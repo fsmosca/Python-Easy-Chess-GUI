@@ -1,3 +1,37 @@
+""" 
+python_easy_chess_gui.py
+
+PySimpleGUI Square Mapping
+board = [
+    56, 57, ... 63
+    ...
+    8, 9, ...
+    0, 1, 2, ...
+]
+
+row = [
+    0, 0, ...
+    1, 1, ...
+    ...
+    7, 7 ...
+]
+
+col = [
+    0, 1, 2, ... 7
+    0, 1, 2, ...
+    ...
+    0, 1, 2, ...
+]
+
+
+Python-Chess Square Mapping
+board is the same as in PySimpleChess
+row is reversed
+col is the same as in PySimpleChess
+
+"""
+
+
 import PySimpleGUI as sg
 import os
 import sys
@@ -103,6 +137,23 @@ def update_rook(window, psg_board, picked_move):
     psg_board[get_row(fr)][get_col(fr)] = BLANK
     psg_board[get_row(to)][get_col(to)] = pc
     redraw_board(window, psg_board) 
+    
+
+def update_ep(window, psg_board, move, stm):
+    """ 
+    Update board if move is an ep capture.
+    move is the ep move in python-chess format
+    stm is side to move
+    * Remove the piece at to-8 (stm is white), to+8 (stm is black)
+    """
+    to = move.to_square
+    if stm:
+        capture_sq = to - 8
+    else:
+        capture_sq = to + 8
+
+    psg_board[get_row(capture_sq)][get_col(capture_sq)] = BLANK
+    redraw_board(window, psg_board)
 
 
 def render_square(image, key, location):
@@ -271,7 +322,10 @@ def PlayGame():
                             
                             # Update rook location if this is a castle move
                             if board.is_castling(python_chess_move):
-                                update_rook(window, psg_board, picked_move)                                                               
+                                update_rook(window, psg_board, picked_move)
+                            # Update board if e.p capture
+                            elif board.is_en_passant(python_chess_move):
+                                update_ep(window, psg_board, python_chess_move, board.turn)
                                 
                             board.push(python_chess_move)
                         else:
@@ -318,6 +372,9 @@ def PlayGame():
             # Update rook location if this is a castle move
             if board.is_castling(best_move):
                 update_rook(window, psg_board, move_str)
+            # Update board if e.p capture
+            elif board.is_en_passant(best_move):
+                update_ep(window, psg_board, best_move, board.turn)
 
             redraw_board(window, psg_board)
 
