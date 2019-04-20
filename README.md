@@ -3,10 +3,10 @@ A Chess GUI based from Python using PySimpleGUI and Python-Chess
 
 ### Requirements
 * PySimpleGUI
-* python-chess
+* Python-Chess
 
 ### Credits
 * PySimpleGUI<br>
 https://github.com/PySimpleGUI/PySimpleGUI
-* python-chess<br>
+* Python-Chess<br>
 https://github.com/niklasf/python-chess
