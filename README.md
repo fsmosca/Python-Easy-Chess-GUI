@@ -5,6 +5,9 @@ A Chess GUI based from Python using PySimpleGUI and Python-Chess. Users can also
 * PySimpleGUI
 * Python-Chess
 
+### Limitation
+* GUI does not support yet the promote and e.p capture moves
+
 ### Credits
 * PySimpleGUI<br>
 https://github.com/PySimpleGUI/PySimpleGUI
