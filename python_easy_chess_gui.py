@@ -236,6 +236,7 @@ def PlayGame():
                     board = chess.Board()
                     move_state = move_from = move_to = 0
                     move_count = 1
+                    window.FindElement('_movelist_').Update('')
                     break
                 
                 if type(button) is tuple:
