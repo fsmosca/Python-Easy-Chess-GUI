@@ -20,14 +20,14 @@ col = [
     0, 1, 2, ... 7
     0, 1, 2, ...
     ...
-    0, 1, 2, ...
+    0, 1, 2, ... 7
 ]
 
 
 Python-Chess Square Mapping
-board is the same as in PySimpleChess
+board is the same as in PySimpleGUI
 row is reversed
-col is the same as in PySimpleChess
+col is the same as in PySimpleGUI
 
 """
 
