@@ -63,8 +63,8 @@ KINGW = 11
 QUEENW = 12
 
 
-# Absolute rank based on real chess board, white at bottom, black at top
-# This is also the rank mapping used by python-chess modules
+# Absolute rank based on real chess board, white at the bottom, black at the top.
+# This is also the rank mapping used by python-chess modules.
 RANK_8 = 7
 RANK_7 = 6
 RANK_6 = 5
@@ -119,11 +119,10 @@ def open_pgn_file(filename):
 
 def relative_row(s, c):
     """ 
-    Returns row based on square s and color c
-    The board will be viewed as white is at the bottom and black is at the top.
+    Returns row based on square s and color c.
+    The board can be viewed, as white is at the bottom and black is at the top.
     If c is white the first row is at the bottom.
     If c is black the first row is at the top.
-    Note rank 1 in real board is row 0 in this program.
     """
     return 7 - get_row(s) if c else get_row(s)
 
@@ -181,12 +180,18 @@ def update_ep(window, psg_board, move, stm):
     
 def get_promo_piece(window, psg_board, move, stm, human):
     """ 
-    Returns promotion piece based on python-chess module and also
-    returns promotion piece based on PySimpleGUI for psg board update
-    move is the promote move in python-chess format
-    stm is side to move
+    Returns:
+        promotion piece based on python-chess module (pyc_promo) and
+        based on PySimpleGUI (psg_promo)
+    move:
+        The promote move in python-chess format
+    stm:
+        The side to move
+    human:
+        This is true if the promotion move is from the user otherwise thi is False
+        which is the move from the computer engine.
     """    
-    # If this move is from a user, we will show a popup box where can
+    # If this move is from a user, we will show a popup box where the user can
     # select which piece to promote, can be q, r, b or n
     if human:
         promote_pc = sg.PopupGetText('Input [q, r, b, n] or [Q, R, B, N]', 'Promotion')
@@ -223,7 +228,7 @@ def get_promo_piece(window, psg_board, move, stm, human):
                 pyc_promo = chess.KNIGHT
     # Else if move is from computer
     else:
-        pyc_promo = move.promotion
+        pyc_promo = move.promotion  # This is from python-chess
         if stm:
             if pyc_promo == chess.QUEEN:
                 psg_promo = QUEENW
