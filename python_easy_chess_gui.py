@@ -38,11 +38,11 @@ import sys
 import chess
 import chess.pgn
 import copy
-import chess.uci
+import chess.engine
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.1.0'
+APP_VERSION = 'v0.2.0'
 
 
 CHESS_PATH = 'Images'  # path to the chess pieces
@@ -278,6 +278,9 @@ def PlayGame():
         by python-chess
     """
     menu_def = [['&File', ['&Open PGN File', 'E&xit']],
+                ['&Game', ['&New Game', '&Resign', '&Draw', 'Copy', 'Paste']],
+                ['&FEN', ['Copy', 'Paste']],
+                ['&Engine', ['Depth', 'Movetime']],
                 ['&Help', '&About...'], ]
 
     # sg.SetOptions(margins=(0,0))
@@ -298,25 +301,24 @@ def PlayGame():
     # add the labels across bottom of board
     board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
                         font='Any 13') for a in 'abcdefgh'])
+        
+    # List all files in dir
+    engine_list = []
+    engine_path = './Engines/'
+    files = os.listdir(engine_path)
+    for file in files:
+        engine_list.append(file)
 
-    board_controls = [[sg.RButton('New Game', key='New Game'), sg.RButton('Draw')],
-                      [sg.RButton('Resign Game'), sg.RButton('Set FEN')],
-                      [sg.RButton('Player Odds'), sg.RButton('Training')],
-                      
-                      [sg.Text('User will play as white')], 
-                      
-                      [sg.Text('Engine'), sg.InputText('', key='_engineid_', size=(22, 1))],
-                      
-                      [sg.Text('Max depth limit', size=(18, 1)), 
-                       sg.Drop([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-                               size=(4, 1),
-                               key='_level_')],
-                      
-                      [sg.Text('Move List')],
-                      [sg.Multiline([], do_not_clear=True, autoscroll=True,
-                                    size=(15, 10), key='_movelist_')],
-                      ]
-
+    board_controls = [
+        [sg.Text('White', size=(6, 1)), sg.InputText('Human', key='_playername_', size=(30, 1))],            
+        [sg.Text('Black', size=(6, 1)), sg.InputText('', key='_engineid_', size=(30, 1))],    
+        [sg.Text('Engine', size=(6, 1)), sg.Drop(engine_list, size=(18, 1), key='_engine_'), sg.Button('Select', size=(5, 1), key='_selectengine_')],                     
+        [sg.Text('Engine analysis info')],
+        [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(36, 4), key='_engineinfo_')],
+        [sg.Text('Move List')],            
+        [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(36, 4), key='_movelist_')],
+    ]
+    
     # layouts for the tabs
     controls_layout = [[sg.Text('Performance Parameters', font='_ 20')],
                        [sg.T('Put stuff like AI engine tuning parms on this tab')]]
@@ -337,27 +339,29 @@ def PlayGame():
     window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), layout,
                        default_button_element_size=(12, 1),
                        auto_size_buttons=False,
-                       icon='kingb.ico')
+                       icon='kingb.ico')   
+    
+    while True:
+        button, value = window.Read()
+        eng = value['_engine_']
+        if button == '_selectengine_':
+            break
+    
+    filename = './Engines/' + eng
 
-    filename = sg.PopupGetFile('\n'.join(('To begin, set location of AI exe file',
-        'If you have not done so already, download a sample engine like',
-        'Stockfish at: https://stockfishchess.org/download/')),
-         file_types=(('Chess AI Engine EXE File', '*.exe'),))
     if filename is None:
-        window.Close()
-        sg.Popup('Engine filename is missing, program will exit')
-        sys.exit()
-    engine = chess.uci.popen_engine(filename)
-    engine.uci()
-    engineid = engine.name
-    info_handler = chess.uci.InfoHandler()
-    engine.info_handlers.append(info_handler)
+        print('Failed to load engine')
+    print(filename)
+
+    engine = chess.engine.SimpleEngine.popen_uci(filename)
+    engineid = engine.id['name']
 
     board = chess.Board()
     move_count = 1
     move_state = move_from = move_to = 0
     exit_is_pressed = False
     level = 2
+    move_time = 0.2
     
     window.FindElement('_engineid_').Update(' '.join(engineid.split()[0:2]))
     
@@ -366,24 +370,31 @@ def PlayGame():
         moved_piece = None
 
         if board.turn == chess.WHITE:
-            engine.position(board)
 
             # human_player(board)
             move_state = 0
             while True:
                 button, value = window.Read()
-                level = value['_level_']
                 
                 if button in (None, 'Exit'):
                     exit_is_pressed = True
                     break
-                if button == 'New Game':
+                if button in (None, 'Depth'):
+                    user_depth = sg.PopupGetText('Input depth[1 to 128]', 'Engine depth setting')
+                    if user_depth is None:
+                        user_depth = 1
+                    level = int(user_depth)
+                    level = min(128, max(1, level))
+                    print('depth is set to', level)
+                    break
+                if button in (None, 'New Game'):
                     psg_board = copy.deepcopy(initial_board)
                     redraw_board(window, psg_board)
                     board = chess.Board()
                     move_state = move_from = move_to = 0
                     move_count = 1
                     window.FindElement('_movelist_').Update('')
+                    window.FindElement('_engineinfo_').Update('')
                     break
                 
                 if type(button) is tuple:
@@ -427,10 +438,11 @@ def PlayGame():
                         if user_move in board.legal_moves:
                             # Convert user move to san move for display in movelist
                             san_move = board.san(user_move)
+                            fmvn = board.fullmove_number
                             if board.turn:
-                                show_san_move = '{}. {} '.format(board.fullmove_number, san_move)
+                                show_san_move = '{}. {} '.format(fmvn, san_move)                              
                             else:
-                                show_san_move = '{}\n'.format(san_move)                                
+                                show_san_move = '{} '.format(san_move)                                
                                 
                             # Update rook location if this is a castle move
                             if board.is_castling(user_move):
@@ -470,8 +482,13 @@ def PlayGame():
         # Else if Black to move
         else:
             is_promote = False
-            engine.position(board)
-            best_move = engine.go(searchmoves=board.legal_moves, depth=level, movetime=(level * 100)).bestmove
+            result = engine.play(board, chess.engine.Limit(depth=level, time=move_time), info=chess.engine.INFO_ALL)
+            best_move = result.move
+            engine_score_info = result.info['score'].relative.score(mate_score=32000) / 100
+            engine_depth_info = result.info['depth']
+            engine_pv_info = board.variation_san(result.info['pv'])
+            engine_info = str(engine_score_info) + '/' + str(engine_depth_info) + ' ' + engine_pv_info
+            window.FindElement('_engineinfo_').Update(engine_info, append=False)
             move_str = str(best_move)
             from_col = ord(move_str[0]) - ord('a')
             from_row = 8 - int(move_str[1])
@@ -480,10 +497,11 @@ def PlayGame():
             
             # Convert user move to san move for display in movelist
             san_move = board.san(best_move)
-            if not board.turn:
-                show_san_move = '{}\n'.format(san_move)
+            fmvn = board.fullmove_number
+            if board.turn:
+                show_san_move = '{}. {} '.format(fmvn, san_move)
             else:
-                show_san_move = '{}. {} '.format(board.fullmove_number, san_move)
+                show_san_move = '{} '.format(san_move)
             window.FindElement('_movelist_').Update(show_san_move, append=True)
 
             piece = psg_board[from_row][from_col]
