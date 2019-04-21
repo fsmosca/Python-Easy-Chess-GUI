@@ -21,9 +21,6 @@ pip install python-chess
 https://github.com/PySimpleGUI/PySimpleGUI<br>
 pip install pysimplegui
 
-### Limitation
-* GUI does not yet update the board properly if move is a promote.
-
 ### Credits
 * PySimpleGUI<br>
 https://github.com/PySimpleGUI/PySimpleGUI
