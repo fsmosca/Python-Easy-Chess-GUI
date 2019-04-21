@@ -63,6 +63,18 @@ KINGW = 11
 QUEENW = 12
 
 
+# Absolute rank based on real chess board, white at bottom, black at top
+# This is also the rank mapping used by python-chess modules
+RANK_8 = 7
+RANK_7 = 6
+RANK_6 = 5
+RANK_5 = 4
+RANK_4 = 3
+RANK_3 = 2
+RANK_2 = 1
+RANK_1 = 0
+
+
 initial_board = [[ROOKB, KNIGHTB, BISHOPB, QUEENB, KINGB, BISHOPB, KNIGHTB, ROOKB],
                  [PAWNB, ] * 8,
                  [BLANK, ] * 8,
@@ -103,6 +115,17 @@ def open_pgn_file(filename):
     # first_game = chess.pgn.read_game(pgn)
     # moves = [move for move in first_game.main_line()]
     # return moves
+
+
+def relative_row(s, c):
+    """ 
+    Returns row based on square s and color c
+    The board will be viewed as white is at the bottom and black is at the top.
+    If c is white the first row is at the bottom.
+    If c is black the first row is at the top.
+    Note rank 1 in real board is row 0 in this program.
+    """
+    return 7 - get_row(s) if c else get_row(s)
 
 
 def get_row(s):
@@ -154,6 +177,73 @@ def update_ep(window, psg_board, move, stm):
 
     psg_board[get_row(capture_sq)][get_col(capture_sq)] = BLANK
     redraw_board(window, psg_board)
+    
+    
+def get_promo_piece(window, psg_board, move, stm, human):
+    """ 
+    Returns promotion piece based on python-chess module and also
+    returns promotion piece based on PySimpleGUI for psg board update
+    move is the promote move in python-chess format
+    stm is side to move
+    """    
+    # If this move is from a user, we will show a popup box where can
+    # select which piece to promote, can be q, r, b or n
+    if human:
+        promote_pc = sg.PopupGetText('Input [q, r, b, n] or [Q, R, B, N]', 'Promotion')
+    
+        # If user selects the cancel button we set the promote piece to queen
+        if promote_pc is None:
+            promote_pc = 'q'
+            
+        if stm:
+            if 'q' in promote_pc.lower():
+                psg_promo = QUEENW
+                pyc_promo = chess.QUEEN
+            elif 'r' in promote_pc.lower():
+                psg_promo = ROOKW
+                pyc_promo = chess.ROOK
+            elif 'b' in promote_pc.lower():
+                psg_promo = BISHOPW
+                pyc_promo = chess.BISHOP
+            elif 'n' in promote_pc.lower():
+                psg_promo = KNIGHTW
+                pyc_promo = chess.KNIGHT
+        else:
+            if 'q' in promote_pc.lower():
+                psg_promo = QUEENB
+                pyc_promo = chess.QUEEN
+            elif 'r' in promote_pc.lower():
+                psg_promo = ROOKB
+                pyc_promo = chess.ROOK
+            elif 'b' in promote_pc.lower():
+                psg_promo = BISHOPB
+                pyc_promo = chess.BISHOP
+            elif 'n' in promote_pc.lower():
+                psg_promo = KNIGHTB
+                pyc_promo = chess.KNIGHT
+    # Else if move is from computer
+    else:
+        pyc_promo = move.promotion
+        if stm:
+            if pyc_promo == chess.QUEEN:
+                psg_promo = QUEENW
+            elif pyc_promo == chess.ROOK:
+                psg_promo = ROOKW
+            elif pyc_promo == chess.BISHOP:
+                psg_promo = BISHOPW
+            elif pyc_promo == chess.KNIGHT:
+                psg_promo = KNIGHTW
+        else:
+            if pyc_promo == chess.QUEEN:
+                psg_promo = QUEENB
+            elif pyc_promo == chess.ROOK:
+                psg_promo = ROOKB
+            elif pyc_promo == chess.BISHOP:
+                psg_promo = BISHOPB
+            elif pyc_promo == chess.KNIGHT:
+                psg_promo = KNIGHTB
+    
+    return pyc_promo, psg_promo
 
 
 def render_square(image, key, location):
@@ -268,6 +358,7 @@ def PlayGame():
     
     # ---===--- Loop taking in user input --- #
     while not board.is_game_over():
+        moved_piece = None
 
         if board.turn == chess.WHITE:
             engine.position(board)
@@ -298,7 +389,9 @@ def PlayGame():
                         button_square = window.FindElement(key=(row, col))
                         button_square.Update(button_color=('white', 'red'))
                         move_state = 1
+                        moved_piece = board.piece_type_at(chess.square(col, 7-row))  # Pawn=1
                     elif move_state == 1:
+                        is_promote = False
                         move_to = button
                         row, col = move_to
                         if move_to == move_from:  # cancelled move
@@ -306,49 +399,72 @@ def PlayGame():
                             button_square.Update(button_color=('white', color))
                             move_state = 0
                             continue
-
-                        picked_move = '{}{}{}{}'.format('abcdefgh'[move_from[1]], 8 - move_from[0],
-                                                        'abcdefgh'[move_to[1]], 8 - move_to[0])
                         
-                        # Convert user move to san move for display in movelist
-                        san_move = board.san(chess.Move.from_uci(picked_move))
-                        if not board.turn:
-                            show_san_move = '{}\n'.format(san_move)
-                        else:
-                            show_san_move = '{}. {} '.format(board.fullmove_number, san_move)
+                        # Create a move in python-chess format based from user input
+                        user_move = None
+                        
+                        # Get the fr_sq and to_sq of the move from user, based from this info
+                        # we will create a move based from python-chess format.
+                        # Note chess.square() and chess.Move() are from python-chess module
+                        fr_row, fr_col = move_from
+                        fr_sq = chess.square(fr_col, 7-fr_row)
+                        to_sq = chess.square(col, 7-row)
 
-                        if picked_move in [str(move) for move in board.legal_moves]:
-                            python_chess_move = chess.Move.from_uci(picked_move)
-                            
-                            # Update rook location if this is a castle move
-                            if board.is_castling(python_chess_move):
-                                update_rook(window, psg_board, picked_move)
-                            # Update board if e.p capture
-                            elif board.is_en_passant(python_chess_move):
-                                update_ep(window, psg_board, python_chess_move, board.turn)
+                        # If user move is a promote
+                        if relative_row(to_sq, board.turn) == RANK_8 and moved_piece == chess.PAWN:
+                            is_promote = True
+                            pyc_promo, psg_promo = get_promo_piece(window, psg_board, user_move, board.turn, True)
+                            user_move = chess.Move(fr_sq, to_sq, promotion=pyc_promo)
+                        else:
+                            user_move = chess.Move(fr_sq, to_sq)
+                        
+                        # Check if user move is legal
+                        if user_move in board.legal_moves:
+                            # Convert user move to san move for display in movelist
+                            san_move = board.san(user_move)
+                            if board.turn:
+                                show_san_move = '{}. {} '.format(board.fullmove_number, san_move)
+                            else:
+                                show_san_move = '{}\n'.format(san_move)                                
                                 
-                            board.push(python_chess_move)
+                            # Update rook location if this is a castle move
+                            if board.is_castling(user_move):
+                                update_rook(window, psg_board, str(user_move))
+                                
+                            # Update board if e.p capture
+                            elif board.is_en_passant(user_move):
+                                update_ep(window, psg_board, user_move, board.turn)                                
+                                
+                            # Empty the board from_square, applied to any types of move
+                            psg_board[move_from[0]][move_from[1]] = BLANK
+                            
+                            # Update board to_square if move is a promotion
+                            if is_promote:
+                                psg_board[row][col] = psg_promo
+                            # Update the to_square if not a promote move
+                            else:
+                                # Place piece in the move to_square
+                                psg_board[row][col] = piece
+                                
+                            redraw_board(window, psg_board)
+                            move_count += 1
+                            window.FindElement('_movelist_').Update(show_san_move, append=True)
+
+                            board.push(user_move)
+                            break                        
                         else:
                             print('Illegal move')
                             move_state = 0
                             color = '#B58863' if (move_from[0] + move_from[1]) % 2 else '#F0D9B5'
                             button_square.Update(button_color=('white', color))
                             continue
-
-                        psg_board[move_from[0]][move_from[1]] = BLANK  # place blank where piece was
-                        psg_board[row][col] = piece  # place piece in the move-to square
-                        redraw_board(window, psg_board)
-                        move_count += 1
-
-                        window.FindElement('_movelist_').Update(show_san_move, append=True)
-
-                        break
                 
             if exit_is_pressed:
                 break
 
         # Else if Black to move
         else:
+            is_promote = False
             engine.position(board)
             best_move = engine.go(searchmoves=board.legal_moves, depth=level, movetime=(level * 100)).bestmove
             move_str = str(best_move)
@@ -366,16 +482,29 @@ def PlayGame():
             window.FindElement('_movelist_').Update(show_san_move, append=True)
 
             piece = psg_board[from_row][from_col]
-            psg_board[from_row][from_col] = BLANK
-            psg_board[to_row][to_col] = piece
+            psg_board[from_row][from_col] = BLANK            
             
             # Update rook location if this is a castle move
             if board.is_castling(best_move):
                 update_rook(window, psg_board, move_str)
+                
             # Update board if e.p capture
             elif board.is_en_passant(best_move):
                 update_ep(window, psg_board, best_move, board.turn)
-
+                
+            # Update board if move is a promotion
+            elif best_move.promotion is not None:
+                is_promote = True
+                _, psg_promo = get_promo_piece(window, psg_board, best_move, board.turn, False)
+                
+            # Update board to_square if move is a promotion
+            if is_promote:
+                psg_board[to_row][to_col] = psg_promo
+            # Update the to_square if not a promote move
+            else:
+                # Place piece in the move to_square
+                psg_board[to_row][to_col] = piece
+                
             redraw_board(window, psg_board)
 
             board.push(best_move)
