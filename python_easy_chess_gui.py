@@ -100,12 +100,31 @@ queenW = os.path.join(CHESS_PATH, 'nqueenw.png')
 kingB = os.path.join(CHESS_PATH, 'nkingb.png')
 kingW = os.path.join(CHESS_PATH, 'nkingw.png')
 
+# 2d piece images
+blank2 = os.path.join(CHESS_PATH, 'blank.png')
+bishopB2 = os.path.join(CHESS_PATH, 'bishopb.png')
+bishopW2 = os.path.join(CHESS_PATH, 'bishopw.png')
+pawnB2 = os.path.join(CHESS_PATH, 'pawnb.png')
+pawnW2 = os.path.join(CHESS_PATH, 'pawnw.png')
+knightB2 = os.path.join(CHESS_PATH, 'knightb.png')
+knightW2 = os.path.join(CHESS_PATH, 'knightw.png')
+rookB2 = os.path.join(CHESS_PATH, 'rookb.png')
+rookW2 = os.path.join(CHESS_PATH, 'rookw.png')
+queenB2 = os.path.join(CHESS_PATH, 'queenb.png')
+queenW2 = os.path.join(CHESS_PATH, 'queenw.png')
+kingB2 = os.path.join(CHESS_PATH, 'kingb.png')
+kingW2 = os.path.join(CHESS_PATH, 'kingw.png')
+
 
 images = {BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
           KNIGHTB: knightB, KNIGHTW: knightW,
           ROOKB: rookB, ROOKW: rookW, KINGB: kingB, KINGW: kingW,
           QUEENB: queenB, QUEENW: queenW, BLANK: blank}
 
+images2 = {BISHOPB: bishopB2, BISHOPW: bishopW2, PAWNB: pawnB2, PAWNW: pawnW2,
+          KNIGHTB: knightB2, KNIGHTW: knightW2,
+          ROOKB: rookB2, ROOKW: rookW2, KINGB: kingB2, KINGW: kingW2,
+          QUEENB: queenB2, QUEENW: queenW2, BLANK: blank2}
 
 def open_pgn_file(filename):
     """ Read pgn file and parse moves in the game.
@@ -267,7 +286,7 @@ def redraw_board(window, board):
     for i in range(8):
         for j in range(8):
             color = '#B58863' if (i + j) % 2 else '#F0D9B5'
-            piece_image = images[board[i][j]]
+            piece_image = images2[board[i][j]]
             elem = window.FindElement(key=(i, j))
             elem.Update(button_color=('white', color),
                         image_filename=piece_image, )
@@ -295,7 +314,7 @@ def PlayGame():
     for i in range(8):
         row = [sg.T(str(8 - i) + '   ', font='Any 13')]
         for j in range(8):
-            piece_image = images[psg_board[i][j]]
+            piece_image = images2[psg_board[i][j]]
             row.append(render_square(piece_image, key=(i, j), location=(i, j)))
         row.append(sg.T(str(8 - i) + '   ', font='Any 13'))
         board_layout.append(row)
@@ -376,7 +395,7 @@ def PlayGame():
             # human_player(board)
             move_state = 0
             while True:
-                button, value = window.Read(timeout=1)
+                button, value = window.Read(timeout=10)
                 
                 if not board.turn and move_state == 2:
                     break
