@@ -3,6 +3,8 @@ A Chess GUI based from Python using PySimpleGUI and Python-Chess. Users can also
 
 ![](https://i.imgur.com/vLiA1bc.png)
 
+![](https://i.imgur.com/RLLZPSG.png)
+
 ### Prerequisites
 I have not yet build an exe file for this GUI, not sure either if I can create it. In the meantime to get it running the following are required.
 * Python 3
