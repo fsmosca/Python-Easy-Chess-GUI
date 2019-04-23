@@ -307,17 +307,21 @@ def PlayGame():
     sg.ChangeLookAndFeel('GreenTan')
     # create initial board setup
     psg_board = copy.deepcopy(initial_board)
+    
     # the main board display layout
-    board_layout = [[sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
-                    font='Any 13') for a in 'abcdefgh']]
+    board_layout = []
+    
     # loop though board and create buttons with images
     for i in range(8):
-        row = [sg.T(str(8 - i) + '   ', font='Any 13')]
+        # Row numbers at left of board
+        row = [sg.T(str(8 - i) + '  ', font='Any 13')]
+        
         for j in range(8):
             piece_image = images2[psg_board[i][j]]
             row.append(render_square(piece_image, key=(i, j), location=(i, j)))
-        row.append(sg.T(str(8 - i) + '   ', font='Any 13'))
+
         board_layout.append(row)
+    
     # add the labels across bottom of board
     board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
                         font='Any 13') for a in 'abcdefgh'])
