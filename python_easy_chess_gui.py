@@ -34,7 +34,8 @@ col is the same as in PySimpleGUI
 
 import PySimpleGUI as sg
 import os
-import sys
+#import sys
+import time
 import chess
 import chess.pgn
 import copy
@@ -310,13 +311,14 @@ def PlayGame():
         engine_list.append(file)
 
     board_controls = [
-        [sg.Text('White', size=(6, 1)), sg.InputText('Human', key='_playername_', size=(30, 1))],            
-        [sg.Text('Black', size=(6, 1)), sg.InputText('', key='_engineid_', size=(30, 1))],    
-        [sg.Text('Engine', size=(6, 1)), sg.Drop(engine_list, size=(18, 1), key='_engine_'), sg.Button('Select', size=(5, 1), key='_selectengine_')],                     
-        [sg.Text('Engine analysis info')],
-        [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(36, 4), key='_engineinfo_')],
-        [sg.Text('Move List')],            
-        [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(36, 4), key='_movelist_')],
+        [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('Human', font=('Consolas', 10), key='_playername_', size=(34, 1))],            
+        [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_engineid_', size=(34, 1))],
+        [sg.Text('Engine', size=(6, 1), font=('Consolas', 10)), sg.Drop(engine_list, size=(23, 1), font=('Consolas', 10), key='_engine_'), 
+            sg.Button('Select', size=(5, 1), font=('Consolas', 10), key='_selectengine_')],
+        [sg.Text('Move List', font=('Consolas', 10))],            
+        [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 4), font=('Consolas', 10), key='_movelist_')],
+        [sg.Text('Engine analysis info', font=('Consolas', 10))],
+        [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 12), font=('Consolas', 10), key='_engineinfo_')],        
     ]
     
     # layouts for the tabs
@@ -339,8 +341,8 @@ def PlayGame():
     window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), layout,
                        default_button_element_size=(12, 1),
                        auto_size_buttons=False,
-                       icon='kingb.ico')   
-    
+                       icon='kingb.ico')
+
     while True:
         button, value = window.Read()
         eng = value['_engine_']
@@ -360,10 +362,10 @@ def PlayGame():
     move_count = 1
     move_state = move_from = move_to = 0
     exit_is_pressed = False
-    level = 2
-    move_time = 0.2
-    
-    window.FindElement('_engineid_').Update(' '.join(engineid.split()[0:2]))
+    level = 32
+    move_time = 1  # sec
+  
+    window.FindElement('_engineid_').Update(' '.join(engineid.split()[0:2]))    
     
     # ---===--- Loop taking in user input --- #
     while not board.is_game_over():
@@ -374,7 +376,10 @@ def PlayGame():
             # human_player(board)
             move_state = 0
             while True:
-                button, value = window.Read()
+                button, value = window.Read(timeout=1)
+                
+                if not board.turn and move_state == 2:
+                    break
                 
                 if button in (None, 'Exit'):
                     exit_is_pressed = True
@@ -387,6 +392,16 @@ def PlayGame():
                     level = min(128, max(1, level))
                     print('depth is set to', level)
                     break
+                
+                if button in (None, 'Movetime'):
+                    user_movetime = sg.PopupGetText('Input movetime ', 'Engine move time in sec')
+                    if user_movetime is None:
+                        user_depth = 1  # sec
+                    move_time = int(user_movetime)
+                    move_time = min(900, max(1, move_time))
+                    print('move_time is set to', move_time)
+                    break
+                
                 if button in (None, 'New Game'):
                     psg_board = copy.deepcopy(initial_board)
                     redraw_board(window, psg_board)
@@ -403,7 +418,7 @@ def PlayGame():
                         row, col = move_from
                         piece = psg_board[row][col]  # get the move-from piece
                         button_square = window.FindElement(key=(row, col))
-                        button_square.Update(button_color=('white', 'red'))
+                        button_square.Update(button_color=('white', 'lightskyblue'))
                         move_state = 1
                         moved_piece = board.piece_type_at(chess.square(col, 7-row))  # Pawn=1
                     elif move_state == 1:
@@ -468,7 +483,12 @@ def PlayGame():
                             window.FindElement('_movelist_').Update(show_san_move, append=True)
 
                             board.push(user_move)
-                            break                        
+                            
+                            button_square = window.FindElement(key=(row, col))
+                            button_square.Update(button_color=('white', 'lightskyblue'))
+            
+                            move_state = 2
+                     
                         else:
                             print('Illegal move')
                             move_state = 0
@@ -482,13 +502,36 @@ def PlayGame():
         # Else if Black to move
         else:
             is_promote = False
-            result = engine.play(board, chess.engine.Limit(depth=level, time=move_time), info=chess.engine.INFO_ALL)
-            best_move = result.move
-            engine_score_info = result.info['score'].relative.score(mate_score=32000) / 100
-            engine_depth_info = result.info['depth']
-            engine_pv_info = board.variation_san(result.info['pv'])
-            engine_info = str(engine_score_info) + '/' + str(engine_depth_info) + ' ' + engine_pv_info
-            window.FindElement('_engineinfo_').Update(engine_info, append=False)
+            is_play = False
+            
+            if is_play:
+                result = engine.play(board, chess.engine.Limit(depth=level, time=move_time), info=chess.engine.INFO_ALL)
+                best_move = result.move
+                engine_score_info = result.info['score'].relative.score(mate_score=32000) / 100
+                engine_depth_info = result.info['depth']
+                engine_pv_info = board.variation_san(result.info['pv'])
+                engine_info = str(engine_score_info) + '/' + str(engine_depth_info) + ' ' + engine_pv_info
+                window.FindElement('_engineinfo_').Update(engine_info, append=False)
+            else:
+                best_move = None
+                with engine.analysis(board) as analysis:
+                    for info in analysis:
+                        time.sleep(0.1)
+                        if 'pv' in info and 'score' in info and 'depth' in info and 'time' in info:
+                            best_move = info['pv'][0]
+                            best_score = info['score'].relative.score(mate_score=32000) / 100
+                            best_depth = info['depth']
+                            best_time = info['time']
+                            best_pv = info['pv'][0:5]
+                            
+                            best_pv = board.variation_san(best_pv)
+                            
+                            engine_info = '{:+0.02f}/{:02d} {}\n'.format(best_score, best_depth, best_pv)
+                            window.FindElement('_engineinfo_').Update(engine_info, append=True)
+                            
+                            if best_time >= move_time:
+                                break
+        
             move_str = str(best_move)
             from_col = ord(move_str[0]) - ord('a')
             from_row = 8 - int(move_str[1])
@@ -532,6 +575,9 @@ def PlayGame():
 
             board.push(best_move)
             move_count += 1
+            
+            button_square = window.FindElement(key=(to_row, to_col))
+            button_square.Update(button_color=('white', 'lightskyblue'))
             
     engine.quit()
     
