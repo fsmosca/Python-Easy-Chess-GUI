@@ -433,12 +433,19 @@ def PlayGame():
                 if button == '_enginewhite_':
                     window.FindElement('_playername_').Update('computer')
                     window.FindElement('_engineid_').Update('human')
-                    is_human_stm = False
+                    if not board.turn:
+                        sg.PopupOK('Engine is already playing white')
+                        continue
+                    if is_human_stm:
+                        is_human_stm = False
                     break
                 
                 if button == '_engineblack_':
                     window.FindElement('_engineid_').Update('computer')
                     window.FindElement('_playername_').Update('human')
+                    if board.turn:
+                        sg.PopupOK('Engine is already playing black')
+                        continue
                     if is_human_stm:
                         is_human_stm = False
                     break
