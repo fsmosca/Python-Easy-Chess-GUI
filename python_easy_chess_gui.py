@@ -334,10 +334,10 @@ def PlayGame():
         engine_list.append(file)
 
     board_controls = [
-        [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('Human', font=('Consolas', 10), key='_playername_', size=(34, 1))],            
+        [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_playername_', size=(34, 1))],            
         [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_engineid_', size=(34, 1))],
-        [sg.Text('Engine', size=(6, 1), font=('Consolas', 10)), sg.Drop(engine_list, size=(23, 1), font=('Consolas', 10), key='_engine_'), 
-            sg.Button('Select', size=(5, 1), font=('Consolas', 10), key='_selectengine_')],
+        [sg.Text('Engine', size=(6, 1), font=('Consolas', 10)), sg.Drop(engine_list, size=(31, 1), font=('Consolas', 10), key='_engine_')],
+        [sg.Button('Engine is white', size=(19, 1), font=('Consolas', 10), key='_enginewhite_'), sg.Button('Engine is black', size=(20, 1), font=('Consolas', 10), key='_engineblack_')],
         [sg.Text('Move List', font=('Consolas', 10))],            
         [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 4), font=('Consolas', 10), key='_movelist_')],
         [sg.Text('Engine analysis info', font=('Consolas', 10))],
@@ -365,11 +365,20 @@ def PlayGame():
                        default_button_element_size=(12, 1),
                        auto_size_buttons=False,
                        icon='kingb.ico')
-
+    
+    is_human_stm = True
     while True:
         button, value = window.Read()
         eng = value['_engine_']
-        if button == '_selectengine_':
+        if button == '_enginewhite_':
+            window.FindElement('_playername_').Update('computer')
+            window.FindElement('_engineid_').Update('human')
+            is_human_stm = False
+            break
+        if button == '_engineblack_':
+            window.FindElement('_engineid_').Update('computer')
+            window.FindElement('_playername_').Update('human')
+            is_human_stm = True
             break
     
     filename = './Engines/' + eng
@@ -379,29 +388,25 @@ def PlayGame():
     print(filename)
 
     engine = chess.engine.SimpleEngine.popen_uci(filename)
-    engineid = engine.id['name']
+#    engineid = engine.id['name']
 
     board = chess.Board()
     move_count = 1
     move_state = move_from = move_to = 0
     exit_is_pressed = False
     level = 32
-    move_time = 1  # sec
-  
-    window.FindElement('_engineid_').Update(' '.join(engineid.split()[0:2]))    
+    move_time = 1  # sec  
     
     # ---===--- Loop taking in user input --- #
     while not board.is_game_over():
         moved_piece = None
 
-        if board.turn == chess.WHITE:
-
-            # human_player(board)
+        if is_human_stm:
             move_state = 0
             while True:
                 button, value = window.Read(timeout=10)
                 
-                if not board.turn and move_state == 2:
+                if not is_human_stm and move_state == 2:
                     break
                 
                 if button in (None, 'Exit'):
@@ -423,6 +428,19 @@ def PlayGame():
                     move_time = int(user_movetime)
                     move_time = min(900, max(1, move_time))
                     print('move_time is set to', move_time)
+                    break
+                
+                if button == '_enginewhite_':
+                    window.FindElement('_playername_').Update('computer')
+                    window.FindElement('_engineid_').Update('human')
+                    is_human_stm = False
+                    break
+                
+                if button == '_engineblack_':
+                    window.FindElement('_engineid_').Update('computer')
+                    window.FindElement('_playername_').Update('human')
+                    if is_human_stm:
+                        is_human_stm = False
                     break
                 
                 if button in (None, 'New Game'):
@@ -511,6 +529,7 @@ def PlayGame():
                             button_square.Update(button_color=('white', 'lightskyblue'))
             
                             move_state = 2
+                            is_human_stm ^= 1
                      
                         else:
                             print('Illegal move')
@@ -522,7 +541,7 @@ def PlayGame():
             if exit_is_pressed:
                 break
 
-        # Else if Black to move
+        # Else if not is human stm
         else:
             is_promote = False
             is_play = False
@@ -601,6 +620,7 @@ def PlayGame():
             
             button_square = window.FindElement(key=(to_row, to_col))
             button_square.Update(button_color=('white', 'lightskyblue'))
+            is_human_stm ^= 1
             
     engine.quit()
     
