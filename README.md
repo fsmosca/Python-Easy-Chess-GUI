@@ -11,7 +11,7 @@ I have not yet build an exe file for this GUI, not sure either if I can create i
 
 #### Installation
 * Python Easy Chess GUI<br>
-Download the files including the Images dir
+Download the files including the Images and Engines dir
 * Python 3<br>
 https://www.python.org/downloads/
 * Python-Chess<br>
