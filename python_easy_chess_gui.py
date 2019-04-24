@@ -34,7 +34,7 @@ col is the same as in PySimpleGUI
 
 import PySimpleGUI as sg
 import os
-#import sys
+import sys
 import time
 import chess
 import chess.pgn
@@ -43,7 +43,8 @@ import chess.engine
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.2.0'
+APP_VERSION = 'v0.3.0'
+BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
 CHESS_PATH = 'Images'  # path to the chess pieces
@@ -214,7 +215,7 @@ def get_promo_piece(window, psg_board, move, stm, human):
     # If this move is from a user, we will show a popup box where the user can
     # select which piece to promote, can be q, r, b or n
     if human:
-        promote_pc = sg.PopupGetText('Input [q, r, b, n] or [Q, R, B, N]', 'Promotion')
+        promote_pc = sg.PopupGetText('Promotion\n\nInput [q, r, b, n] or [Q, R, B, N]', title=BOX_TITLE, keep_on_top=True)
     
         # If user selects the cancel button we set the promote piece to queen
         if promote_pc is None:
@@ -268,41 +269,15 @@ def get_promo_piece(window, psg_board, move, stm, human):
             elif pyc_promo == chess.KNIGHT:
                 psg_promo = KNIGHTB
     
-    return pyc_promo, psg_promo
-
-
-def render_square(image, key, location):
-    """ Render square """
-    if (location[0] + location[1]) % 2:
-        color = '#B58863'
-    else:
-        color = '#F0D9B5'
-    return sg.RButton('', image_filename=image, size=(1, 1), 
-                      button_color=('white', color), pad=(0, 0), key=key)
-
-
-def redraw_board(window, board):
-    """ Redraw GUI board """
-    for i in range(8):
-        for j in range(8):
-            color = '#B58863' if (i + j) % 2 else '#F0D9B5'
-            piece_image = images2[board[i][j]]
-            elem = window.FindElement(key=(i, j))
-            elem.Update(button_color=('white', color),
-                        image_filename=piece_image, )
-
-
-def PlayGame():
-    """ Load chess engine and use can play a game.
-        This also creates a chessboard. Move legality is handled
-        by python-chess
-    """
-    menu_def = [['&File', ['&Open PGN File', 'E&xit']],
-                ['&Game', ['&New Game', '&Resign', '&Draw', 'Copy', 'Paste']],
-                ['&FEN', ['Copy', 'Paste']],
-                ['&Engine', ['Depth', 'Movetime']],
-                ['&Help', '&About...'], ]
-
+    return pyc_promo, psg_promo 
+    
+    
+def create_board(flip):
+    menu_def = [['&File', ['E&xit']],
+                ['&Game', ['&New Game']],
+                ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings']]
+                ]
+    
     # sg.SetOptions(margins=(0,0))
     sg.ChangeLookAndFeel('GreenTan')
     # create initial board setup
@@ -311,12 +286,23 @@ def PlayGame():
     # the main board display layout
     board_layout = []
     
+    start = 0
+    end = 8
+    step = 1
+    file_names = 'abcdefgh'
+    
+    if flip:
+        start = 7
+        end = -1
+        step = -1
+        file_names = file_names[::-1]
+    
     # loop though board and create buttons with images
-    for i in range(8):
+    for i in range(start, end, step):
         # Row numbers at left of board
         row = [sg.T(str(8 - i) + '  ', font='Any 13')]
         
-        for j in range(8):
+        for j in range(start, end, step):
             piece_image = images2[psg_board[i][j]]
             row.append(render_square(piece_image, key=(i, j), location=(i, j)))
 
@@ -324,7 +310,7 @@ def PlayGame():
     
     # add the labels across bottom of board
     board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
-                        font='Any 13') for a in 'abcdefgh'])
+                        font='Any 13') for a in file_names])
         
     # List all files in dir
     engine_list = []
@@ -334,10 +320,10 @@ def PlayGame():
         engine_list.append(file)
 
     board_controls = [
-        [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_playername_', size=(34, 1))],            
-        [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_engineid_', size=(34, 1))],
-        [sg.Text('Engine', size=(6, 1), font=('Consolas', 10)), sg.Drop(engine_list, size=(31, 1), font=('Consolas', 10), key='_engine_')],
-        [sg.Button('Engine is white', size=(19, 1), font=('Consolas', 10), key='_enginewhite_'), sg.Button('Engine is black', size=(20, 1), font=('Consolas', 10), key='_engineblack_')],
+        [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_White_', size=(34, 1))],            
+        [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_Black_', size=(34, 1))],
+        [sg.Text('Engine', size=(6, 1), font=('Consolas', 10)), sg.Drop(engine_list, size=(22, 1), font=('Consolas', 10), key='_engine_'),
+            sg.Button('Select', size=(6, 1), font=('Consolas', 10), key='_selectengine_')],
         [sg.Text('Move List', font=('Consolas', 10))],            
         [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 4), font=('Consolas', 10), key='_movelist_')],
         [sg.Text('Engine analysis info', font=('Consolas', 10))],
@@ -366,21 +352,63 @@ def PlayGame():
                        auto_size_buttons=False,
                        icon='kingb.ico')
     
-    is_human_stm = True
-    while True:
-        button, value = window.Read()
-        eng = value['_engine_']
-        if button == '_enginewhite_':
-            window.FindElement('_playername_').Update('computer')
-            window.FindElement('_engineid_').Update('human')
-            is_human_stm = False
-            break
-        if button == '_engineblack_':
-            window.FindElement('_engineid_').Update('computer')
-            window.FindElement('_playername_').Update('human')
-            is_human_stm = True
-            break
+    return window, psg_board   
+
+
+def render_square(image, key, location):
+    """ Render square """
+    if (location[0] + location[1]) % 2:
+        color = '#B58863'
+    else:
+        color = '#F0D9B5'
+    return sg.RButton('', image_filename=image, size=(1, 1), 
+                      button_color=('white', color), pad=(0, 0), key=key)
+
+
+def redraw_board(window, board):
+    """ Redraw GUI board """
+    for i in range(8):
+        for j in range(8):
+            color = '#B58863' if (i + j) % 2 else '#F0D9B5'
+            piece_image = images2[board[i][j]]
+            elem = window.FindElement(key=(i, j))
+            elem.Update(button_color=('white', color),
+                        image_filename=piece_image, )
+
+
+def PlayGame():
+    """ Load chess engine and use can play a game.
+        This also creates a chessboard. Move legality is handled
+        by python-chess
+    """ 
+    # Build GUI layout
+    reply = sg.PopupYesNo('Play as white?', title=BOX_TITLE)
+    flip = False if reply == 'Yes' else True
+    window, psg_board = create_board(flip)
     
+    if not flip:
+        window.FindElement('_White_').Update('human')
+        window.FindElement('_Black_').Update('computer')
+    else:
+        window.FindElement('_Black_').Update('human')
+        window.FindElement('_White_').Update('computer')
+    
+    is_human_stm = True if not flip else False
+    
+    # Let the user choose the engine first
+    while True:        
+        button, value = window.Read()
+        
+        eng = value['_engine_']
+        
+        if button == 'Exit':
+            sys.exit()
+        if button == '_selectengine_':
+            
+            break
+        elif button != '_selectengine_':
+            sg.PopupOK('Select engine first', title=BOX_TITLE, keep_on_top=True)
+
     filename = './Engines/' + eng
 
     if filename is None:
@@ -388,19 +416,53 @@ def PlayGame():
     print(filename)
 
     engine = chess.engine.SimpleEngine.popen_uci(filename)
-#    engineid = engine.id['name']
 
     board = chess.Board()
     move_count = 1
     move_state = move_from = move_to = 0
     exit_is_pressed = False
-    level = 32
-    move_time = 1  # sec  
+    level = 8
+    move_time = 1  # sec
+    
+    # Do not play immediately when stm is computer
+    is_engine_ready = True if is_human_stm else False
     
     # ---===--- Loop taking in user input --- #
     while not board.is_game_over():
         moved_piece = None
+        
+        # If engine is to play first, allow the user to configure the engine
+        # and exit this loop only, when user presses the Engine->Go button
+        if not is_engine_ready:
+            while True:
+                button, value = window.Read(timeout=10)
+                
+                if button in (None, 'Depth'):
+                    backup_level = level
+                    user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[1 to 8]'.format(backup_level), title=BOX_TITLE)
+                    if user_depth is None:
+                        user_depth = backup_level
+                    level = int(user_depth)
+                    level = min(8, max(1, level))
+                    print('depth is set to', level)
+                
+                if button in (None, 'Movetime'):
+                    backup_movetime = move_time
+                    user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [1 to 5]'.format(backup_movetime), title=BOX_TITLE)
+                    if user_movetime is None:
+                        user_movetime = backup_movetime  # sec
+                    move_time = int(user_movetime)
+                    move_time = min(5, max(1, move_time))
+                    print('move_time is set to', move_time)
+                
+                if button in (None, 'Settings'):
+                    sg.PopupOK('Depth={}\nMovetime={}\n'.format(level, move_time), title=BOX_TITLE, keep_on_top=True)
+                
+                if button in (None, 'Go'):
+                    is_engine_ready = True
+                    break
 
+        # If human moves frist
         if is_human_stm:
             move_state = 0
             while True:
@@ -412,42 +474,37 @@ def PlayGame():
                 if button in (None, 'Exit'):
                     exit_is_pressed = True
                     break
+                
+                if button in (None, 'Go'):
+                    if is_human_stm:
+                        is_human_stm = False
+                    else:
+                        is_human_stm = True
+                    is_engine_ready = True
+                    break
+                
+                if button in (None, 'Settings'):
+                    sg.PopupOK('Depth={}\nMovetime={}\n'.format(level, move_time), title=BOX_TITLE, keep_on_top=True)
+                    break
+                
                 if button in (None, 'Depth'):
-                    user_depth = sg.PopupGetText('Input depth[1 to 128]', 'Engine depth setting')
+                    backup_level = level
+                    user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[1 to 8]'.format(backup_level), title=BOX_TITLE)
                     if user_depth is None:
-                        user_depth = 1
+                        user_depth = backup_level
                     level = int(user_depth)
-                    level = min(128, max(1, level))
+                    level = min(8, max(1, level))
                     print('depth is set to', level)
                     break
                 
                 if button in (None, 'Movetime'):
-                    user_movetime = sg.PopupGetText('Input movetime ', 'Engine move time in sec')
+                    backup_movetime = move_time
+                    user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [1 to 5]'.format(backup_movetime), title=BOX_TITLE)
                     if user_movetime is None:
-                        user_depth = 1  # sec
+                        user_movetime = backup_movetime  # sec
                     move_time = int(user_movetime)
-                    move_time = min(900, max(1, move_time))
+                    move_time = min(5, max(1, move_time))
                     print('move_time is set to', move_time)
-                    break
-                
-                if button == '_enginewhite_':
-                    window.FindElement('_playername_').Update('computer')
-                    window.FindElement('_engineid_').Update('human')
-                    if not board.turn:
-                        sg.PopupOK('Engine is already playing white')
-                        continue
-                    if is_human_stm:
-                        is_human_stm = False
-                    break
-                
-                if button == '_engineblack_':
-                    window.FindElement('_engineid_').Update('computer')
-                    window.FindElement('_playername_').Update('human')
-                    if board.turn:
-                        sg.PopupOK('Engine is already playing black')
-                        continue
-                    if is_human_stm:
-                        is_human_stm = False
                     break
                 
                 if button in (None, 'New Game'):
@@ -537,6 +594,8 @@ def PlayGame():
             
                             move_state = 2
                             is_human_stm ^= 1
+                            
+                            # Human has done its move
                      
                         else:
                             print('Illegal move')
@@ -549,7 +608,7 @@ def PlayGame():
                 break
 
         # Else if not is human stm
-        else:
+        elif not is_human_stm:
             is_promote = False
             is_play = False
             
@@ -579,6 +638,8 @@ def PlayGame():
                             window.FindElement('_engineinfo_').Update(engine_info, append=True)
                             
                             if best_time >= move_time:
+                                break
+                            if best_depth >= level:
                                 break
         
             move_str = str(best_move)
@@ -629,12 +690,16 @@ def PlayGame():
             button_square.Update(button_color=('white', 'lightskyblue'))
             is_human_stm ^= 1
             
+            # Engine has done its move
+            
+    # Exit game over loop
+            
     engine.quit()
     
     if exit_is_pressed:
-        sg.Popup('Program will exit')
+        pass
     else:
-        sg.Popup('Game over!', 'Thank you for playing')
+        sg.Popup('Game over!\n\nThank you for playing', title=BOX_TITLE)
 
     window.Close()
     print('window is closed')
