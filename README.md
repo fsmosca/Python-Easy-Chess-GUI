@@ -1,9 +1,7 @@
 # Python-Easy-Chess-GUI
 A Chess GUI based from Python using PySimpleGUI and Python-Chess. Users can also load a chess engine and play with it. This program is based on a [demo chess against ai](https://github.com/PySimpleGUI/PySimpleGUI/tree/master/Chess) from PySimpleGUI.<br>
 
-![](https://i.imgur.com/vLiA1bc.png)
-
-![](https://i.imgur.com/RLLZPSG.png)
+![](https://i.imgur.com/WJzSNae.png)
 
 ### Prerequisites
 I have not yet build an exe file for this GUI, not sure either if I can create it. In the meantime to get it running the following are required.
@@ -22,6 +20,11 @@ pip install python-chess
 * PySimpleGUI<br>
 https://github.com/PySimpleGUI/PySimpleGUI<br>
 pip install pysimplegui
+
+### Limitation
+This will be implemented with highest priority.<br>
+* Cannot flip board especially useful when user is playing black
+* Program would exit after a game ends.
 
 ### Credits
 * PySimpleGUI<br>
