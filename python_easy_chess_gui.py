@@ -304,18 +304,24 @@ def init_layout():
             
     init_window.Close()
     
-    return enginefn, is_player_white if True else False
+    return enginefn, True if is_player_white else False
     
     
-def create_board(is_user_white):        
+def create_board(is_user_white):
+    """
+    Build the main GUI, board is oriented based on side to move first.
+    is_user_white:
+        It this is True, the board is oriented such that the white pieces
+        are in the bottom. Otherwise the board will be oriented such that
+        the black pieces are at the bottom.
+    """
+     
     menu_def = [['&File', ['E&xit']],
                 ['&Game', ['&New Game']],
                 ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings']]
                 ]
     
-    # sg.SetOptions(margins=(0,0))
-    sg.ChangeLookAndFeel('GreenTan')
-    # create initial board setup
+    sg.ChangeLookAndFeel('#B0BEC5')  # Light dark
     psg_board = copy.deepcopy(initial_board)
     
     # the main board display layout
@@ -403,9 +409,8 @@ def redraw_board(window, board):
 
 
 def PlayGame():
-    """ Load chess engine and use can play a game.
-        This also creates a chessboard. Move legality is handled
-        by python-chess
+    """ 
+    Plays a game against an engine. Move legality is handled by python-chess.
     """ 
     enginefn, is_user_white = init_layout()
     
@@ -439,7 +444,7 @@ def PlayGame():
         moved_piece = None
         
         # If engine is to play first, allow the user to configure the engine
-        # and exit this loop only, when user presses the Engine->Go button
+        # and exit this loop when user presses the Engine->Go button
         if not is_engine_ready:
             while True:
                 button, value = window.Read(timeout=10)
@@ -606,6 +611,8 @@ def PlayGame():
             
                             move_state = 2
                             is_human_stm ^= 1
+                            
+                            window.FindElement('_engineinfo_').Update('', append=False)
                             
                             # Human has done its move
                      
