@@ -317,8 +317,9 @@ def create_board(is_user_white):
     """
      
     menu_def = [['&File', ['E&xit']],
-                ['&Game', ['&New Game']],
-                ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings']]
+                ['&Game', ['&New Game', 'Exit Game']],
+                ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings']],
+                ['&Help', ['Play']],
                 ]
     
     sg.ChangeLookAndFeel('Reddit')
@@ -406,12 +407,9 @@ def redraw_board(window, board):
             elem = window.FindElement(key=(i, j))
             elem.Update(button_color=('white', color),
                         image_filename=piece_image, )
-
-
-def PlayGame():
-    """ 
-    Plays a game against an engine. Move legality is handled by python-chess.
-    """ 
+            
+            
+def build_gui():
     enginefn, is_user_white = init_layout()
     
     # Build GUI layout
@@ -426,20 +424,53 @@ def PlayGame():
     else:
         window.FindElement('_White_').Update(engine_id_name)
         window.FindElement('_Black_').Update('Human')
+        
+    return window, psg_board, engine, engine_id_name, is_user_white
+
+
+def main_loop():
+    window, psg_board, engine, engine_id_name, is_user_white = build_gui()
     
+    while True:
+        button, value = window.Read(timeout=10)
+        if button in (None, 'Exit'):
+            break
+        if button in (None, 'Play'):
+            sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
+            continue
+        if button in (None, 'New Game'):
+            while True:
+                start_new_game = play_game(window, psg_board, engine, engine_id_name, is_user_white)
+                if not start_new_game:
+                    break
+            continue
+        
+    engine.quit()
+        
+        
+def play_game(window, psg_board, engine, engine_id_name, is_user_white):
+    """ 
+    Plays a game against an engine. Move legality is handled by python-chess.
+    """ 
+    window.FindElement('_movelist_').Update('')
+    window.FindElement('_engineinfo_').Update('')
+            
     is_human_stm = True if is_user_white else False
+    
+    psg_board = copy.deepcopy(initial_board)
+    redraw_board(window, psg_board)
 
     board = chess.Board()
     move_count = 1
     move_state = move_from = move_to = 0
-    exit_is_pressed = False
     level = 8
     move_time = 1  # sec
+    is_new_game, is_exit_game = False, False
     
     # Do not play immediately when stm is computer
     is_engine_ready = True if is_human_stm else False
     
-    # ---===--- Loop taking in user input --- #
+    # Game loop
     while not board.is_game_over():
         moved_piece = None
         
@@ -452,7 +483,6 @@ def PlayGame():
                 if button in (None, 'Exit'):
                     engine.quit()
                     sys.exit()
-                    break
                 
                 if button in (None, 'Depth'):
                     backup_level = level
@@ -479,7 +509,7 @@ def PlayGame():
                     is_engine_ready = True
                     break
 
-        # If human moves frist
+        # If human moves first
         if is_human_stm:
             move_state = 0
             while True:
@@ -489,7 +519,15 @@ def PlayGame():
                     break
                 
                 if button in (None, 'Exit'):
-                    exit_is_pressed = True
+                    engine.quit()
+                    sys.exit()
+                
+                if button in (None, 'New Game'):
+                    is_new_game = True
+                    break
+                
+                if button in (None, 'Exit Game'):
+                    is_exit_game = True
                     break
                 
                 if button in (None, 'Go'):
@@ -522,16 +560,6 @@ def PlayGame():
                     move_time = int(user_movetime)
                     move_time = min(5, max(1, move_time))
                     print('move_time is set to', move_time)
-                    break
-                
-                if button in (None, 'New Game'):
-                    psg_board = copy.deepcopy(initial_board)
-                    redraw_board(window, psg_board)
-                    board = chess.Board()
-                    move_state = move_from = move_to = 0
-                    move_count = 1
-                    window.FindElement('_movelist_').Update('')
-                    window.FindElement('_engineinfo_').Update('')
                     break
                 
                 if type(button) is tuple:
@@ -623,7 +651,7 @@ def PlayGame():
                             button_square.Update(button_color=('white', color))
                             continue
                 
-            if exit_is_pressed:
+            if is_new_game or is_exit_game:
                 break
 
         # Else if not is human stm
@@ -712,20 +740,19 @@ def PlayGame():
             # Engine has done its move
             
     # Exit game over loop
-            
-    engine.quit()
     
-    if exit_is_pressed:
-        pass
-    else:
+    if is_exit_game:
+        return False
+    
+    if not is_new_game:
         sg.Popup('Game over!\n\nThank you for playing', title=BOX_TITLE)
-
-    window.Close()
-    print('window is closed')
+    
+    return is_new_game
 
 
 def main():
-    PlayGame()
+    main_loop()
+#    PlayGame()
 
 
 if __name__ == "__main__":
