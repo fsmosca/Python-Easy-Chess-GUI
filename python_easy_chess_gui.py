@@ -127,16 +127,6 @@ images2 = {BISHOPB: bishopB2, BISHOPW: bishopW2, PAWNB: pawnB2, PAWNW: pawnW2,
           ROOKB: rookB2, ROOKW: rookW2, KINGB: kingB2, KINGW: kingW2,
           QUEENB: queenB2, QUEENW: queenW2, BLANK: blank2}
 
-def open_pgn_file(filename):
-    """ Read pgn file and parse moves in the game.
-        Not used at the moment .
-    """
-    pass
-    # pgn = open(filename)
-    # first_game = chess.pgn.read_game(pgn)
-    # moves = [move for move in first_game.main_line()]
-    # return moves
-
 
 def relative_row(s, c):
     """ 
@@ -269,10 +259,55 @@ def get_promo_piece(window, psg_board, move, stm, human):
             elif pyc_promo == chess.KNIGHT:
                 psg_promo = KNIGHTB
     
-    return pyc_promo, psg_promo 
+    return pyc_promo, psg_promo
+
+
+def start_engine(enginefn):
+    """ Start engine """
+    eng_filename = './Engines/' + enginefn
+    if eng_filename is None:
+        print('Failed to load engine')
+        sys.exit()
+    engine = chess.engine.SimpleEngine.popen_uci(eng_filename)
+    engine_id_name = engine.id['name']
+    
+    return engine, engine_id_name
+
+
+def init_layout():    
+    # List all files in Engines dir
+    engine_list = []
+    engine_path = './Engines/'
+    files = os.listdir(engine_path)
+    for file in files:
+        engine_list.append(file)
+        
+    layout = [
+        [sg.Radio('I play with white color', 'first_color', size=(24, 1), font=('Consolas', 10), default=True, key = '_white_'), 
+         sg.Radio('I play with black color', 'first_color', size=(24, 1), font=('Consolas', 10), key = '_black_')],
+        [sg.Text('Engine opponent', size=(16, 1), font=('Consolas', 10)), sg.Drop(engine_list, size=(34, 1), font=('Consolas', 10), key='_enginefn_')],
+        [sg.Button('OK', size=(6, 1), font=('Consolas', 10), key='_ok_')],
+    ]
+    
+    init_window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), layout,
+                       default_button_element_size=(12, 1),
+                       auto_size_buttons=False,
+                       icon='kingb.ico')
+
+    enginefn = None
+    while True:        
+        button, value = init_window.Read()        
+        enginefn = value['_enginefn_']
+        is_player_white = value['_white_']
+        if button == '_ok_':
+            break
+            
+    init_window.Close()
+    
+    return enginefn, is_player_white if True else False
     
     
-def create_board(flip):
+def create_board(is_user_white):        
     menu_def = [['&File', ['E&xit']],
                 ['&Game', ['&New Game']],
                 ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings']]
@@ -291,7 +326,7 @@ def create_board(flip):
     step = 1
     file_names = 'abcdefgh'
     
-    if flip:
+    if not is_user_white:
         start = 7
         end = -1
         step = -1
@@ -311,19 +346,10 @@ def create_board(flip):
     # add the labels across bottom of board
     board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
                         font='Any 13') for a in file_names])
-        
-    # List all files in dir
-    engine_list = []
-    engine_path = './Engines/'
-    files = os.listdir(engine_path)
-    for file in files:
-        engine_list.append(file)
 
     board_controls = [
         [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_White_', size=(34, 1))],            
         [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_Black_', size=(34, 1))],
-        [sg.Text('Engine', size=(6, 1), font=('Consolas', 10)), sg.Drop(engine_list, size=(22, 1), font=('Consolas', 10), key='_engine_'),
-            sg.Button('Select', size=(6, 1), font=('Consolas', 10), key='_selectengine_')],
         [sg.Text('Move List', font=('Consolas', 10))],            
         [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 4), font=('Consolas', 10), key='_movelist_')],
         [sg.Text('Engine analysis info', font=('Consolas', 10))],
@@ -381,41 +407,22 @@ def PlayGame():
         This also creates a chessboard. Move legality is handled
         by python-chess
     """ 
+    enginefn, is_user_white = init_layout()
+    
     # Build GUI layout
-    reply = sg.PopupYesNo('Play as white?', title=BOX_TITLE)
-    flip = False if reply == 'Yes' else True
-    window, psg_board = create_board(flip)
+    window, psg_board = create_board(is_user_white)
     
-    if not flip:
-        window.FindElement('_White_').Update('human')
-        window.FindElement('_Black_').Update('computer')
+    # Start engine and get its id name
+    engine, engine_id_name = start_engine(enginefn)
+    
+    if is_user_white:
+        window.FindElement('_White_').Update('Human')
+        window.FindElement('_Black_').Update(engine_id_name)
     else:
-        window.FindElement('_Black_').Update('human')
-        window.FindElement('_White_').Update('computer')
+        window.FindElement('_White_').Update(engine_id_name)
+        window.FindElement('_Black_').Update('Human')
     
-    is_human_stm = True if not flip else False
-    
-    # Let the user choose the engine first
-    while True:        
-        button, value = window.Read()
-        
-        eng = value['_engine_']
-        
-        if button == 'Exit':
-            sys.exit()
-        if button == '_selectengine_':
-            
-            break
-        elif button != '_selectengine_':
-            sg.PopupOK('Select engine first', title=BOX_TITLE, keep_on_top=True)
-
-    filename = './Engines/' + eng
-
-    if filename is None:
-        print('Failed to load engine')
-    print(filename)
-
-    engine = chess.engine.SimpleEngine.popen_uci(filename)
+    is_human_stm = True if is_user_white else False
 
     board = chess.Board()
     move_count = 1
@@ -437,6 +444,11 @@ def PlayGame():
             while True:
                 button, value = window.Read(timeout=10)
                 
+                if button in (None, 'Exit'):
+                    engine.quit()
+                    sys.exit()
+                    break
+                
                 if button in (None, 'Depth'):
                     backup_level = level
                     user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[1 to 8]'.format(backup_level), title=BOX_TITLE)
@@ -456,7 +468,7 @@ def PlayGame():
                     print('move_time is set to', move_time)
                 
                 if button in (None, 'Settings'):
-                    sg.PopupOK('Depth={}\nMovetime={}\n'.format(level, move_time), title=BOX_TITLE, keep_on_top=True)
+                    sg.PopupOK('Depth={}\nMovetime={}\nengine={}\n'.format(level, move_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
                 
                 if button in (None, 'Go'):
                     is_engine_ready = True
@@ -484,7 +496,7 @@ def PlayGame():
                     break
                 
                 if button in (None, 'Settings'):
-                    sg.PopupOK('Depth={}\nMovetime={}\n'.format(level, move_time), title=BOX_TITLE, keep_on_top=True)
+                    sg.PopupOK('Depth={}\nMovetime={}\nengine={}\n'.format(level, move_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
                     break
                 
                 if button in (None, 'Depth'):
