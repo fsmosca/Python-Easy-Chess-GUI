@@ -30,10 +30,6 @@ pip install pysimplegui
 * To start a new game press Game->New Game
 * To exit, press File->Exit
 
-### Limitation
-This will be implemented with highest priority.<br>
-* Program would exit after a game ends.
-
 ### Credits
 * PySimpleGUI<br>
 https://github.com/PySimpleGUI/PySimpleGUI
