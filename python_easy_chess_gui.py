@@ -321,7 +321,7 @@ def create_board(is_user_white):
                 ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings']]
                 ]
     
-    sg.ChangeLookAndFeel('#B0BEC5')  # Light dark
+    sg.ChangeLookAndFeel('Reddit')
     psg_board = copy.deepcopy(initial_board)
     
     # the main board display layout
