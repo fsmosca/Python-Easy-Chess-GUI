@@ -526,6 +526,9 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                 
                 if button in (None, 'Settings'):
                     sg.PopupOK('Depth={}\nMovetime={}\nengine={}\n'.format(level, move_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+                    
+                if button in (None, 'Play'):
+                    sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
                 
                 if button in (None, 'Go'):
                     is_engine_ready = True
@@ -550,6 +553,10 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                 
                 if button in (None, 'Exit Game'):
                     is_exit_game = True
+                    break
+                
+                if button in (None, 'Play'):
+                    sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
                     break
                 
                 if button in (None, 'Go'):
