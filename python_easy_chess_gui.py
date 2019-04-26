@@ -463,7 +463,7 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
     is_engine_ready = True if is_human_stm else False
     
     # Game loop
-    while not board.is_game_over():
+    while not board.is_game_over(claim_draw=True):
         moved_piece = None
         
         # If engine is to play first, allow the user to configure the engine
@@ -744,7 +744,8 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
         return False
     
     if not is_new_game:
-        sg.Popup('Game over!\n\nThank you for playing', title=BOX_TITLE)
+        result = board.result(claim_draw=True)
+        sg.Popup('Game over!\n\nResult is {}\nThank you for playing'.format(result), title=BOX_TITLE)
     
     return is_new_game
             
