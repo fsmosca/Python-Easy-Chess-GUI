@@ -338,7 +338,7 @@ def create_board(psg_board, is_user_white):
     # loop though board and create buttons with images
     for i in range(start, end, step):
         # Row numbers at left of board
-        row = [sg.T(str(8 - i) + '  ', font='Any 13')]
+        row = [sg.T(str(8 - i) + '  ', font='Any 11')]
         
         for j in range(start, end, step):
             piece_image = images3[psg_board[i][j]]
@@ -348,7 +348,7 @@ def create_board(psg_board, is_user_white):
         
     # add the labels across bottom of board
     board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
-                        font='Any 13') for a in file_char_name])
+                        font='Any 11') for a in file_char_name])
         
     return board_layout
 
