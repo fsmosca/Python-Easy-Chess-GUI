@@ -334,6 +334,39 @@ def init_user_option():
     init_window.Close()
     
     return enginefn, True if is_player_white else False
+
+
+def create_board(psg_board, is_user_white):
+    """
+    Returns board layout for main layout. The board is oriented depending on
+    the value of is_user_white.
+    """
+    # the main board display layout
+    board_layout = []
+    
+    start = 0
+    end = 8
+    step = 1
+    file_char_name = 'abcdefgh'
+    
+    if not is_user_white:
+        start = 7
+        end = -1
+        step = -1
+        file_char_name = file_char_name[::-1]
+    
+    # loop though board and create buttons with images
+    for i in range(start, end, step):
+        # Row numbers at left of board
+        row = [sg.T(str(8 - i) + '  ', font='Any 13')]
+        
+        for j in range(start, end, step):
+            piece_image = images3[psg_board[i][j]]
+            row.append(render_square(piece_image, key=(i, j), location=(i, j)))
+
+        board_layout.append(row)
+        
+    return board_layout
     
     
 def build_main_layout(is_user_white):
@@ -347,41 +380,15 @@ def build_main_layout(is_user_white):
      
     menu_def = [['&File', ['E&xit']],
                 ['&Game', ['&New Game', 'Exit Game']],
-                ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings']],
+                ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings', 'Select']],
                 ['&Help', ['Play']],
                 ]
     
     sg.ChangeLookAndFeel('Reddit')
     psg_board = copy.deepcopy(initial_board)
     
-    # the main board display layout
-    board_layout = []
-    
-    start = 0
-    end = 8
-    step = 1
-    file_names = 'abcdefgh'
-    
-    if not is_user_white:
-        start = 7
-        end = -1
-        step = -1
-        file_names = file_names[::-1]
-    
-    # loop though board and create buttons with images
-    for i in range(start, end, step):
-        # Row numbers at left of board
-        row = [sg.T(str(8 - i) + '  ', font='Any 13')]
-        
-        for j in range(start, end, step):
-            piece_image = images3[psg_board[i][j]]
-            row.append(render_square(piece_image, key=(i, j), location=(i, j)))
-
-        board_layout.append(row)
-    
-    # add the labels across bottom of board
-    board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
-                        font='Any 13') for a in file_names])
+    # Define board
+    board_layout = create_board(psg_board, is_user_white)
 
     board_controls = [
         [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_White_', size=(34, 1))],            
@@ -405,7 +412,7 @@ def build_main_layout(is_user_white):
                        auto_size_buttons=False,
                        icon='kingb.ico')
     
-    return window, psg_board   
+    return window, psg_board
 
 
 def render_square(image, key, location):
@@ -460,6 +467,9 @@ def main_loop():
     while True:
         button, value = window.Read(timeout=10)
         if button in (None, 'Exit'):
+            break
+        if button in (None, 'Select'):
+            init_user_option()
             break
         if button in (None, 'Play'):
             sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
