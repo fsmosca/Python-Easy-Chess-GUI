@@ -170,6 +170,17 @@ def get_col(s):
     return chess.square_file(s)
 
 
+def redraw_board(window, board):
+    """ Redraw GUI board """
+    for i in range(8):
+        for j in range(8):
+            color = '#B58863' if (i + j) % 2 else '#F0D9B5'
+            piece_image = images3[board[i][j]]
+            elem = window.FindElement(key=(i, j))
+            elem.Update(button_color=('white', color),
+                        image_filename=piece_image, )
+
+
 def update_rook(window, psg_board, picked_move):
     """ Update rook location on the board for castle move """
     if picked_move == 'e1g1':
@@ -284,18 +295,6 @@ def get_promo_piece(window, psg_board, move, stm, human):
     return pyc_promo, psg_promo
 
 
-def start_engine(enginefn):
-    """ Start engine """
-    eng_filename = './Engines/' + enginefn
-    if eng_filename is None:
-        print('Failed to load engine')
-        sys.exit()
-    engine = chess.engine.SimpleEngine.popen_uci(eng_filename)
-    engine_id_name = engine.id['name']
-    
-    return engine, engine_id_name
-
-
 def get_engines():
     """ Returns a list of engines located in Engines dir """
     engine_list = []
@@ -307,33 +306,14 @@ def get_engines():
     return engine_list
 
 
-def init_user_option():
-    """ Shows user options for user color and engine opponent """
-    engine_list = get_engines()
-    
-    layout = [
-        [sg.Radio('I play with white color', 'first_color', size=(24, 1), font=('Consolas', 10), default=True, key = '_white_'), 
-         sg.Radio('I play with black color', 'first_color', size=(24, 1), font=('Consolas', 10), key = '_black_')],
-        [sg.Text('Engine opponent', size=(16, 1), font=('Consolas', 10)), sg.Drop(engine_list, size=(34, 1), font=('Consolas', 10), key='_enginefn_')],
-        [sg.Button('OK', size=(6, 1), font=('Consolas', 10), key='_ok_')],
-    ]
-    
-    init_window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), layout,
-                       default_button_element_size=(12, 1),
-                       auto_size_buttons=False,
-                       icon='kingb.ico')
-
-    enginefn = None
-    while True:        
-        button, value = init_window.Read()        
-        enginefn = value['_enginefn_']
-        is_player_white = value['_white_']
-        if button == '_ok_':
-            break
-            
-    init_window.Close()
-    
-    return enginefn, True if is_player_white else False
+def render_square(image, key, location):
+    """ Render square """
+    if (location[0] + location[1]) % 2:
+        color = '#B58863'
+    else:
+        color = '#F0D9B5'
+    return sg.RButton('', image_filename=image, size=(1, 1), 
+                      button_color=('white', color), pad=(0, 0), key=key)
 
 
 def create_board(psg_board, is_user_white):
@@ -371,6 +351,18 @@ def create_board(psg_board, is_user_white):
                         font='Any 13') for a in file_char_name])
         
     return board_layout
+
+
+def start_engine(enginefn):
+    """ Start engine """
+    eng_filename = './Engines/' + enginefn
+    if eng_filename is None:
+        print('Failed to load engine')
+        sys.exit()
+    engine = chess.engine.SimpleEngine.popen_uci(eng_filename)
+    engine_id_name = engine.id['name']
+    
+    return engine, engine_id_name
     
     
 def build_main_layout(is_user_white):
@@ -419,75 +411,35 @@ def build_main_layout(is_user_white):
     return window, psg_board
 
 
-def render_square(image, key, location):
-    """ Render square """
-    if (location[0] + location[1]) % 2:
-        color = '#B58863'
-    else:
-        color = '#F0D9B5'
-    return sg.RButton('', image_filename=image, size=(1, 1), 
-                      button_color=('white', color), pad=(0, 0), key=key)
-
-
-def redraw_board(window, board):
-    """ Redraw GUI board """
-    for i in range(8):
-        for j in range(8):
-            color = '#B58863' if (i + j) % 2 else '#F0D9B5'
-            piece_image = images3[board[i][j]]
-            elem = window.FindElement(key=(i, j))
-            elem.Update(button_color=('white', color),
-                        image_filename=piece_image, )
-            
-            
-def build_gui():
-    """ 
-    Builds the main GUI, this includes board orientation and engine initialization.
-    """
-    enginefn, is_user_white = init_user_option()
-
-    window, psg_board = build_main_layout(is_user_white)
+def init_user_option():
+    """ Shows user options for user color and engine opponent """
+    engine_list = get_engines()
     
-    # Start engine and get its id name
-    engine, engine_id_name = start_engine(enginefn)
+    layout = [
+        [sg.Radio('I play with white color', 'first_color', size=(24, 1), font=('Consolas', 10), default=True, key = '_white_'), 
+         sg.Radio('I play with black color', 'first_color', size=(24, 1), font=('Consolas', 10), key = '_black_')],
+        [sg.Text('Engine opponent', size=(16, 1), font=('Consolas', 10)), sg.Drop(engine_list, size=(34, 1), font=('Consolas', 10), key='_enginefn_')],
+        [sg.Button('OK', size=(6, 1), font=('Consolas', 10), key='_ok_')],
+    ]
     
-    # Update White/Black label values
-    if is_user_white:
-        window.FindElement('_White_').Update('Human')
-        window.FindElement('_Black_').Update(engine_id_name)
-    else:
-        window.FindElement('_White_').Update(engine_id_name)
-        window.FindElement('_Black_').Update('Human')
-        
-    return window, psg_board, engine, engine_id_name, is_user_white
+    init_window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), layout,
+                       default_button_element_size=(12, 1),
+                       auto_size_buttons=False,
+                       icon='kingb.ico')
 
-
-def main_loop():
-    """ 
-    This is where we build our GUI and read user inputs. When user presses Exit we also quit the engine.
-    """
-    window, psg_board, engine, engine_id_name, is_user_white = build_gui()
-    
-    while True:
-        button, value = window.Read(timeout=10)
-        if button in (None, 'Exit'):
+    enginefn = None
+    while True:        
+        button, value = init_window.Read()        
+        enginefn = value['_enginefn_']
+        is_player_white = value['_white_']
+        if button == '_ok_':
             break
-        if button in (None, 'Select'):
-            init_user_option()
-            break
-        if button in (None, 'Play'):
-            sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
-            continue
-        if button in (None, 'New Game'):
-            while True:
-                start_new_game = play_game(window, psg_board, engine, engine_id_name, is_user_white)
-                if not start_new_game:
-                    break
-            continue
-        
-    engine.quit()
-        
-        
+            
+    init_window.Close()
+    
+    return enginefn, True if is_player_white else False
+
+
 def play_game(window, psg_board, engine, engine_id_name, is_user_white):
     """ 
     Plays a game against an engine. Move legality is handled by python-chess.
@@ -795,6 +747,54 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
         sg.Popup('Game over!\n\nThank you for playing', title=BOX_TITLE)
     
     return is_new_game
+            
+            
+def build_gui():
+    """ 
+    Builds the main GUI, this includes board orientation and engine initialization.
+    """
+    enginefn, is_user_white = init_user_option()
+
+    window, psg_board = build_main_layout(is_user_white)
+    
+    # Start engine and get its id name
+    engine, engine_id_name = start_engine(enginefn)
+    
+    # Update White/Black label values
+    if is_user_white:
+        window.FindElement('_White_').Update('Human')
+        window.FindElement('_Black_').Update(engine_id_name)
+    else:
+        window.FindElement('_White_').Update(engine_id_name)
+        window.FindElement('_Black_').Update('Human')
+        
+    return window, psg_board, engine, engine_id_name, is_user_white
+
+
+def main_loop():
+    """ 
+    This is where we build our GUI and read user inputs. When user presses Exit we also quit the engine.
+    """
+    window, psg_board, engine, engine_id_name, is_user_white = build_gui()
+    
+    while True:
+        button, value = window.Read(timeout=10)
+        if button in (None, 'Exit'):
+            break
+        if button in (None, 'Select'):
+            init_user_option()
+            break
+        if button in (None, 'Play'):
+            sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
+            continue
+        if button in (None, 'New Game'):
+            while True:
+                start_new_game = play_game(window, psg_board, engine, engine_id_name, is_user_white)
+                if not start_new_game:
+                    break
+            continue
+        
+    engine.quit()
 
 
 def main():
