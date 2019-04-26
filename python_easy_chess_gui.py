@@ -567,7 +567,7 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                         row, col = move_from
                         piece = psg_board[row][col]  # get the move-from piece
                         button_square = window.FindElement(key=(row, col))
-                        button_square.Update(button_color=('white', 'lightskyblue'))
+                        button_square.Update(button_color=('white', 'lightcoral'))
                         move_state = 1
                         moved_piece = board.piece_type_at(chess.square(col, 7-row))  # Pawn=1
                     elif move_state == 1:
@@ -634,7 +634,7 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                             board.push(user_move)
                             
                             button_square = window.FindElement(key=(row, col))
-                            button_square.Update(button_color=('white', 'lightskyblue'))
+                            button_square.Update(button_color=('white', 'khaki'))
             
                             move_state = 2
                             is_human_stm ^= 1
@@ -733,7 +733,7 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
             move_count += 1
             
             button_square = window.FindElement(key=(to_row, to_col))
-            button_square.Update(button_color=('white', 'lightskyblue'))
+            button_square.Update(button_color=('white', 'khaki'))
             is_human_stm ^= 1
             
             # Engine has done its move
