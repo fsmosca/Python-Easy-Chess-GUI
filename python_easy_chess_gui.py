@@ -43,11 +43,11 @@ import chess.engine
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.3.0'
+APP_VERSION = 'v0.3.1'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
-CHESS_PATH = 'Images'  # path to the chess pieces
+CHESS_PATH = 'Images/60'  # path to the chess pieces
 
 
 BLANK = 0  # piece names
@@ -116,16 +116,38 @@ queenW2 = os.path.join(CHESS_PATH, 'queenw.png')
 kingB2 = os.path.join(CHESS_PATH, 'kingb.png')
 kingW2 = os.path.join(CHESS_PATH, 'kingw.png')
 
+# Images/wiki_60
+blank = os.path.join(CHESS_PATH, 'blank.png')
+bishopB = os.path.join(CHESS_PATH, 'bB.png')
+bishopW = os.path.join(CHESS_PATH, 'wB.png')
+pawnB = os.path.join(CHESS_PATH, 'bP.png')
+pawnW = os.path.join(CHESS_PATH, 'wP.png')
+knightB = os.path.join(CHESS_PATH, 'bN.png')
+knightW = os.path.join(CHESS_PATH, 'wN.png')
+rookB = os.path.join(CHESS_PATH, 'bR.png')
+rookW = os.path.join(CHESS_PATH, 'wR.png')
+queenB = os.path.join(CHESS_PATH, 'bQ.png')
+queenW = os.path.join(CHESS_PATH, 'wQ.png')
+kingB = os.path.join(CHESS_PATH, 'bK.png')
+kingW = os.path.join(CHESS_PATH, 'wK.png')
+
 
 images = {BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
           KNIGHTB: knightB, KNIGHTW: knightW,
           ROOKB: rookB, ROOKW: rookW, KINGB: kingB, KINGW: kingW,
           QUEENB: queenB, QUEENW: queenW, BLANK: blank}
 
+
 images2 = {BISHOPB: bishopB2, BISHOPW: bishopW2, PAWNB: pawnB2, PAWNW: pawnW2,
           KNIGHTB: knightB2, KNIGHTW: knightW2,
           ROOKB: rookB2, ROOKW: rookW2, KINGB: kingB2, KINGW: kingW2,
           QUEENB: queenB2, QUEENW: queenW2, BLANK: blank2}
+
+
+images3 = {BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
+          KNIGHTB: knightB, KNIGHTW: knightW,
+          ROOKB: rookB, ROOKW: rookW, KINGB: kingB, KINGW: kingW,
+          QUEENB: queenB, QUEENW: queenW, BLANK: blank}
 
 
 def relative_row(s, c):
@@ -345,7 +367,7 @@ def create_board(is_user_white):
         row = [sg.T(str(8 - i) + '  ', font='Any 13')]
         
         for j in range(start, end, step):
-            piece_image = images2[psg_board[i][j]]
+            piece_image = images3[psg_board[i][j]]
             row.append(render_square(piece_image, key=(i, j), location=(i, j)))
 
         board_layout.append(row)
@@ -403,7 +425,7 @@ def redraw_board(window, board):
     for i in range(8):
         for j in range(8):
             color = '#B58863' if (i + j) % 2 else '#F0D9B5'
-            piece_image = images2[board[i][j]]
+            piece_image = images3[board[i][j]]
             elem = window.FindElement(key=(i, j))
             elem.Update(button_color=('white', color),
                         image_filename=piece_image, )
@@ -669,7 +691,7 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                 window.FindElement('_engineinfo_').Update(engine_info, append=False)
             else:
                 best_move = None
-                with engine.analysis(board) as analysis:
+                with engine.analysis(board, chess.engine.Limit(depth=level, time=move_time), info=chess.engine.INFO_ALL) as analysis:
                     for info in analysis:
                         time.sleep(0.1)
                         if 'pv' in info and 'score' in info and 'depth' in info and 'time' in info:
