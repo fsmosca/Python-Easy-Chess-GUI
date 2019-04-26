@@ -376,7 +376,7 @@ def build_main_layout(is_user_white):
      
     menu_def = [['&File', ['E&xit']],
                 ['&Game', ['&New Game', 'Exit Game']],
-                ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings', 'Select']],
+                ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings']],
                 ['&Help', ['Play']],
                 ]
     
@@ -782,9 +782,6 @@ def main_loop():
         button, value = window.Read(timeout=10)
         if button in (None, 'Exit'):
             break
-        if button in (None, 'Select'):
-            init_user_option()
-            break
         if button in (None, 'Play'):
             sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
             continue
@@ -796,6 +793,7 @@ def main_loop():
             continue
         
     engine.quit()
+    window.Close()
 
 
 def main():
