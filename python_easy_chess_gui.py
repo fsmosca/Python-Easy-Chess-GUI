@@ -296,14 +296,21 @@ def start_engine(enginefn):
     return engine, engine_id_name
 
 
-def init_layout():    
-    # List all files in Engines dir
+def get_engines():
+    """ Returns a list of engines located in Engines dir """
     engine_list = []
     engine_path = './Engines/'
     files = os.listdir(engine_path)
     for file in files:
         engine_list.append(file)
         
+    return engine_list
+
+
+def init_user_option():
+    """ Shows user options for user color and engine opponent """
+    engine_list = get_engines()
+    
     layout = [
         [sg.Radio('I play with white color', 'first_color', size=(24, 1), font=('Consolas', 10), default=True, key = '_white_'), 
          sg.Radio('I play with black color', 'first_color', size=(24, 1), font=('Consolas', 10), key = '_black_')],
@@ -329,9 +336,9 @@ def init_layout():
     return enginefn, True if is_player_white else False
     
     
-def create_board(is_user_white):
+def build_main_layout(is_user_white):
     """
-    Build the main GUI, board is oriented based on side to move first.
+    Build the main part of GUI, board is oriented based on the color of the side to move first.
     is_user_white:
         It this is True, the board is oriented such that the white pieces
         are in the bottom. Otherwise the board will be oriented such that
@@ -423,14 +430,17 @@ def redraw_board(window, board):
             
             
 def build_gui():
-    enginefn, is_user_white = init_layout()
-    
-    # Build GUI layout
-    window, psg_board = create_board(is_user_white)
+    """ 
+    Builds the main GUI, this includes board orientation and engine initialization.
+    """
+    enginefn, is_user_white = init_user_option()
+
+    window, psg_board = build_main_layout(is_user_white)
     
     # Start engine and get its id name
     engine, engine_id_name = start_engine(enginefn)
     
+    # Update White/Black label values
     if is_user_white:
         window.FindElement('_White_').Update('Human')
         window.FindElement('_Black_').Update(engine_id_name)
@@ -442,6 +452,9 @@ def build_gui():
 
 
 def main_loop():
+    """ 
+    This is where we build our GUI and read user inputs. When user presses Exit we also quit the engine.
+    """
     window, psg_board, engine, engine_id_name, is_user_white = build_gui()
     
     while True:
@@ -772,7 +785,6 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
 
 def main():
     main_loop()
-#    PlayGame()
 
 
 if __name__ == "__main__":
