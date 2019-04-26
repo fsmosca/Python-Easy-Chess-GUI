@@ -384,21 +384,12 @@ def create_board(is_user_white):
         [sg.Text('Engine analysis info', font=('Consolas', 10))],
         [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 12), font=('Consolas', 10), key='_engineinfo_')],        
     ]
-    
-    # layouts for the tabs
-    controls_layout = [[sg.Text('Performance Parameters', font='_ 20')],
-                       [sg.T('Put stuff like AI engine tuning parms on this tab')]]
-
-    statistics_layout = [[sg.Text('Statistics', font=('_ 20'))],
-                         [sg.T('Game statistics go here?')]]
 
     board_tab = [[sg.Column(board_layout)]]
 
     # the main window layout
     layout = [[sg.Menu(menu_def, tearoff=False)],
-              [sg.TabGroup([[sg.Tab('Board', board_tab),
-                             sg.Tab('Controls', controls_layout),
-                             sg.Tab('Statistics', statistics_layout)]], title_color='red'),
+              [sg.TabGroup([[sg.Tab('Board', board_tab)]], title_color='red'),
                sg.Column(board_controls)],
               ]
 
