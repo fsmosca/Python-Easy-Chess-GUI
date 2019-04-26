@@ -386,10 +386,10 @@ def build_main_layout(is_user_white):
     board_controls = [
         [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_White_', size=(34, 1))],            
         [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_Black_', size=(34, 1))],
-        [sg.Text('Move List', font=('Consolas', 10))],            
+        [sg.Text('MOVE LIST', font=('Consolas', 10))],            
         [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 4), font=('Consolas', 10), key='_movelist_')],
-        [sg.Text('Engine analysis info', font=('Consolas', 10))],
-        [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 12), font=('Consolas', 10), key='_engineinfo_')],        
+        [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10))],
+        [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 4), font=('Consolas', 10), key='_engineinfo_')],        
     ]
 
     board_tab = [[sg.Column(board_layout)]]
