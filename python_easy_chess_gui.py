@@ -366,6 +366,10 @@ def create_board(psg_board, is_user_white):
 
         board_layout.append(row)
         
+    # add the labels across bottom of board
+    board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
+                        font='Any 13') for a in file_char_name])
+        
     return board_layout
     
     
