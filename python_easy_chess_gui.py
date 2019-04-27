@@ -87,36 +87,7 @@ initial_board = [[ROOKB, KNIGHTB, BISHOPB, QUEENB, KINGB, BISHOPB, KNIGHTB, ROOK
                  [ROOKW, KNIGHTW, BISHOPW, QUEENW, KINGW, BISHOPW, KNIGHTW, ROOKW]]
 
 
-blank = os.path.join(CHESS_PATH, 'blank.png')
-bishopB = os.path.join(CHESS_PATH, 'nbishopb.png')
-bishopW = os.path.join(CHESS_PATH, 'nbishopw.png')
-pawnB = os.path.join(CHESS_PATH, 'npawnb.png')
-pawnW = os.path.join(CHESS_PATH, 'npawnw.png')
-knightB = os.path.join(CHESS_PATH, 'nknightb.png')
-knightW = os.path.join(CHESS_PATH, 'nknightw.png')
-rookB = os.path.join(CHESS_PATH, 'nrookb.png')
-rookW = os.path.join(CHESS_PATH, 'nrookw.png')
-queenB = os.path.join(CHESS_PATH, 'nqueenb.png')
-queenW = os.path.join(CHESS_PATH, 'nqueenw.png')
-kingB = os.path.join(CHESS_PATH, 'nkingb.png')
-kingW = os.path.join(CHESS_PATH, 'nkingw.png')
-
-# 2d piece images
-blank2 = os.path.join(CHESS_PATH, 'blank.png')
-bishopB2 = os.path.join(CHESS_PATH, 'bishopb.png')
-bishopW2 = os.path.join(CHESS_PATH, 'bishopw.png')
-pawnB2 = os.path.join(CHESS_PATH, 'pawnb.png')
-pawnW2 = os.path.join(CHESS_PATH, 'pawnw.png')
-knightB2 = os.path.join(CHESS_PATH, 'knightb.png')
-knightW2 = os.path.join(CHESS_PATH, 'knightw.png')
-rookB2 = os.path.join(CHESS_PATH, 'rookb.png')
-rookW2 = os.path.join(CHESS_PATH, 'rookw.png')
-queenB2 = os.path.join(CHESS_PATH, 'queenb.png')
-queenW2 = os.path.join(CHESS_PATH, 'queenw.png')
-kingB2 = os.path.join(CHESS_PATH, 'kingb.png')
-kingW2 = os.path.join(CHESS_PATH, 'kingw.png')
-
-# Images/wiki_60
+# Images/60
 blank = os.path.join(CHESS_PATH, 'blank.png')
 bishopB = os.path.join(CHESS_PATH, 'bB.png')
 bishopW = os.path.join(CHESS_PATH, 'wB.png')
@@ -133,18 +104,6 @@ kingW = os.path.join(CHESS_PATH, 'wK.png')
 
 
 images = {BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
-          KNIGHTB: knightB, KNIGHTW: knightW,
-          ROOKB: rookB, ROOKW: rookW, KINGB: kingB, KINGW: kingW,
-          QUEENB: queenB, QUEENW: queenW, BLANK: blank}
-
-
-images2 = {BISHOPB: bishopB2, BISHOPW: bishopW2, PAWNB: pawnB2, PAWNW: pawnW2,
-          KNIGHTB: knightB2, KNIGHTW: knightW2,
-          ROOKB: rookB2, ROOKW: rookW2, KINGB: kingB2, KINGW: kingW2,
-          QUEENB: queenB2, QUEENW: queenW2, BLANK: blank2}
-
-
-images3 = {BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
           KNIGHTB: knightB, KNIGHTW: knightW,
           ROOKB: rookB, ROOKW: rookW, KINGB: kingB, KINGW: kingW,
           QUEENB: queenB, QUEENW: queenW, BLANK: blank}
@@ -175,7 +134,7 @@ def redraw_board(window, board):
     for i in range(8):
         for j in range(8):
             color = '#B58863' if (i + j) % 2 else '#F0D9B5'
-            piece_image = images3[board[i][j]]
+            piece_image = images[board[i][j]]
             elem = window.FindElement(key=(i, j))
             elem.Update(button_color=('white', color),
                         image_filename=piece_image, )
@@ -341,7 +300,7 @@ def create_board(psg_board, is_user_white):
         row = [sg.T(str(8 - i) + '  ', font='Any 11')]
         
         for j in range(start, end, step):
-            piece_image = images3[psg_board[i][j]]
+            piece_image = images[psg_board[i][j]]
             row.append(render_square(piece_image, key=(i, j), location=(i, j)))
 
         board_layout.append(row)
@@ -406,7 +365,7 @@ def build_main_layout(is_user_white):
     window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), layout,
                        default_button_element_size=(12, 1),
                        auto_size_buttons=False,
-                       icon='kingb.ico')
+                       icon='')
     
     return window, psg_board
 
@@ -425,7 +384,7 @@ def init_user_option():
     init_window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), layout,
                        default_button_element_size=(12, 1),
                        auto_size_buttons=False,
-                       icon='kingb.ico')
+                       icon='')
 
     enginefn = None
     while True:        
