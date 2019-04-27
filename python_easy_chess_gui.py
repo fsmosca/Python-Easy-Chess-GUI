@@ -47,6 +47,10 @@ APP_VERSION = 'v0.3.2'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
+MIN_TIME = 0.5  # sec
+MAX_TIME = 60
+
+
 CHESS_PATH = 'Images/60'  # path to the chess pieces
 
 
@@ -361,12 +365,14 @@ def build_main_layout(is_user_white):
     board_layout = create_board(psg_board, is_user_white)
 
     board_controls = [
-        [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_White_', size=(34, 1))],            
+        [sg.Text('Game status: Waiting ...', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
+        [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_White_', size=(34, 1))],
         [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_Black_', size=(34, 1))],
         [sg.Text('MOVE LIST', font=('Consolas', 10))],            
         [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 8), font=('Consolas', 10), key='_movelist_')],
         [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10))],
-        [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 4), font=('Consolas', 10), key='_engineinfo_')],        
+        [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 4), font=('Consolas', 10), key='_engineinfo_')],
+        
     ]
 
     board_tab = [[sg.Column(board_layout)]]
@@ -429,7 +435,7 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
     board = chess.Board()
     move_state = 0
     move_from, move_to = None, None
-    level = 8
+    level = 1
     move_time = 1  # sec
     is_new_game, is_exit_game = False, False
     
@@ -465,7 +471,7 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                     if user_movetime is None:
                         user_movetime = backup_movetime  # sec
                     move_time = int(user_movetime)
-                    move_time = min(5, max(1, move_time))
+                    move_time = min(MAX_TIME, max(MIN_TIME, move_time))
                     print('move_time is set to', move_time)
                 
                 if button in (None, 'Settings'):
@@ -509,6 +515,7 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                     else:
                         is_human_stm = True
                     is_engine_ready = True
+                    window.FindElement('_gamestatus_').Update('Game status: Engine is thinking ...')
                     break
                 
                 if button in (None, 'Settings'):
@@ -531,7 +538,7 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                     if user_movetime is None:
                         user_movetime = backup_movetime  # sec
                     move_time = int(user_movetime)
-                    move_time = min(5, max(1, move_time))
+                    move_time = min(MAX_TIME, max(MIN_TIME, move_time))
                     print('move_time is set to', move_time)
                     break
                 
@@ -624,6 +631,7 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                             is_human_stm ^= 1
                             
                             window.FindElement('_engineinfo_').Update('', append=False)
+                            window.FindElement('_gamestatus_').Update('Game status: Engine is thinking ...')
                             
                             # Human has done its move
                      
@@ -723,6 +731,8 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
             
             is_human_stm ^= 1
             
+            window.FindElement('_gamestatus_').Update('Game status: Playing ...')
+            
             # Engine has done its move
             
     # Exit game over loop
@@ -774,7 +784,9 @@ def main_loop():
             continue
         if button in (None, 'New Game'):
             while True:
+                window.FindElement('_gamestatus_').Update('Game status: Playing ...')
                 start_new_game = play_game(window, psg_board, engine, engine_id_name, is_user_white)
+                window.FindElement('_gamestatus_').Update('Game status: Waiting ...')
                 if not start_new_game:
                     break
             continue
