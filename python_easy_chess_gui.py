@@ -427,8 +427,8 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
     redraw_board(window, psg_board)
 
     board = chess.Board()
-    move_count = 1
-    move_state = move_from = move_to = 0
+    move_state = 0
+    move_from, move_to = None, None
     level = 8
     move_time = 1  # sec
     is_new_game, is_exit_game = False, False
@@ -478,13 +478,13 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                     is_engine_ready = True
                     break
 
-        # If human moves first
+        # If side to move is human
         if is_human_stm:
             move_state = 0
             while True:
                 button, value = window.Read(timeout=10)
                 
-                if not is_human_stm and move_state == 2:
+                if not is_human_stm:
                     break
                 
                 if button in (None, 'Exit'):
@@ -536,6 +536,7 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                     break
                 
                 if type(button) is tuple:
+                    # If fr_sq button is pressed
                     if move_state == 0:
                         move_from = button
                         fr_row, fr_col = move_from
@@ -546,14 +547,20 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                         
                         move_state = 1
                         moved_piece = board.piece_type_at(chess.square(fr_col, 7-fr_row))  # Pawn=1
+                    
+                    # Else if to_sq button is pressed
                     elif move_state == 1:
                         is_promote = False
                         move_to = button
                         to_row, to_col = move_to
                         button_square = window.FindElement(key=(fr_row, fr_col))
-                        if move_to == move_from:  # cancelled move
+                        
+                        # If move is cancelled, pressing same button twice
+                        if move_to == move_from:
                             # Restore the color of the pressed board square
-                            color = '#B58863' if (to_row + to_col) % 2 else '#F0D9B5'                            
+                            color = '#B58863' if (to_row + to_col) % 2 else '#F0D9B5'
+                            
+                            # Restore the color of the fr square
                             button_square.Update(button_color=('white', color))
                             move_state = 0
                             continue
@@ -606,7 +613,6 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                                 psg_board[to_row][to_col] = piece
                                 
                             redraw_board(window, psg_board)
-                            move_count += 1
                             window.FindElement('_movelist_').Update(show_san_move, append=True)
 
                             board.push(user_move)
@@ -614,25 +620,26 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                             # Change the color of the "fr" and "to" board squares
                             change_square_color(window, fr_row, fr_col)
                             change_square_color(window, to_row, to_col)
-            
-                            move_state = 2
+
                             is_human_stm ^= 1
                             
                             window.FindElement('_engineinfo_').Update('', append=False)
                             
                             # Human has done its move
                      
+                        # Else if move is illegal
                         else:
-                            print('Illegal move')
                             move_state = 0
                             color = '#B58863' if (move_from[0] + move_from[1]) % 2 else '#F0D9B5'
+                            
+                            # Restore the color of the fr square
                             button_square.Update(button_color=('white', color))
                             continue
                 
             if is_new_game or is_exit_game:
                 break
 
-        # Else if not is human stm
+        # Else if side to move is not human
         elif not is_human_stm:
             is_promote = False
             is_play = False
@@ -709,7 +716,6 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
             redraw_board(window, psg_board)
 
             board.push(best_move)
-            move_count += 1
             
             # Change the color of the "fr" and "to" board squares
             change_square_color(window, fr_row, fr_col)
