@@ -43,7 +43,7 @@ import chess.engine
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.3.1'
+APP_VERSION = 'v0.3.2'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -87,6 +87,11 @@ initial_board = [[ROOKB, KNIGHTB, BISHOPB, QUEENB, KINGB, BISHOPB, KNIGHTB, ROOK
                  [ROOKW, KNIGHTW, BISHOPW, QUEENW, KINGW, BISHOPW, KNIGHTW, ROOKW]]
 
 
+# Move color
+DARK_SQ_MOVE_COLOR = '#e9db89'
+LIGHT_SQ_MOVE_COLOR = '#f9f086'
+
+
 # Images/60
 blank = os.path.join(CHESS_PATH, 'blank.png')
 bishopB = os.path.join(CHESS_PATH, 'bB.png')
@@ -107,6 +112,16 @@ images = {BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
           KNIGHTB: knightB, KNIGHTW: knightW,
           ROOKB: rookB, ROOKW: rookW, KINGB: kingB, KINGW: kingW,
           QUEENB: queenB, QUEENW: queenW, BLANK: blank}
+
+
+def change_square_color(window, row, col):
+    """ 
+    Change the color of a square based on square row and col.
+    """
+    btn_sq = window.FindElement(key=(row, col))
+    is_dark_square = True if (row + col) % 2 else False
+    bd_sq_color = DARK_SQ_MOVE_COLOR if is_dark_square else LIGHT_SQ_MOVE_COLOR
+    btn_sq.Update(button_color=('white', bd_sq_color))
 
 
 def relative_row(s, c):
@@ -523,18 +538,22 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                 if type(button) is tuple:
                     if move_state == 0:
                         move_from = button
-                        row, col = move_from
-                        piece = psg_board[row][col]  # get the move-from piece
-                        button_square = window.FindElement(key=(row, col))
-                        button_square.Update(button_color=('white', 'lightcoral'))
+                        fr_row, fr_col = move_from
+                        piece = psg_board[fr_row][fr_col]  # get the move-from piece
+                        
+                        # Change the color of the "fr" board square
+                        change_square_color(window, fr_row, fr_col)
+                        
                         move_state = 1
-                        moved_piece = board.piece_type_at(chess.square(col, 7-row))  # Pawn=1
+                        moved_piece = board.piece_type_at(chess.square(fr_col, 7-fr_row))  # Pawn=1
                     elif move_state == 1:
                         is_promote = False
                         move_to = button
-                        row, col = move_to
+                        to_row, to_col = move_to
+                        button_square = window.FindElement(key=(fr_row, fr_col))
                         if move_to == move_from:  # cancelled move
-                            color = '#B58863' if (row + col) % 2 else '#F0D9B5'
+                            # Restore the color of the pressed board square
+                            color = '#B58863' if (to_row + to_col) % 2 else '#F0D9B5'                            
                             button_square.Update(button_color=('white', color))
                             move_state = 0
                             continue
@@ -547,7 +566,7 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                         # Note chess.square() and chess.Move() are from python-chess module
                         fr_row, fr_col = move_from
                         fr_sq = chess.square(fr_col, 7-fr_row)
-                        to_sq = chess.square(col, 7-row)
+                        to_sq = chess.square(to_col, 7-to_row)
 
                         # If user move is a promote
                         if relative_row(to_sq, board.turn) == RANK_8 and moved_piece == chess.PAWN:
@@ -580,11 +599,11 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                             
                             # Update board to_square if move is a promotion
                             if is_promote:
-                                psg_board[row][col] = psg_promo
+                                psg_board[to_row][to_col] = psg_promo
                             # Update the to_square if not a promote move
                             else:
                                 # Place piece in the move to_square
-                                psg_board[row][col] = piece
+                                psg_board[to_row][to_col] = piece
                                 
                             redraw_board(window, psg_board)
                             move_count += 1
@@ -592,8 +611,9 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
 
                             board.push(user_move)
                             
-                            button_square = window.FindElement(key=(row, col))
-                            button_square.Update(button_color=('white', 'khaki'))
+                            # Change the color of the "fr" and "to" board squares
+                            change_square_color(window, fr_row, fr_col)
+                            change_square_color(window, to_row, to_col)
             
                             move_state = 2
                             is_human_stm ^= 1
@@ -648,8 +668,8 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                                 break
         
             move_str = str(best_move)
-            from_col = ord(move_str[0]) - ord('a')
-            from_row = 8 - int(move_str[1])
+            fr_col = ord(move_str[0]) - ord('a')
+            fr_row = 8 - int(move_str[1])
             to_col = ord(move_str[2]) - ord('a')
             to_row = 8 - int(move_str[3])
             
@@ -662,8 +682,8 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
                 show_san_move = '{} '.format(san_move)
             window.FindElement('_movelist_').Update(show_san_move, append=True)
 
-            piece = psg_board[from_row][from_col]
-            psg_board[from_row][from_col] = BLANK            
+            piece = psg_board[fr_row][fr_col]
+            psg_board[fr_row][fr_col] = BLANK            
             
             # Update rook location if this is a castle move
             if board.is_castling(best_move):
@@ -691,8 +711,10 @@ def play_game(window, psg_board, engine, engine_id_name, is_user_white):
             board.push(best_move)
             move_count += 1
             
-            button_square = window.FindElement(key=(to_row, to_col))
-            button_square.Update(button_color=('white', 'khaki'))
+            # Change the color of the "fr" and "to" board squares
+            change_square_color(window, fr_row, fr_col)
+            change_square_color(window, to_row, to_col)
+            
             is_human_stm ^= 1
             
             # Engine has done its move
