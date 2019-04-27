@@ -3,7 +3,7 @@ A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users 
 
 ![](https://i.imgur.com/F9wT6OV.png)
 
-![](https://i.imgur.com/HcKetYn.png)
+![](https://i.imgur.com/E5763DS.png)
 
 ### Prerequisites
 I have not yet build an exe file for this GUI, not sure either if I can create it. In the meantime to get it running the following are required.
