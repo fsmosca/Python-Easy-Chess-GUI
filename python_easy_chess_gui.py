@@ -43,15 +43,17 @@ import chess.engine
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.3.2'
+APP_VERSION = 'v0.4.0'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
 MIN_TIME = 0.5  # sec
 MAX_TIME = 60
+MIN_DEPTH = 1
+MAX_DEPTH = 128
 
 
-CHESS_PATH = 'Images/60'  # path to the chess pieces
+IMAGE_PATH = 'Images/60'  # path to the chess pieces
 
 
 BLANK = 0  # piece names
@@ -97,19 +99,19 @@ LIGHT_SQ_MOVE_COLOR = '#f9f086'
 
 
 # Images/60
-blank = os.path.join(CHESS_PATH, 'blank.png')
-bishopB = os.path.join(CHESS_PATH, 'bB.png')
-bishopW = os.path.join(CHESS_PATH, 'wB.png')
-pawnB = os.path.join(CHESS_PATH, 'bP.png')
-pawnW = os.path.join(CHESS_PATH, 'wP.png')
-knightB = os.path.join(CHESS_PATH, 'bN.png')
-knightW = os.path.join(CHESS_PATH, 'wN.png')
-rookB = os.path.join(CHESS_PATH, 'bR.png')
-rookW = os.path.join(CHESS_PATH, 'wR.png')
-queenB = os.path.join(CHESS_PATH, 'bQ.png')
-queenW = os.path.join(CHESS_PATH, 'wQ.png')
-kingB = os.path.join(CHESS_PATH, 'bK.png')
-kingW = os.path.join(CHESS_PATH, 'wK.png')
+blank = os.path.join(IMAGE_PATH, 'blank.png')
+bishopB = os.path.join(IMAGE_PATH, 'bB.png')
+bishopW = os.path.join(IMAGE_PATH, 'wB.png')
+pawnB = os.path.join(IMAGE_PATH, 'bP.png')
+pawnW = os.path.join(IMAGE_PATH, 'wP.png')
+knightB = os.path.join(IMAGE_PATH, 'bN.png')
+knightW = os.path.join(IMAGE_PATH, 'wN.png')
+rookB = os.path.join(IMAGE_PATH, 'bR.png')
+rookW = os.path.join(IMAGE_PATH, 'wR.png')
+queenB = os.path.join(IMAGE_PATH, 'bQ.png')
+queenW = os.path.join(IMAGE_PATH, 'wQ.png')
+kingB = os.path.join(IMAGE_PATH, 'bK.png')
+kingW = os.path.join(IMAGE_PATH, 'wK.png')
 
 
 images = {BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
@@ -282,6 +284,32 @@ class EasyChessGui():
                     psg_promo = KNIGHTB
         
         return pyc_promo, psg_promo
+    
+    def modify_depth_limit(self, current_level):
+        """ Returns level based from user setting """
+        user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[{} to {}]'.format(current_level, MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE)
+        
+        # If user presses the cancel button
+        if user_depth is None:
+            user_depth = current_level
+
+        level = int(user_depth)
+        level = min(MAX_DEPTH, max(MIN_DEPTH, level))
+        
+        return level
+    
+    def modify_time_limit(self, current_move_time_sec):
+        """ Returns move time based on user setting """
+        user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [{} to {}]'.format(current_move_time_sec, MIN_TIME, MAX_TIME), title=BOX_TITLE)
+        
+        # If user presses the cancel button
+        if user_movetime is None:
+            user_movetime = current_move_time_sec
+
+        move_time = int(user_movetime)
+        move_time = min(MAX_TIME, max(MIN_TIME, move_time))
+        
+        return move_time
         
     def play_game(self, window, psg_board, engine, engine_id_name):
         """ 
@@ -320,22 +348,10 @@ class EasyChessGui():
                         sys.exit()
                     
                     if button in (None, 'Depth'):
-                        backup_level = level
-                        user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[1 to 8]'.format(backup_level), title=BOX_TITLE)
-                        if user_depth is None:
-                            user_depth = backup_level
-                        level = int(user_depth)
-                        level = min(8, max(1, level))
-                        print('depth is set to', level)
+                        level = self.modify_depth_limit(level)
                     
                     if button in (None, 'Movetime'):
-                        backup_movetime = move_time
-                        user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [1 to 5]'.format(backup_movetime), title=BOX_TITLE)
-                        if user_movetime is None:
-                            user_movetime = backup_movetime  # sec
-                        move_time = int(user_movetime)
-                        move_time = min(MAX_TIME, max(MIN_TIME, move_time))
-                        print('move_time is set to', move_time)
+                        move_time = self.modify_time_limit(move_time)
                     
                     if button in (None, 'Settings'):
                         sg.PopupOK('Depth={}\nMovetime={}\nengine={}\n'.format(level, move_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
@@ -386,23 +402,11 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'Depth'):
-                        backup_level = level
-                        user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[1 to 8]'.format(backup_level), title=BOX_TITLE)
-                        if user_depth is None:
-                            user_depth = backup_level
-                        level = int(user_depth)
-                        level = min(8, max(1, level))
-                        print('depth is set to', level)
+                        level = self.modify_depth_limit(level)
                         break
                     
                     if button in (None, 'Movetime'):
-                        backup_movetime = move_time
-                        user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [1 to 5]'.format(backup_movetime), title=BOX_TITLE)
-                        if user_movetime is None:
-                            user_movetime = backup_movetime  # sec
-                        move_time = int(user_movetime)
-                        move_time = min(MAX_TIME, max(MIN_TIME, move_time))
-                        print('move_time is set to', move_time)
+                        move_time = self.modify_time_limit(move_time)
                         break
                     
                     if type(button) is tuple:
