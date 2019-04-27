@@ -1,5 +1,5 @@
 # Python Easy Chess GUI
-A Chess GUI based from Python using PySimpleGUI and Python-Chess. Users can also load a chess engine and play with it. This program is based on a [demo chess against ai](https://github.com/PySimpleGUI/PySimpleGUI/tree/master/Chess) from PySimpleGUI.<br>
+A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users can also load a chess engine and play with it. This program is based on a [demo chess against ai](https://github.com/PySimpleGUI/PySimpleGUI/tree/master/Chess) from PySimpleGUI.<br>
 
 ![](https://i.imgur.com/F9wT6OV.png)
 
@@ -24,9 +24,12 @@ https://github.com/PySimpleGUI/PySimpleGUI<br>
 pip install pysimplegui
 
 ### How to play
-* Execute python_easy_chess_gui.py
+* Execute python_easy_chess_gui.py<br>
+Typical command line:<br>
+`python python_easy_chess_gui.py`
 * Select color and engine opponent
-* If you select to play as black, press Engine->Go to start the engine
+* Press Game->New Game
+* If you selected to play as black, press Engine->Go to start the engine
 * To start a new game press Game->New Game
 * To exit, press File->Exit
 
