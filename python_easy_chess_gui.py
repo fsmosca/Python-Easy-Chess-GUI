@@ -349,7 +349,7 @@ class EasyChessGui():
                         self.max_time = self.modify_time_limit(self.max_time)
                     
                     if button in (None, 'Settings'):
-                        sg.PopupOK('Depth={}\nMovetime={}\nengine={}\n'.format(self.max_depth, self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+                        sg.PopupOK('Depth={}\nMovetime(s)={}\n\nEngine={}\n'.format(self.max_depth, self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
                         
                     if button in (None, 'Play'):
                         sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
@@ -393,7 +393,7 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'Settings'):
-                        sg.PopupOK('Depth={}\nMovetime={}\nengine={}\n'.format(self.max_depth, self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+                        sg.PopupOK('Depth={}\nMovetime(s)={}\n\nEngine={}\n'.format(self.max_depth, self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
                         break
                     
                     if button in (None, 'Depth'):
