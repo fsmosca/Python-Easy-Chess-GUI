@@ -133,7 +133,6 @@ class EasyChessGui():
         bd_sq_color = DARK_SQ_MOVE_COLOR if is_dark_square else LIGHT_SQ_MOVE_COLOR
         btn_sq.Update(button_color=('white', bd_sq_color))
 
-
     def relative_row(self, s, c):
         """ 
         Returns row based on square s and color c.
@@ -141,13 +140,11 @@ class EasyChessGui():
         If c is white the first row is at the bottom.
         If c is black the first row is at the top.
         """
-        return 7 - self.get_row(s) if c else self.get_row(s)
-    
+        return 7 - self.get_row(s) if c else self.get_row(s)    
     
     def get_row(self, s):
         """ Returns row given square s """
-        return 7 - chess.square_rank(s)
-    
+        return 7 - chess.square_rank(s)    
     
     def get_col(self, s):
         """ Returns col given square s """
@@ -193,8 +190,7 @@ class EasyChessGui():
 
         psg_board[self.get_row(fr)][self.get_col(fr)] = BLANK
         psg_board[self.get_row(to)][self.get_col(to)] = pc
-        self.redraw_board(window, psg_board)
-        
+        self.redraw_board(window, psg_board)        
     
     def update_ep(self, window, psg_board, move, stm):
         """ 
@@ -210,8 +206,7 @@ class EasyChessGui():
             capture_sq = to + 8
     
         psg_board[self.get_row(capture_sq)][self.get_col(capture_sq)] = BLANK
-        self.redraw_board(window, psg_board)
-        
+        self.redraw_board(window, psg_board)        
         
     def get_promo_piece(self, window, psg_board, move, stm, human):
         """ 
@@ -598,12 +593,10 @@ class EasyChessGui():
                 
                 is_human_stm ^= 1
                 
-                window.FindElement('_gamestatus_').Update('Game status: Playing ...')
-                
+                window.FindElement('_gamestatus_').Update('Game status: Playing ...')                
                 # Engine has done its move
                 
-        # Exit game over loop
-        
+        # Exit game over loop        
         if is_exit_game:
             return False
         
