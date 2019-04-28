@@ -94,8 +94,8 @@ initial_board = [[ROOKB, KNIGHTB, BISHOPB, QUEENB, KINGB, BISHOPB, KNIGHTB, ROOK
 
 
 # Move color
-DARK_SQ_MOVE_COLOR = '#e9db89'
-LIGHT_SQ_MOVE_COLOR = '#f9f086'
+DARK_SQ_MOVE_COLOR = '#B8AF4E'
+LIGHT_SQ_MOVE_COLOR = '#E8E18E'
 
 
 # Images/60
@@ -767,11 +767,17 @@ class EasyChessGui():
         
         while True:
             button, value = window.Read(timeout=10)
+            
+            # Menu->File->Exit
             if button in (None, 'Exit'):
                 break
+            
+            # Menu->Help->Help
             if button in (None, 'Play'):
                 sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
                 continue
+            
+            # Menu->Game->New Game
             if button in (None, 'New Game'):
                 while True:
                     window.FindElement('_gamestatus_').Update('Game status: Playing ...')
