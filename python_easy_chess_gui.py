@@ -360,8 +360,8 @@ class EasyChessGui():
                 while True:
                     button, value = window.Read(timeout=10)
                     
-                    if not is_human_stm:
-                        break
+#                    if not is_human_stm:
+#                        break
                     
                     if button in (None, 'Exit'):
                         engine.quit()
@@ -490,6 +490,8 @@ class EasyChessGui():
                                 
                                 window.FindElement('_engineinfo_').Update('', append=False)
                                 window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
+                                
+                                break
                                 
                                 # Human has done its move
                          
