@@ -282,31 +282,27 @@ class EasyChessGui():
         
         return pyc_promo, psg_promo
     
-    def modify_depth_limit(self, current_max_depth):
+    def modify_depth_limit(self):
         """ Returns max depth based from user setting """
-        user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[{} to {}]'.format(current_max_depth, MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE)
+        user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[{} to {}]'.format(self.max_depth, MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE)
         
-        # If user presses the cancel button
-        if user_depth is None:
-            user_depth = current_max_depth
+        try:
+            user_depth = int(user_depth)
+        except:
+            user_depth = self.max_depth
 
-        user_depth = int(user_depth)
-        user_depth = min(MAX_DEPTH, max(MIN_DEPTH, user_depth))
-        
-        return user_depth
+        self.max_depth = min(MAX_DEPTH, max(MIN_DEPTH, user_depth))
     
-    def modify_time_limit(self, current_move_time_sec):
+    def modify_time_limit(self):
         """ Returns move time based on user setting """
-        user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [{} to {}]'.format(current_move_time_sec, MIN_TIME, MAX_TIME), title=BOX_TITLE)
+        user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [{} to {}]'.format(self.max_time, MIN_TIME, MAX_TIME), title=BOX_TITLE)
         
-        # If user presses the cancel button
-        if user_movetime is None:
-            user_movetime = current_move_time_sec
+        try:
+            user_movetime = int(user_movetime)
+        except:
+            user_movetime = self.max_time
 
-        move_time = int(user_movetime)
-        move_time = min(MAX_TIME, max(MIN_TIME, move_time))
-        
-        return move_time
+        self.max_time = min(MAX_TIME, max(MIN_TIME, user_movetime))
         
     def play_game(self, window, psg_board, engine, engine_id_name):
         """ 
@@ -343,13 +339,13 @@ class EasyChessGui():
                         sys.exit()
                     
                     if button in (None, 'Depth'):
-                        self.max_depth = self.modify_depth_limit(self.max_depth)
+                        self.modify_depth_limit()
                     
                     if button in (None, 'Movetime'):
-                        self.max_time = self.modify_time_limit(self.max_time)
+                        self.modify_time_limit()
                     
                     if button in (None, 'Settings'):
-                        sg.PopupOK('Depth={}\nMovetime(s)={}\n\nEngine={}\n'.format(self.max_depth, self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+                        sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth, self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
                         
                     if button in (None, 'Play'):
                         sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
@@ -393,15 +389,15 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'Settings'):
-                        sg.PopupOK('Depth={}\nMovetime(s)={}\n\nEngine={}\n'.format(self.max_depth, self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+                        sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth, self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
                         break
                     
                     if button in (None, 'Depth'):
-                        self.max_depth = self.modify_depth_limit(self.max_depth)
+                        self.modify_depth_limit()
                         break
                     
                     if button in (None, 'Movetime'):
-                        self.max_time = self.modify_time_limit(self.max_time)
+                        self.modify_time_limit()
                         break
                     
                     if type(button) is tuple:
@@ -653,8 +649,17 @@ class EasyChessGui():
             button, value = init_window.Read()        
             enginefn = value['_enginefn_']
             is_player_white = value['_white_']
-            max_depth = int(value['_maxdepth_'])
-            max_time = int(value['_maxtime_'])
+            
+            try:
+                max_depth = int(value['_maxdepth_'])
+            except:
+                max_depth = self.max_depth
+
+            try:
+                max_time = int(value['_maxtime_'])
+            except:
+                max_time = self.max_time
+
             if button == '_ok_':
                 break
 
