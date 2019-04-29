@@ -43,7 +43,7 @@ import chess.engine
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.4.0'
+APP_VERSION = 'v0.4.1'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -360,8 +360,8 @@ class EasyChessGui():
                 while True:
                     button, value = window.Read(timeout=10)
                     
-#                    if not is_human_stm:
-#                        break
+                    if not is_human_stm:
+                        break
                     
                     if button in (None, 'Exit'):
                         engine.quit()
@@ -490,8 +490,6 @@ class EasyChessGui():
                                 
                                 window.FindElement('_engineinfo_').Update('', append=False)
                                 window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
-                                
-                                break
                                 
                                 # Human has done its move
                          
