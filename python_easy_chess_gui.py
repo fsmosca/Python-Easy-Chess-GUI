@@ -43,7 +43,7 @@ import chess.engine
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.4.1'
+APP_VERSION = 'v0.4.2'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -332,7 +332,7 @@ class EasyChessGui():
             # and exit this loop when user presses the Engine->Go button
             if not is_engine_ready:
                 while True:
-                    button, value = window.Read(timeout=10)
+                    button, value = window.Read(timeout=100)
                     
                     if button in (None, 'Exit'):
                         engine.quit()
@@ -358,7 +358,7 @@ class EasyChessGui():
             if is_human_stm:
                 move_state = 0
                 while True:
-                    button, value = window.Read(timeout=10)
+                    button, value = window.Read(timeout=100)
                     
                     if not is_human_stm:
                         break
@@ -646,7 +646,7 @@ class EasyChessGui():
     
         enginefn = None
         while True:        
-            button, value = init_window.Read()        
+            button, value = init_window.Read(timeout=100)        
             enginefn = value['_enginefn_']
             is_player_white = value['_white_']
             
@@ -782,7 +782,7 @@ class EasyChessGui():
         start_play_game = False
         
         while True:
-            button, value = window.Read(timeout=10)
+            button, value = window.Read(timeout=100)
             
             # Menu->File->Exit
             if button in (None, 'Exit'):
