@@ -31,15 +31,20 @@ col is the same as in PySimpleGUI
 
 """
 
-
 import PySimpleGUI as sg
 import os
 import sys
-import time
+import threading
+import queue
+import copy
 import chess
 import chess.pgn
-import copy
 import chess.engine
+import logging
+
+
+logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
+                    format='%(asctime)s :: %(levelname)s :: %(message)s')
 
 
 APP_NAME = 'Python Easy Chess GUI'
@@ -120,11 +125,69 @@ images = {BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
           QUEENB: queenB, QUEENW: queenW, BLANK: blank}
 
 
+class RunEngine(threading.Thread):
+    def __init__(self, eng_queue, engine_path, max_depth=1, max_time=1):
+        threading.Thread.__init__(self)
+        self.engine_path = engine_path
+        self.bm = None
+        self.pv = None
+        self.score = None
+        self.depth = None
+        self.time = None
+        self.max_depth = max_depth
+        self.max_time = max_time  # sec
+        self.eng_queue = eng_queue
+        self.engine = None
+        self.pv_length = 4
+        self.board = None
+        
+    def get_board(self, board):
+        """ Get board from user """
+        self.board = board
+
+    def run(self):
+        self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
+        with self.engine.analysis(self.board) as analysis:
+            for info in analysis:
+                try:
+                    if 'pv' in info and 'score' in info and 'depth' in info and 'time' in info:
+                        self.depth = int(info['depth'])
+                        self.time = float(info['time'])  # sec
+                        self.score = int(info['score'].relative.score(mate_score=32000))/100
+                        self.pv = info['pv'][0:self.pv_length]
+                        self.pv = self.board.variation_san(self.pv)
+                        info_line = '{:+0.2f}/{:02d} {:0.1f}s {}\n'.format(self.score, self.depth, self.time, self.pv)
+                        self.eng_queue.put(info_line)
+                        self.bm = info['pv'][0]
+                        
+                    if 'time' in info:
+                        if float(info['time']) >= self.max_time:
+                            logging.info('time limit is reached')
+                            break
+                        
+                    if 'depth' in info:
+                        if int(info['depth']) >= self.max_depth:
+                            logging.info('depth limit is reached')
+                            break
+                except:
+                    pass
+
+        self.eng_queue.put('bestmove {}' .format(self.bm))
+        logging.info('bestmove {}'.format(self.bm))
+        
+    def quit_engine(self):
+        """ Quit engine """
+        self.engine.quit()
+        logging.info('quit engine')
+
+
 class EasyChessGui():
     def __init__(self):
         self.is_user_white = None
         self.max_depth = 1
         self.max_time = 1
+        self.engine_full_path_and_name = None
+        self.queue = queue.Queue()
         
     def change_square_color(self, window, row, col):
         """ 
@@ -304,7 +367,7 @@ class EasyChessGui():
 
         self.max_time = min(MAX_TIME, max(MIN_TIME, user_movetime))
         
-    def play_game(self, window, psg_board, engine, engine_id_name):
+    def play_game(self, window, psg_board, engine_id_name):
         """ 
         Plays a game against an engine. Move legality is handled by python-chess.
         """ 
@@ -335,7 +398,6 @@ class EasyChessGui():
                     button, value = window.Read(timeout=100)
                     
                     if button in (None, 'Exit'):
-                        engine.quit()
                         sys.exit()
                     
                     if button in (None, 'Depth'):
@@ -364,7 +426,6 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'Exit'):
-                        engine.quit()
                         sys.exit()
                     
                     if button in (None, 'New Game'):
@@ -508,38 +569,21 @@ class EasyChessGui():
             # Else if side to move is not human
             elif not is_human_stm:
                 is_promote = False
-                is_play = False
-                
-                if is_play:
-                    result = engine.play(board, chess.engine.Limit(depth=self.max_depth, time=self.max_time), info=chess.engine.INFO_ALL)
-                    best_move = result.move
-                    engine_score_info = result.info['score'].relative.score(mate_score=32000) / 100
-                    engine_depth_info = result.info['depth']
-                    engine_pv_info = board.variation_san(result.info['pv'])
-                    engine_info = str(engine_score_info) + '/' + str(engine_depth_info) + ' ' + engine_pv_info
-                    window.FindElement('_engineinfo_').Update(engine_info, append=False)
-                else:
-                    best_move = None
-                    with engine.analysis(board, chess.engine.Limit(depth=self.max_depth, time=self.max_time), info=chess.engine.INFO_ALL) as analysis:
-                        for info in analysis:
-                            time.sleep(0.1)
-                            if 'pv' in info and 'score' in info and 'depth' in info and 'time' in info:
-                                best_move = info['pv'][0]
-                                best_score = info['score'].relative.score(mate_score=32000) / 100
-                                best_depth = info['depth']
-                                best_time = info['time']
-                                best_pv = info['pv'][0:5]
-                                
-                                best_pv = board.variation_san(best_pv)
-                                
-                                engine_info = '{:+0.02f}/{:02d} {}\n'.format(best_score, best_depth, best_pv)
-                                window.FindElement('_engineinfo_').Update(engine_info, append=True)
-                                
-                                if best_time >= self.max_time:
-                                    break
-                                if best_depth >= self.max_depth:
-                                    break
-            
+                search = RunEngine(self.queue, self.engine_full_path_and_name,
+                                   self.max_depth, self.max_time)
+                search.get_board(board)
+                search.start()          
+                while True:
+                    button, value = window.Read(timeout=500)
+                    msg = self.queue.get()
+                    if not 'bestmove ' in str(msg):
+                        window.FindElement('_engineinfo_').Update(msg, append=True)
+                    else:
+                        best_move = chess.Move.from_uci(msg.split()[1])
+                        break
+                search.join()
+                search.quit_engine()
+
                 move_str = str(best_move)
                 fr_col = ord(move_str[0]) - ord('a')
                 fr_row = 8 - int(move_str[1])
@@ -605,13 +649,15 @@ class EasyChessGui():
     def start_engine(self, enginefn):
         """ Start engine """
         eng_filename = './Engines/' + enginefn
+        self.engine_full_path_and_name = eng_filename
         if eng_filename is None:
             print('Failed to load engine')
             sys.exit()
         engine = chess.engine.SimpleEngine.popen_uci(eng_filename)
         engine_id_name = engine.id['name']
+        engine.quit()
         
-        return engine, engine_id_name
+        return engine_id_name
     
     def get_engines(self):
         """ Returns a list of engines located in Engines dir """
@@ -646,7 +692,7 @@ class EasyChessGui():
     
         enginefn = None
         while True:        
-            button, value = init_window.Read(timeout=100)        
+            button, value = init_window.Read(timeout=0)        
             enginefn = value['_enginefn_']
             is_player_white = value['_white_']
             
@@ -734,7 +780,7 @@ class EasyChessGui():
             [sg.Text('MOVE LIST', font=('Consolas', 10))],            
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 8), font=('Consolas', 10), key='_movelist_')],
             [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10))],
-            [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 4), font=('Consolas', 10), key='_engineinfo_')],
+            [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 10), font=('Consolas', 10), key='_engineinfo_')],
             
         ]
     
@@ -762,7 +808,7 @@ class EasyChessGui():
         window, psg_board = self.build_main_layout()
         
         # Start engine and get its id name
-        engine, engine_id_name = self.start_engine(enginefn)
+        engine_id_name = self.start_engine(enginefn)
         
         # Update White/Black label values
         if self.is_user_white:
@@ -772,13 +818,13 @@ class EasyChessGui():
             window.FindElement('_White_').Update(engine_id_name)
             window.FindElement('_Black_').Update('Human')
             
-        return window, psg_board, engine, engine_id_name
+        return window, psg_board, engine_id_name
     
     def main_loop(self):
         """ 
         This is where we build our GUI and read user inputs. When user presses Exit we also quit the engine.
         """
-        window, psg_board, engine, engine_id_name = self.build_gui()
+        window, psg_board, engine_id_name = self.build_gui()
         start_play_game = False
         
         while True:
@@ -793,7 +839,7 @@ class EasyChessGui():
                 start_play_game = True
                 while True:
                     window.FindElement('_gamestatus_').Update('Status: Play mode ...')
-                    start_new_game = self.play_game(window, psg_board, engine, engine_id_name)
+                    start_new_game = self.play_game(window, psg_board, engine_id_name)
                     window.FindElement('_gamestatus_').Update('Status: Waiting ...')
                     if not start_new_game:
                         break
@@ -808,13 +854,12 @@ class EasyChessGui():
             if button in (None, 'New Game'):
                 while True:
                     window.FindElement('_gamestatus_').Update('Status: Play mode ...')
-                    start_new_game = self.play_game(window, psg_board, engine, engine_id_name)
+                    start_new_game = self.play_game(window, psg_board, engine_id_name)
                     window.FindElement('_gamestatus_').Update('Status: Waiting ...')
                     if not start_new_game:
                         break
                 continue
-            
-        engine.quit()
+
         window.Close()
 
 
