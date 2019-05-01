@@ -550,7 +550,6 @@ class EasyChessGui():
                                 is_human_stm ^= 1
                                 
                                 window.FindElement('_engineinfo_').Update('', append=False)
-                                window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
                                 
                                 # Human has done its move
                          
@@ -568,6 +567,7 @@ class EasyChessGui():
     
             # Else if side to move is not human
             elif not is_human_stm:
+                window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
                 is_promote = False
                 search = RunEngine(self.queue, self.engine_full_path_and_name,
                                    self.max_depth, self.max_time)
