@@ -48,7 +48,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.4.2'
+APP_VERSION = 'v0.4.3'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -234,21 +234,25 @@ class EasyChessGui():
         return sg.RButton('', image_filename=image, size=(1, 1), 
                           button_color=('white', color), pad=(0, 0), key=key)
         
-    def update_rook(self, window, psg_board, picked_move):
-        """ Update rook location on the board for castle move """
-        if picked_move == 'e1g1':
+    def update_rook(self, window, psg_board, move):
+        """ 
+        Update rook location on the board for a castle move.
+        move:
+            a move in uci move format
+        """
+        if move == 'e1g1':
             fr = chess.H1
             to = chess.F1
             pc = ROOKW
-        elif picked_move == 'e1c1':
+        elif move == 'e1c1':
             fr = chess.A1
             to = chess.D1
             pc = ROOKW
-        elif picked_move == 'e8g8':
+        elif move == 'e8g8':
             fr = chess.H8
             to = chess.F8
             pc = ROOKB
-        elif picked_move == 'e8c8':
+        elif move == 'e8c8':
             fr = chess.A8
             to = chess.D8
             pc = ROOKB
@@ -259,10 +263,12 @@ class EasyChessGui():
     
     def update_ep(self, window, psg_board, move, stm):
         """ 
-        Update board if move is an ep capture.
-        move is the ep move in python-chess format
-        stm is side to move
-        * Remove the piece at to-8 (stm is white), to+8 (stm is black)
+        Update board if move is an ep capture. Remove the piece at 
+        to-8 (stm is white) or to+8 (stm is black)
+        move:
+            is the ep move in python-chess format
+        stm:
+            is side to move        
         """
         to = move.to_square
         if stm:
@@ -382,7 +388,7 @@ class EasyChessGui():
         board = chess.Board()
         move_state = 0
         move_from, move_to = None, None
-        is_new_game, is_exit_game = False, False
+        is_new_game, is_exit_game, is_exit_app = False, False, False
         
         # Do not play immediately when stm is computer
         is_engine_ready = True if is_human_stm else False
@@ -398,7 +404,8 @@ class EasyChessGui():
                     button, value = window.Read(timeout=100)
                     
                     if button in (None, 'Exit'):
-                        sys.exit()
+                        is_exit_app = True
+                        break
                     
                     if button in (None, 'Depth'):
                         self.modify_depth_limit()
@@ -415,6 +422,9 @@ class EasyChessGui():
                     if button in (None, 'Go'):
                         is_engine_ready = True
                         break
+                    
+                if is_exit_app:
+                    break
     
             # If side to move is human
             if is_human_stm:
@@ -426,7 +436,9 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'Exit'):
-                        sys.exit()
+                        logging.info('Exit app')
+                        is_exit_app = True
+                        sys.exit(0)
                     
                     if button in (None, 'New Game'):
                         is_new_game = True
@@ -562,7 +574,7 @@ class EasyChessGui():
                                 button_square.Update(button_color=('white', color))
                                 continue
                     
-                if is_new_game or is_exit_game:
+                if is_new_game or is_exit_game or is_exit_app:
                     break
     
             # Else if side to move is not human
@@ -635,7 +647,10 @@ class EasyChessGui():
                 
                 window.FindElement('_gamestatus_').Update('Status: Play mode ...')                
                 # Engine has done its move
-                
+            
+        if is_exit_app:
+            sys.exit(0)
+            
         # Exit game over loop        
         if is_exit_game:
             return False
@@ -652,7 +667,7 @@ class EasyChessGui():
         self.engine_full_path_and_name = eng_filename
         if eng_filename is None:
             print('Failed to load engine')
-            sys.exit()
+            sys.exit(0)
         engine = chess.engine.SimpleEngine.popen_uci(eng_filename)
         engine_id_name = engine.id['name']
         engine.quit()
