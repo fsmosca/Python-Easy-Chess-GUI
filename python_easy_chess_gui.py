@@ -216,7 +216,7 @@ class EasyChessGui():
         return chess.square_file(s)
         
     def redraw_board(self, window, psg_board):
-        """ Redraw GUI board """
+        """ Redraw the chess board at the begining of the game or after a move """
         for i in range(8):
             for j in range(8):
                 color = '#B58863' if (i + j) % 2 else '#F0D9B5'
@@ -226,7 +226,7 @@ class EasyChessGui():
                             image_filename=piece_image, )
         
     def render_square(self, image, key, location):
-        """ Render square """
+        """ Returns an RButton with image image """
         if (location[0] + location[1]) % 2:
             color = '#B58863'
         else:
@@ -357,7 +357,7 @@ class EasyChessGui():
         self.max_depth = min(MAX_DEPTH, max(MIN_DEPTH, user_depth))
     
     def modify_time_limit(self):
-        """ Returns move time based on user setting """
+        """ Update max time based on user input """
         user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [{} to {}]'.format(self.max_time, MIN_TIME, MAX_TIME), title=BOX_TITLE)
         
         try:
@@ -646,7 +646,7 @@ class EasyChessGui():
         
         return is_new_game
 
-    def start_engine(self, enginefn):
+    def get_engine_id_name(self, enginefn):
         """ Start engine """
         eng_filename = './Engines/' + enginefn
         self.engine_full_path_and_name = eng_filename
@@ -808,7 +808,7 @@ class EasyChessGui():
         window, psg_board = self.build_main_layout()
         
         # Start engine and get its id name
-        engine_id_name = self.start_engine(enginefn)
+        engine_id_name = self.get_engine_id_name(enginefn)
         
         # Update White/Black label values
         if self.is_user_white:
