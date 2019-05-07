@@ -146,6 +146,9 @@ class RunEngine(threading.Thread):
         self.board = board
 
     def run(self):
+        # When converting .py to exe using pyinstaller use the following
+        # self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path, creationflags=subprocess.CREATE_NO_WINDOW)  
+        
         self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
         with self.engine.analysis(self.board) as analysis:
             for info in analysis:
@@ -578,13 +581,13 @@ class EasyChessGui():
                     break
     
             # Else if side to move is not human
-            elif not is_human_stm:
-                window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
+            elif not is_human_stm:                
                 is_promote = False
                 search = RunEngine(self.queue, self.engine_full_path_and_name,
                                    self.max_depth, self.max_time)
                 search.get_board(board)
-                search.start()          
+                search.start() 
+                window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
                 while True:
                     button, value = window.Read(timeout=500)
                     msg = self.queue.get()
