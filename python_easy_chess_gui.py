@@ -48,7 +48,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.4.3'
+APP_VERSION = 'v0.5.0'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -98,6 +98,11 @@ initial_board = [[ROOKB, KNIGHTB, BISHOPB, QUEENB, KINGB, BISHOPB, KNIGHTB, ROOK
                  [ROOKW, KNIGHTW, BISHOPW, QUEENW, KINGW, BISHOPW, KNIGHTW, ROOKW]]
 
 
+white_init_promote_board = [[QUEENW, ROOKW, BISHOPW, KNIGHTW]]
+
+black_init_promote_board = [[QUEENB, ROOKB, BISHOPB, KNIGHTB]]
+
+
 # Move color
 DARK_SQ_MOVE_COLOR = '#B8AF4E'
 LIGHT_SQ_MOVE_COLOR = '#E8E18E'
@@ -123,6 +128,13 @@ images = {BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
           KNIGHTB: knightB, KNIGHTW: knightW,
           ROOKB: rookB, ROOKW: rookW, KINGB: kingB, KINGW: kingW,
           QUEENB: queenB, QUEENW: queenW, BLANK: blank}
+
+
+# Promote piece from psg (pysimplegui) to pyc (python-chess)
+promote_psg_to_pyc = {KNIGHTB: chess.KNIGHT, BISHOPB: chess.BISHOP,
+                      ROOKB: chess.ROOK, QUEENB: chess.QUEEN,
+                      KNIGHTW: chess.KNIGHT, BISHOPW: chess.BISHOP,
+                      ROOKW: chess.ROOK, QUEENW: chess.QUEEN,}
 
 
 class RunEngine(threading.Thread):
@@ -237,6 +249,46 @@ class EasyChessGui():
         return sg.RButton('', image_filename=image, size=(1, 1), 
                           button_color=('white', color), pad=(0, 0), key=key)
         
+    def select_promotion_piece(self, stm):
+        """ 
+        Returns the promoted piece [KNIGHTW, KNIGHTB, ... QUEENW]
+        stm:
+            side to move
+        """
+        piece = None
+        board_layout, row = [], []
+        
+        psg_promote_board = copy.deepcopy(white_init_promote_board) if stm \
+                else copy.deepcopy(black_init_promote_board)
+
+        # Loop through board and create buttons with images        
+        for i in range(1):            
+            for j in range(4):
+                piece_image = images[psg_promote_board[i][j]]
+                row.append(self.render_square(piece_image, key=(i, j), location=(i, j)))
+    
+            board_layout.append(row)
+    
+        promo_window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), board_layout,
+                           default_button_element_size=(12, 1),
+                           auto_size_buttons=False,
+                           icon='')
+        
+        while True:
+            button, value = promo_window.Read(timeout=0)
+            if button is None:
+                break
+            if type(button) is tuple:
+                move_from = button
+                fr_row, fr_col = move_from
+                piece = psg_promote_board[fr_row][fr_col]
+                logging.info('promote piece: {}'.format(piece))
+                break
+            
+        promo_window.Close()
+        
+        return piece
+        
     def update_rook(self, window, psg_board, move):
         """ 
         Update rook location on the board for a castle move.
@@ -295,41 +347,16 @@ class EasyChessGui():
             This is true if the promotion move is from the user otherwise thi is False
             which is the move from the computer engine.
         """    
-        # If this move is from a user, we will show a popup box where the user can
-        # select which piece to promote, can be q, r, b or n
+        # If this move is from a user, we will show a window with piece images
         if human:
-            promote_pc = sg.PopupGetText('Promotion\n\nInput [q, r, b, n] or [Q, R, B, N]', title=BOX_TITLE, keep_on_top=True)
-        
-            # If user selects the cancel button we set the promote piece to queen
-            if promote_pc is None:
-                promote_pc = 'q'
-                
-            if stm:
-                if 'q' in promote_pc.lower():
-                    psg_promo = QUEENW
-                    pyc_promo = chess.QUEEN
-                elif 'r' in promote_pc.lower():
-                    psg_promo = ROOKW
-                    pyc_promo = chess.ROOK
-                elif 'b' in promote_pc.lower():
-                    psg_promo = BISHOPW
-                    pyc_promo = chess.BISHOP
-                elif 'n' in promote_pc.lower():
-                    psg_promo = KNIGHTW
-                    pyc_promo = chess.KNIGHT
-            else:
-                if 'q' in promote_pc.lower():
-                    psg_promo = QUEENB
-                    pyc_promo = chess.QUEEN
-                elif 'r' in promote_pc.lower():
-                    psg_promo = ROOKB
-                    pyc_promo = chess.ROOK
-                elif 'b' in promote_pc.lower():
-                    psg_promo = BISHOPB
-                    pyc_promo = chess.BISHOP
-                elif 'n' in promote_pc.lower():
-                    psg_promo = KNIGHTB
-                    pyc_promo = chess.KNIGHT
+            psg_promo = self.select_promotion_piece(stm)
+            
+            # If user pressed x we set the promo to queen
+            if psg_promo is None:
+                logging.info('User did not select a promotion piece, set this to queen.')
+                psg_promo = QUEENW if stm else QUEENB
+
+            pyc_promo = promote_psg_to_pyc[psg_promo]
         # Else if move is from computer
         else:
             pyc_promo = move.promotion  # This is from python-chess
@@ -753,7 +780,7 @@ class EasyChessGui():
             step = -1
             file_char_name = file_char_name[::-1]
         
-        # loop though board and create buttons with images
+        # Loop through the board and create buttons with images
         for i in range(start, end, step):
             # Row numbers at left of board
             row = [sg.T(str(8 - i) + '  ', font='Any 11')]
@@ -871,6 +898,7 @@ class EasyChessGui():
             # Menu->Game->New Game
             if button in (None, 'New Game'):
                 while True:
+                    button, value = window.Read(timeout=100)                
                     window.FindElement('_gamestatus_').Update('Status: Play mode ...')
                     start_new_game = self.play_game(window, psg_board, engine_id_name)
                     window.FindElement('_gamestatus_').Update('Status: Waiting ...')
