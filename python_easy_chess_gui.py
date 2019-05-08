@@ -159,7 +159,8 @@ class RunEngine(threading.Thread):
 
     def run(self):
         # When converting .py to exe using pyinstaller use the following
-        # self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path, creationflags=subprocess.CREATE_NO_WINDOW)  
+        # self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path,
+        #         creationflags=subprocess.CREATE_NO_WINDOW)  
         
         self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
         with self.engine.analysis(self.board) as analysis:
@@ -489,10 +490,11 @@ class EasyChessGui():
                     
                     if button in (None, 'Settings'):
                         sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth, 
-                                   self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+                                self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
                         
                     if button in (None, 'Play'):
-                        sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
+                        sg.Popup('* To play a game, press Game->New Game\n* When playing as black, ' + 
+                                 'press Engine->Go to start the engine', title=BOX_TITLE)
                     
                     if button in (None, 'Go'):
                         is_engine_ready = True
@@ -524,7 +526,8 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'Play'):
-                        sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
+                        sg.Popup('* To play a game, press Game->New Game\n* When playing as black, ' +
+                                 'press Engine->Go to start the engine', title=BOX_TITLE)
                         break
                     
                     if button in (None, 'Go'):
@@ -951,7 +954,8 @@ class EasyChessGui():
             
             # Menu->Help->Help
             if button in (None, 'Play'):
-                sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
+                sg.Popup('* To play a game, press Game->New Game\n* When playing as black, ' +
+                         'press Engine->Go to start the engine', title=BOX_TITLE)
                 continue
             
             # Menu->Game->New Game
