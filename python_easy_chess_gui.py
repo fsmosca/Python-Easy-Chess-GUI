@@ -213,17 +213,36 @@ class EasyChessGui():
         bd_sq_color = DARK_SQ_MOVE_COLOR if is_dark_square else LIGHT_SQ_MOVE_COLOR
         btn_sq.Update(button_color=('white', bd_sq_color))
 
-    def relative_row(self, s, c):
+    def relative_row(self, s, stm):
         """ 
-        Returns row based on square s and color c.
-        The board can be viewed, as white is at the bottom and black is at the top.
-        If c is white the first row is at the bottom.
-        If c is black the first row is at the top.
+        s:
+            square
+        stm:
+            side to move
+        Return:
+            row
+        
+        Note:
+            The board can be viewed, as white at the bottom and black at the
+            top. If stm is white the row 0 is at the bottom. If stm is black
+            row 0 is at the top.
         """
-        return 7 - self.get_row(s) if c else self.get_row(s)    
+        return 7 - self.get_row(s) if stm else self.get_row(s)
     
     def get_row(self, s):
-        """ Returns row given square s """
+        """ 
+        s:
+            square
+        Return:
+            row
+        
+        Note:
+            This row is based on PySimpleGUI square mapping that is 0 at the
+            top and 7 at the bottom. 
+            In contrast Python-chess square mapping is 0 at the bottom and 7
+            at the top. chess.square_rank() is a method from Python-chess that
+            returns row given square s.
+        """
         return 7 - chess.square_rank(s)    
     
     def get_col(self, s):
@@ -241,7 +260,7 @@ class EasyChessGui():
                             image_filename=piece_image, )
         
     def render_square(self, image, key, location):
-        """ Returns an RButton with image image """
+        """ Returns an RButton (Read Button) with image image """
         if (location[0] + location[1]) % 2:
             color = '#B58863'
         else:
