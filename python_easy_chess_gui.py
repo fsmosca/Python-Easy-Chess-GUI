@@ -48,12 +48,12 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.5.0'
+APP_VERSION = 'v0.5.1'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
 MIN_TIME = 0.5  # sec
-MAX_TIME = 60
+MAX_TIME = 300.0  # sec
 MIN_DEPTH = 1
 MAX_DEPTH = 128
 
@@ -171,9 +171,32 @@ class RunEngine(threading.Thread):
                         self.score = int(info['score'].relative.score(mate_score=32000))/100
                         self.pv = info['pv'][0:self.pv_length]
                         self.pv = self.board.variation_san(self.pv)
-                        info_line = '{:+0.2f}/{:02d} {:0.1f}s {}\n'.format(self.score, self.depth, self.time, self.pv)
+                        
+                        # Use time in ms if time is below 1 sec
+                        if self.time < 1.0:
+                            self.time = int(self.time * 1000)
+                            info_line = '{:+0.2f}/{:02d} {:03d}ms {}\n'.format(self.score,
+                                     self.depth, self.time, self.pv)
+                        # Else if time is below 60 seconces or 1 minute
+                        elif self.time < 60:
+                            info_line = '{:+0.2f}/{:02d} {:4.1f}s {}\n'.format(self.score,
+                                     self.depth, self.time, self.pv)
+                        # Else if time is 1 minute or more
+                        else:
+                            self.time = self.time/60
+                            info_line = '{:+0.2f}/{:02d} {:4.1f}m {}\n'.format(self.score,
+                                     self.depth, self.time, self.pv)
+                            
                         self.eng_queue.put(info_line)
                         self.bm = info['pv'][0]
+                        
+                    elif 'currmove' in info:
+                        info_line = 'Searching {:02d}. {}\n'.format(int(info['currmovenumber']),
+                                              self.board.san(info['currmove']))
+                        self.eng_queue.put(info_line)
+                    elif 'nodes' in info:
+                        info_line = 'Positions searched {}\n'.format(info['nodes'])
+                        self.eng_queue.put(info_line)
                         
                     if 'time' in info:
                         if float(info['time']) >= self.max_time:
@@ -402,7 +425,8 @@ class EasyChessGui():
     
     def modify_depth_limit(self):
         """ Returns max depth based from user setting """
-        user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[{} to {}]'.format(self.max_depth, MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE)
+        user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[{} to {}]'.format(self.max_depth, 
+                                     MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE)
         
         try:
             user_depth = int(user_depth)
@@ -413,7 +437,8 @@ class EasyChessGui():
     
     def modify_time_limit(self):
         """ Update max time based on user input """
-        user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [{} to {}]'.format(self.max_time, MIN_TIME, MAX_TIME), title=BOX_TITLE)
+        user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [{} to {}]'.format(self.max_time, 
+                                        MIN_TIME, MAX_TIME), title=BOX_TITLE)
         
         try:
             user_movetime = int(user_movetime)
@@ -463,7 +488,8 @@ class EasyChessGui():
                         self.modify_time_limit()
                     
                     if button in (None, 'Settings'):
-                        sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth, self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+                        sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth, 
+                                   self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
                         
                     if button in (None, 'Play'):
                         sg.Popup('* To play a game, press Game->New Game\n* When playing as black, press Engine->Go to start the engine', title=BOX_TITLE)
@@ -511,7 +537,8 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'Settings'):
-                        sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth, self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+                        sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth,
+                                   self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
                         break
                     
                     if button in (None, 'Depth'):
@@ -563,9 +590,11 @@ class EasyChessGui():
                             to_sq = chess.square(to_col, 7-to_row)
     
                             # If user move is a promote
-                            if self.relative_row(to_sq, board.turn) == RANK_8 and moved_piece == chess.PAWN:
+                            if self.relative_row(to_sq, board.turn) == RANK_8 and \
+                                    moved_piece == chess.PAWN:
                                 is_promote = True
-                                pyc_promo, psg_promo = self.get_promo_piece(window, psg_board, user_move, board.turn, True)
+                                pyc_promo, psg_promo = self.get_promo_piece(window, 
+                                        psg_board, user_move, board.turn, True)
                                 user_move = chess.Move(fr_sq, to_sq, promotion=pyc_promo)
                             else:
                                 user_move = chess.Move(fr_sq, to_sq)
@@ -738,8 +767,10 @@ class EasyChessGui():
         engine_list = self.get_engines()
         
         layout = [
-            [sg.Radio('I play with white color', 'first_color', size=(24, 1), font=('Consolas', 10), default=True, key = '_white_'), 
-             sg.Radio('I play with black color', 'first_color', size=(24, 1), font=('Consolas', 10), key = '_black_')],
+            [sg.Radio('I play with white color', 'first_color', size=(24, 1),
+                      font=('Consolas', 10), default=True, key = '_white_'), 
+             sg.Radio('I play with black color', 'first_color', size=(24, 1),
+                      font=('Consolas', 10), key = '_black_')],
             [sg.Text('Engine opponent', size=(16, 1), font=('Consolas', 10)), 
              sg.Drop(engine_list, size=(34, 1), font=('Consolas', 10), key='_enginefn_')],
             [sg.Text('Max Depth', size=(16, 1), font=('Consolas', 10)), 
@@ -844,12 +875,16 @@ class EasyChessGui():
     
         board_controls = [
             [sg.Text('Status: Waiting ...', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
-            [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_White_', size=(34, 1))],
-            [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.InputText('', font=('Consolas', 10), key='_Black_', size=(34, 1))],
+            [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('',
+                    font=('Consolas', 10), key='_White_', size=(34, 1))],
+            [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.InputText('',
+                    font=('Consolas', 10), key='_Black_', size=(34, 1))],
             [sg.Text('MOVE LIST', font=('Consolas', 10))],            
-            [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 8), font=('Consolas', 10), key='_movelist_')],
+            [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 8),
+                    font=('Consolas', 10), key='_movelist_')],
             [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10))],
-            [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 10), font=('Consolas', 10), key='_engineinfo_')],
+            [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 10),
+                    font=('Consolas', 10), key='_engineinfo_')],
             
         ]
     
