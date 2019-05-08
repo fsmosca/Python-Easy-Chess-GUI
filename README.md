@@ -5,10 +5,10 @@ A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users 
 
 ![](https://i.imgur.com/S7HUQmv.png)
 
-### Prerequisites
+### Requirements
 I have not yet build an exe file for this GUI, not sure either if I can create it. In the meantime to get it running the following are required.
-* Python 3
-* Python-chess
+* Python 3.7 and up
+* Python-chess v0.27.3 and up
 * PySimpleGUI
 
 ### Installation
