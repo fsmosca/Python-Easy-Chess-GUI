@@ -756,7 +756,12 @@ class EasyChessGui():
     
         enginefn = None
         while True:        
-            button, value = init_window.Read(timeout=0)        
+            button, value = init_window.Read(timeout=0) 
+            
+            if button is None:
+                logging.info('User pressed x')
+                sys.exit(0)
+            
             enginefn = value['_enginefn_']
             is_player_white = value['_white_']
             
