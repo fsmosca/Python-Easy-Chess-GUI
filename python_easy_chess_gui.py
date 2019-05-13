@@ -48,7 +48,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.5.1'
+APP_VERSION = 'v0.5.2'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -150,7 +150,7 @@ class RunEngine(threading.Thread):
         self.max_time = max_time  # sec
         self.eng_queue = eng_queue
         self.engine = None
-        self.pv_length = 4
+        self.pv_length = 12
         self.board = None
         
     def get_board(self, board):
@@ -191,12 +191,12 @@ class RunEngine(threading.Thread):
                         self.eng_queue.put(info_line)
                         self.bm = info['pv'][0]
                         
-                    elif 'currmove' in info:
-                        info_line = 'Searching {:02d}. {}\n'.format(int(info['currmovenumber']),
-                                              self.board.san(info['currmove']))
-                        self.eng_queue.put(info_line)
-                    elif 'nodes' in info:
+                    if 'nodes' in info:
                         info_line = 'Positions searched {}\n'.format(info['nodes'])
+                        self.eng_queue.put(info_line)
+                        
+                    if 'nps' in info:
+                        info_line = 'Speed {} positions/sec\n'.format(info['nps'])
                         self.eng_queue.put(info_line)
                         
                     if 'time' in info:
@@ -667,10 +667,17 @@ class EasyChessGui():
                 search.start() 
                 window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
                 while True:
-                    button, value = window.Read(timeout=500)
+                    button, value = window.Read(timeout=200)
                     msg = self.queue.get()
                     if not 'bestmove ' in str(msg):
                         window.FindElement('_engineinfo_').Update(msg, append=True)
+                        
+                        # Show engine search info summary. [eval/depth] [time] [pv]
+                        if len(str(msg).split()) >= 4:
+                            pv_len = 10 if board.turn else 9
+                            msg_update = ' '.join(str(msg).split()[0:pv_len])
+                            window.FindElement('_engineinfosummary_').Update(msg_update,
+                                              text_color='blue')
                     else:
                         best_move = chess.Move.from_uci(msg.split()[1])
                         break
@@ -886,6 +893,7 @@ class EasyChessGui():
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 8),
                     font=('Consolas', 10), key='_movelist_')],
             [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10))],
+            [sg.Text('', key='_engineinfosummary_', size=(36, 1))],
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 10),
                     font=('Consolas', 10), key='_engineinfo_')],
             
