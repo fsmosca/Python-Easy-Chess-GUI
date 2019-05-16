@@ -48,7 +48,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.6'
+APP_VERSION = 'v0.7'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -243,12 +243,13 @@ class EasyChessGui():
         self.queue = queue.Queue()
         self.white_layout = None
         self.black_layout = None
+        self.window = None
         
-    def change_square_color(self, window, row, col):
+    def change_square_color(self, row, col):
         """ 
         Change the color of a square based on square row and col.
         """
-        btn_sq = window.FindElement(key=(row, col))
+        btn_sq = self.window.FindElement(key=(row, col))
         is_dark_square = True if (row + col) % 2 else False
         bd_sq_color = DARK_SQ_MOVE_COLOR if is_dark_square else LIGHT_SQ_MOVE_COLOR
         btn_sq.Update(button_color=('white', bd_sq_color))
@@ -289,13 +290,13 @@ class EasyChessGui():
         """ Returns col given square s """
         return chess.square_file(s)
         
-    def redraw_board(self, window, psg_board):
+    def redraw_board(self, psg_board):
         """ Redraw the chess board at the begining of the game or after a move """
         for i in range(8):
             for j in range(8):
                 color = '#B58863' if (i + j) % 2 else '#F0D9B5'
                 piece_image = images[psg_board[i][j]]
-                elem = window.FindElement(key=(i, j))
+                elem = self.window.FindElement(key=(i, j))
                 elem.Update(button_color=('white', color),
                             image_filename=piece_image, )
         
@@ -348,7 +349,7 @@ class EasyChessGui():
         
         return piece
         
-    def update_rook(self, window, psg_board, move):
+    def update_rook(self, psg_board, move):
         """ 
         Update rook location on the board for a castle move.
         move:
@@ -373,9 +374,9 @@ class EasyChessGui():
 
         psg_board[self.get_row(fr)][self.get_col(fr)] = BLANK
         psg_board[self.get_row(to)][self.get_col(to)] = pc
-        self.redraw_board(window, psg_board)        
+        self.redraw_board(psg_board)        
     
-    def update_ep(self, window, psg_board, move, stm):
+    def update_ep(self, psg_board, move, stm):
         """ 
         Update board if move is an ep capture. Remove the piece at 
         to-8 (stm is white) or to+8 (stm is black)
@@ -391,9 +392,9 @@ class EasyChessGui():
             capture_sq = to + 8
     
         psg_board[self.get_row(capture_sq)][self.get_col(capture_sq)] = BLANK
-        self.redraw_board(window, psg_board)        
+        self.redraw_board(psg_board)        
         
-    def get_promo_piece(self, window, psg_board, move, stm, human):
+    def get_promo_piece(self, psg_board, move, stm, human):
         """ 
         Returns:
             promotion piece based on python-chess module (pyc_promo) and
@@ -464,12 +465,12 @@ class EasyChessGui():
 
         self.max_time = min(MAX_TIME, max(MIN_TIME, user_movetime))
         
-    def play_game(self, window, psg_board, engine_id_name, board):
+    def play_game(self, psg_board, engine_id_name, board):
         """ 
         Plays a game against an engine. Move legality is handled by python-chess.
         """ 
-        window.FindElement('_movelist_').Update('')
-        window.FindElement('_engineinfo_').Update('')
+        self.window.FindElement('_movelist_').Update('')
+        self.window.FindElement('_engineinfo_').Update('')
                 
         is_human_stm = True if self.is_user_white else False
         move_state = 0
@@ -487,7 +488,7 @@ class EasyChessGui():
             # and exit this loop when user presses the Engine->Go button
             if not is_engine_ready:
                 while True:
-                    button, value = window.Read(timeout=100)
+                    button, value = self.window.Read(timeout=100)
                     
                     if button in (None, 'Exit'):
                         is_exit_app = True
@@ -526,7 +527,7 @@ class EasyChessGui():
             if is_human_stm:
                 move_state = 0
                 while True:
-                    button, value = window.Read(timeout=100)
+                    button, value = self.window.Read(timeout=100)
                     
                     if not is_human_stm:
                         break
@@ -559,7 +560,7 @@ class EasyChessGui():
                         else:
                             is_human_stm = True
                         is_engine_ready = True
-                        window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
+                        self.window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
                         break
                     
                     if button in (None, 'Settings'):
@@ -583,7 +584,7 @@ class EasyChessGui():
                             piece = psg_board[fr_row][fr_col]  # get the move-from piece
                             
                             # Change the color of the "fr" board square
-                            self.change_square_color(window, fr_row, fr_col)
+                            self.change_square_color(fr_row, fr_col)
                             
                             move_state = 1
                             moved_piece = board.piece_type_at(chess.square(fr_col, 7-fr_row))  # Pawn=1
@@ -593,7 +594,7 @@ class EasyChessGui():
                             is_promote = False
                             move_to = button
                             to_row, to_col = move_to
-                            button_square = window.FindElement(key=(fr_row, fr_col))
+                            button_square = self.window.FindElement(key=(fr_row, fr_col))
                             
                             # If move is cancelled, pressing same button twice
                             if move_to == move_from:
@@ -619,8 +620,8 @@ class EasyChessGui():
                             if self.relative_row(to_sq, board.turn) == RANK_8 and \
                                     moved_piece == chess.PAWN:
                                 is_promote = True
-                                pyc_promo, psg_promo = self.get_promo_piece(window, 
-                                        psg_board, user_move, board.turn, True)
+                                pyc_promo, psg_promo = self.get_promo_piece(psg_board,
+                                        user_move, board.turn, True)
                                 user_move = chess.Move(fr_sq, to_sq, promotion=pyc_promo)
                             else:
                                 user_move = chess.Move(fr_sq, to_sq)
@@ -637,11 +638,11 @@ class EasyChessGui():
                                     
                                 # Update rook location if this is a castle move
                                 if board.is_castling(user_move):
-                                    self.update_rook(window, psg_board, str(user_move))
+                                    self.update_rook(psg_board, str(user_move))
                                     
                                 # Update board if e.p capture
                                 elif board.is_en_passant(user_move):
-                                    self.update_ep(window, psg_board, user_move, board.turn)                                
+                                    self.update_ep(psg_board, user_move, board.turn)                                
                                     
                                 # Empty the board from_square, applied to any types of move
                                 psg_board[move_from[0]][move_from[1]] = BLANK
@@ -654,18 +655,18 @@ class EasyChessGui():
                                     # Place piece in the move to_square
                                     psg_board[to_row][to_col] = piece
                                     
-                                self.redraw_board(window, psg_board)
-                                window.FindElement('_movelist_').Update(show_san_move, append=True)
+                                self.redraw_board(psg_board)
+                                self.window.FindElement('_movelist_').Update(show_san_move, append=True)
     
                                 board.push(user_move)
                                 
                                 # Change the color of the "fr" and "to" board squares
-                                self.change_square_color(window, fr_row, fr_col)
-                                self.change_square_color(window, to_row, to_col)
+                                self.change_square_color(fr_row, fr_col)
+                                self.change_square_color(to_row, to_col)
     
                                 is_human_stm ^= 1
                                 
-                                window.FindElement('_engineinfo_').Update('', append=False)
+                                self.window.FindElement('_engineinfo_').Update('', append=False)
                                 
                                 # Human has done its move
                          
@@ -688,18 +689,18 @@ class EasyChessGui():
                                    self.max_depth, self.max_time)
                 search.get_board(board)
                 search.start() 
-                window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
+                self.window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
                 while True:
-                    button, value = window.Read(timeout=200)
+                    button, value = self.window.Read(timeout=200)
                     msg = self.queue.get()
                     if not 'bestmove ' in str(msg):
-                        window.FindElement('_engineinfo_').Update(msg, append=True)
+                        self.window.FindElement('_engineinfo_').Update(msg, append=True)
                         
                         # Show engine search info summary. [eval/depth] [time] [pv]
                         if len(str(msg).split()) >= 4:
                             pv_len = 10 if board.turn else 9
                             msg_update = ' '.join(str(msg).split()[0:pv_len])
-                            window.FindElement('_engineinfosummary_').Update(msg_update,
+                            self.window.FindElement('_engineinfosummary_').Update(msg_update,
                                               text_color='blue')
                     else:
                         best_move = chess.Move.from_uci(msg.split()[1])
@@ -720,23 +721,23 @@ class EasyChessGui():
                     show_san_move = '{}. {} '.format(fmvn, san_move)
                 else:
                     show_san_move = '{} '.format(san_move)
-                window.FindElement('_movelist_').Update(show_san_move, append=True)
+                self.window.FindElement('_movelist_').Update(show_san_move, append=True)
     
                 piece = psg_board[fr_row][fr_col]
                 psg_board[fr_row][fr_col] = BLANK            
                 
                 # Update rook location if this is a castle move
                 if board.is_castling(best_move):
-                    self.update_rook(window, psg_board, move_str)
+                    self.update_rook(psg_board, move_str)
                     
                 # Update board if e.p capture
                 elif board.is_en_passant(best_move):
-                    self.update_ep(window, psg_board, best_move, board.turn)
+                    self.update_ep(psg_board, best_move, board.turn)
                     
                 # Update board if move is a promotion
                 elif best_move.promotion is not None:
                     is_promote = True
-                    _, psg_promo = self.get_promo_piece(window, psg_board, best_move, board.turn, False)
+                    _, psg_promo = self.get_promo_piece(psg_board, best_move, board.turn, False)
                     
                 # Update board to_square if move is a promotion
                 if is_promote:
@@ -746,17 +747,17 @@ class EasyChessGui():
                     # Place piece in the move to_square
                     psg_board[to_row][to_col] = piece
                     
-                self.redraw_board(window, psg_board)
+                self.redraw_board(psg_board)
     
                 board.push(best_move)
                 
                 # Change the color of the "fr" and "to" board squares
-                self.change_square_color(window, fr_row, fr_col)
-                self.change_square_color(window, to_row, to_col)
+                self.change_square_color(fr_row, fr_col)
+                self.change_square_color(to_row, to_col)
                 
                 is_human_stm ^= 1
                 
-                window.FindElement('_gamestatus_').Update('Status: Play mode ...')                
+                self.window.FindElement('_gamestatus_').Update('Status: Play mode ...')                
                 # Engine has done its move
             
         if is_exit_app:
@@ -960,7 +961,7 @@ class EasyChessGui():
                    sg.Column(board_controls)],
                   ]
     
-        window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), layout,
+        self.window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), layout,
                            default_button_element_size=(12, 1),
                            auto_size_buttons=False,
                            icon='')
@@ -968,7 +969,7 @@ class EasyChessGui():
         self.white_layout = layout
         self.black_layout = layout_flip
         
-        return window, psg_board, layout_flip
+        return psg_board, layout_flip
     
     def build_gui(self):
         """ 
@@ -976,30 +977,29 @@ class EasyChessGui():
         """
         enginefn = self.init_user_option()
     
-        window, psg_board, layout_flip = self.build_main_layout()
+        psg_board, layout_flip = self.build_main_layout()
         
         # Start engine and get its id name
         engine_id_name = self.get_engine_id_name(enginefn)
         
         # Update White/Black label values
         if self.is_user_white:
-            window.FindElement('_White_').Update('Human')
-            window.FindElement('_Black_').Update(engine_id_name)
+            self.window.FindElement('_White_').Update('Human')
+            self.window.FindElement('_Black_').Update(engine_id_name)
         else:
-            window.FindElement('_White_').Update(engine_id_name)
-            window.FindElement('_Black_').Update('Human')
+            self.window.FindElement('_White_').Update(engine_id_name)
+            self.window.FindElement('_Black_').Update('Human')
             
-        return window, psg_board, engine_id_name, layout_flip
+        return psg_board, engine_id_name, layout_flip
     
     def main_loop(self):
         """ 
         This is where we build our GUI and read user inputs. When user presses Exit we also quit the engine.
         """
-        window, psg_board, engine_id_name, layout_flip = self.build_gui()
-        pop_cnt = 0
+        psg_board, engine_id_name, layout_flip = self.build_gui()
         
         while True:
-            button, value = window.Read(timeout=100)
+            button, value = self.window.Read(timeout=100)
             
             # Menu->File->Exit
             if button in (None, 'Exit'):
@@ -1010,10 +1010,10 @@ class EasyChessGui():
                 
             if button in (None, 'Flip'):
                 # Clear Text and Multiline elements
-                window.FindElement('_gamestatus_').Update('Status: waiting ...')
-                window.FindElement('_movelist_').Update('')
-                window.FindElement('_engineinfosummary_').Update('')
-                window.FindElement('_engineinfo_').Update('')                
+                self.window.FindElement('_gamestatus_').Update('Status: waiting ...')
+                self.window.FindElement('_movelist_').Update('')
+                self.window.FindElement('_engineinfosummary_').Update('')
+                self.window.FindElement('_engineinfo_').Update('')                
                 
                 window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), 
                                     self.black_layout if self.is_user_white else self.white_layout,
@@ -1024,16 +1024,16 @@ class EasyChessGui():
                 
                 # Update White/Black label values
                 if self.is_user_white:
-                    window.FindElement('_White_').Update('Human')
-                    window.FindElement('_Black_').Update(engine_id_name)
+                    self.window.FindElement('_White_').Update('Human')
+                    self.window.FindElement('_Black_').Update(engine_id_name)
                 else:
-                    window.FindElement('_White_').Update(engine_id_name)
-                    window.FindElement('_Black_').Update('Human')
+                    self.window.FindElement('_White_').Update(engine_id_name)
+                    self.window.FindElement('_Black_').Update('Human')
                 
-                window.Close()
+                self.window.Close()
                 psg_board = copy.deepcopy(initial_board)
                 board = chess.Board()
-                window = window1
+                self.window = window1
                 continue
             
             # Menu->Help->Help
@@ -1046,25 +1046,27 @@ class EasyChessGui():
                 psg_board = copy.deepcopy(initial_board)
                 board = chess.Board()
                 while True:
-                    button, value = window.Read(timeout=100)
+                    button, value = self.window.Read(timeout=100)
                     
-                    window.FindElement('_gamestatus_').Update('Status: Play mode ...')
-                    window.FindElement('_engineinfosummary_').Update('')
-                    window.FindElement('_movelist_').Update('')
+                    self.window.FindElement('_gamestatus_').Update('Status: Play mode ...')
+                    self.window.FindElement('_engineinfosummary_').Update('')
+                    self.window.FindElement('_movelist_').Update('')
                     
-                    start_new_game = self.play_game(window, psg_board, engine_id_name, board)
-                    window.FindElement('_gamestatus_').Update('Status: Waiting ...')
+                    start_new_game = self.play_game(psg_board, engine_id_name, board)
+                    self.window.FindElement('_gamestatus_').Update('Status: Waiting ...')
                     
                     if start_new_game:
                         psg_board = copy.deepcopy(initial_board)
-                        self.redraw_board(window, psg_board)
+                        self.redraw_board(psg_board)
                         board = chess.Board()
                     else:
-                        self.redraw_board(window, psg_board)
+                        psg_board = copy.deepcopy(initial_board)
+                        self.redraw_board(psg_board)
+                        board = chess.Board()
                         break
                 continue
             
-        window.Close()
+        self.window.Close()
 
 
 def main():
