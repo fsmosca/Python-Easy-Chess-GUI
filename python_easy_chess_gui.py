@@ -108,6 +108,20 @@ DARK_SQ_MOVE_COLOR = '#B8AF4E'
 LIGHT_SQ_MOVE_COLOR = '#E8E18E'
 
 
+FLIP_MSG = """Flipping a board while status is Play mode is not possible at the moment.
+If you really want to flip the board and start the game from startpos do the following:
+1. Game->Exit Game
+2. Board->Flip
+3. Game->New Game
+"""
+
+
+PLAY_MSG = """* To play:: Game->New Game
+* To flip board:: Game->Exit Game, Board->Flip
+* To play as black:: Game->Exit Game, Board->Flip, Game->New Game, Engine->Go
+"""
+
+
 # Images/60
 blank = os.path.join(IMAGE_PATH, 'blank.png')
 bishopB = os.path.join(IMAGE_PATH, 'bB.png')
@@ -484,14 +498,8 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'Flip'):
-                        sg.PopupScrolled('Flipping a board while status is Play mode is not ' +
-                                   'possible at the moment. If you really want ' +
-                                   'to flip the board and start the game from startpos do the following:\n' + 
-                                   '1. Game->Exit Game\n' +
-                                   '2. Board->Flip\n' + 
-                                   '3. Game->New Game',
-                                   size=(80, 6), non_blocking=True,
-                                   title = BOX_TITLE)
+                        sg.PopupScrolled(FLIP_MSG, size=(80, 5),
+                                         non_blocking=True, title = BOX_TITLE)
                         continue
                     
                     if button in (None, 'Depth'):
@@ -505,8 +513,7 @@ class EasyChessGui():
                                 self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
                         
                     if button in (None, 'Play'):
-                        sg.Popup('* To play a game, press Game->New Game\n* When playing as black, ' + 
-                                 'press Engine->Go to start the engine', title=BOX_TITLE)
+                        sg.Popup(PLAY_MSG, title=BOX_TITLE)
                     
                     if button in (None, 'Go'):
                         is_engine_ready = True
@@ -538,19 +545,12 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'Play'):
-                        sg.Popup('* To play a game, press Game->New Game\n* When playing as black, ' +
-                                 'press Engine->Go to start the engine', title=BOX_TITLE)
+                        sg.Popup(PLAY_MSG, title=BOX_TITLE)
                         break
                     
                     if button in (None, 'Flip'):
-                        sg.PopupScrolled('Flipping a board while status is Play mode is not ' +
-                                   'possible at the moment. If you really want ' +
-                                   'to flip the board and start the game from startpos do the following:\n' + 
-                                   '1. Game->Exit Game\n' +
-                                   '2. Board->Flip\n' + 
-                                   '3. Game->New Game',
-                                   size=(80, 6), non_blocking=True,
-                                   title = BOX_TITLE)
+                        sg.PopupScrolled(FLIP_MSG, size=(80, 5),
+                                         non_blocking=True, title = BOX_TITLE)
                         continue
                     
                     if button in (None, 'Go'):
@@ -1001,12 +1001,6 @@ class EasyChessGui():
         while True:
             button, value = window.Read(timeout=100)
             
-            if pop_cnt == 0:
-                sg.Popup('Game->New game to enter Play mode and start playing.\n ' + 
-                         'Or Board->Flip, Game->New Game and Engine->Go to play as black\n' + 
-                         'and engine plays as white', title = BOX_TITLE)
-                pop_cnt += 1
-            
             # Menu->File->Exit
             if button in (None, 'Exit'):
                 break
@@ -1044,8 +1038,7 @@ class EasyChessGui():
             
             # Menu->Help->Help
             if button in (None, 'Play'):
-                sg.Popup('* To play a game, press Game->New Game\n* When playing as black, ' +
-                         'press Engine->Go to start the engine', title=BOX_TITLE)
+                sg.Popup(PLAY_MSG, title=BOX_TITLE)
                 continue
             
             # Menu->Game->New Game
