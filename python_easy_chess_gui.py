@@ -48,7 +48,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.5.2'
+APP_VERSION = 'v0.6'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -222,11 +222,13 @@ class RunEngine(threading.Thread):
 
 class EasyChessGui():
     def __init__(self):
-        self.is_user_white = None
+        self.is_user_white = True
         self.max_depth = 1
         self.max_time = 1
         self.engine_full_path_and_name = None
         self.queue = queue.Queue()
+        self.white_layout = None
+        self.black_layout = None
         
     def change_square_color(self, window, row, col):
         """ 
@@ -448,7 +450,7 @@ class EasyChessGui():
 
         self.max_time = min(MAX_TIME, max(MIN_TIME, user_movetime))
         
-    def play_game(self, window, psg_board, engine_id_name):
+    def play_game(self, window, psg_board, engine_id_name, board):
         """ 
         Plays a game against an engine. Move legality is handled by python-chess.
         """ 
@@ -456,11 +458,6 @@ class EasyChessGui():
         window.FindElement('_engineinfo_').Update('')
                 
         is_human_stm = True if self.is_user_white else False
-        
-        psg_board = copy.deepcopy(initial_board)
-        self.redraw_board(window, psg_board)
-    
-        board = chess.Board()
         move_state = 0
         move_from, move_to = None, None
         is_new_game, is_exit_game, is_exit_app = False, False, False
@@ -482,6 +479,21 @@ class EasyChessGui():
                         is_exit_app = True
                         break
                     
+                    if button in (None, 'Exit Game'):
+                        is_exit_game = True
+                        break
+                    
+                    if button in (None, 'Flip'):
+                        sg.PopupScrolled('Flipping a board while status is Play mode is not ' +
+                                   'possible at the moment. If you really want ' +
+                                   'to flip the board and start the game from startpos do the following:\n' + 
+                                   '1. Game->Exit Game\n' +
+                                   '2. Board->Flip\n' + 
+                                   '3. Game->New Game',
+                                   size=(80, 6), non_blocking=True,
+                                   title = BOX_TITLE)
+                        continue
+                    
                     if button in (None, 'Depth'):
                         self.modify_depth_limit()
                     
@@ -500,7 +512,7 @@ class EasyChessGui():
                         is_engine_ready = True
                         break
                     
-                if is_exit_app:
+                if is_exit_app or is_exit_game:
                     break
     
             # If side to move is human
@@ -529,6 +541,17 @@ class EasyChessGui():
                         sg.Popup('* To play a game, press Game->New Game\n* When playing as black, ' +
                                  'press Engine->Go to start the engine', title=BOX_TITLE)
                         break
+                    
+                    if button in (None, 'Flip'):
+                        sg.PopupScrolled('Flipping a board while status is Play mode is not ' +
+                                   'possible at the moment. If you really want ' +
+                                   'to flip the board and start the game from startpos do the following:\n' + 
+                                   '1. Game->Exit Game\n' +
+                                   '2. Board->Flip\n' + 
+                                   '3. Game->New Game',
+                                   size=(80, 6), non_blocking=True,
+                                   title = BOX_TITLE)
+                        continue
                     
                     if button in (None, 'Go'):
                         if is_human_stm:
@@ -754,7 +777,7 @@ class EasyChessGui():
         eng_filename = './Engines/' + enginefn
         self.engine_full_path_and_name = eng_filename
         if eng_filename is None:
-            print('Failed to load engine')
+            logging.info('Failed to load engine')
             sys.exit(0)
         engine = chess.engine.SimpleEngine.popen_uci(eng_filename)
         engine_id_name = engine.id['name']
@@ -777,10 +800,6 @@ class EasyChessGui():
         engine_list = self.get_engines()
         
         layout = [
-            [sg.Radio('I play with white color', 'first_color', size=(24, 1),
-                      font=('Consolas', 10), default=True, key = '_white_'), 
-             sg.Radio('I play with black color', 'first_color', size=(24, 1),
-                      font=('Consolas', 10), key = '_black_')],
             [sg.Text('Engine opponent', size=(16, 1), font=('Consolas', 10)), 
              sg.Drop(engine_list, size=(34, 1), font=('Consolas', 10), key='_enginefn_')],
             [sg.Text('Max Depth', size=(16, 1), font=('Consolas', 10)), 
@@ -804,7 +823,6 @@ class EasyChessGui():
                 sys.exit(0)
             
             enginefn = value['_enginefn_']
-            is_player_white = value['_white_']
             
             try:
                 max_depth = int(value['_maxdepth_'])
@@ -824,7 +842,7 @@ class EasyChessGui():
         
         init_window.Close()
         
-        return enginefn, True if is_player_white else False
+        return enginefn
 
     def create_board(self, psg_board):
         """
@@ -832,7 +850,7 @@ class EasyChessGui():
         the value of is_user_white.
         """
         # the main board display layout
-        board_layout = []
+        board_layout, board_layout_flip = [], []
         
         start = 0
         end = 8
@@ -859,8 +877,37 @@ class EasyChessGui():
         # add the labels across bottom of board
         board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
                             font='Any 11') for a in file_char_name])
+        
+        # Save the board with white at the top
+        file_char_name = 'abcdefgh'
+        
+        start = 7
+        end = -1
+        step = -1
+        file_char_name = file_char_name[::-1]
+
+        if not self.is_user_white:
+            start = 0
+            end = 8
+            step = 1
+            file_char_name = file_char_name[::-1]
             
-        return board_layout
+        # Loop through the board and create buttons with images
+        for i in range(start, end, step):
+            # Row numbers at left of board
+            row = [sg.T(str(8 - i) + '  ', font='Any 11')]
+            
+            for j in range(start, end, step):
+                piece_image = images[psg_board[i][j]]
+                row.append(self.render_square(piece_image, key=(i, j), location=(i, j)))
+    
+            board_layout_flip.append(row)
+            
+        # add the labels across bottom of board
+        board_layout_flip.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
+                            font='Any 11') for a in file_char_name])
+            
+        return board_layout, board_layout_flip
         
     def build_main_layout(self):
         """
@@ -873,6 +920,7 @@ class EasyChessGui():
          
         menu_def = [['&File', ['E&xit']],
                     ['&Game', ['&New Game', 'Exit Game']],
+                    ['Board', ['Flip']],
                     ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings']],
                     ['&Help', ['Play']],
                     ]
@@ -881,7 +929,7 @@ class EasyChessGui():
         psg_board = copy.deepcopy(initial_board)
         
         # Define board
-        board_layout = self.create_board(psg_board)
+        board_layout, board_layout_flip = self.create_board(psg_board)
     
         board_controls = [
             [sg.Text('Status: Waiting ...', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
@@ -895,15 +943,20 @@ class EasyChessGui():
             [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10))],
             [sg.Text('', key='_engineinfosummary_', size=(36, 1))],
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 10),
-                    font=('Consolas', 10), key='_engineinfo_')],
-            
+                    font=('Consolas', 10), key='_engineinfo_', visible = True)],            
         ]
     
         board_tab = [[sg.Column(board_layout)]]
+        board_tab_flip = [[sg.Column(board_layout_flip)]]
     
         # the main window layout
         layout = [[sg.Menu(menu_def, tearoff=False)],
                   [sg.TabGroup([[sg.Tab('Board', board_tab)]], title_color='red'),
+                   sg.Column(board_controls)],
+                  ]
+                  
+        layout_flip = [[sg.Menu(menu_def, tearoff=False)],
+                  [sg.TabGroup([[sg.Tab('Board', board_tab_flip)]], title_color='red'),
                    sg.Column(board_controls)],
                   ]
     
@@ -912,15 +965,18 @@ class EasyChessGui():
                            auto_size_buttons=False,
                            icon='')
         
-        return window, psg_board
+        self.white_layout = layout
+        self.black_layout = layout_flip
+        
+        return window, psg_board, layout_flip
     
     def build_gui(self):
         """ 
         Builds the main GUI, this includes board orientation and engine initialization.
         """
-        enginefn, self.is_user_white = self.init_user_option()
+        enginefn = self.init_user_option()
     
-        window, psg_board = self.build_main_layout()
+        window, psg_board, layout_flip = self.build_main_layout()
         
         # Start engine and get its id name
         engine_id_name = self.get_engine_id_name(enginefn)
@@ -933,31 +989,57 @@ class EasyChessGui():
             window.FindElement('_White_').Update(engine_id_name)
             window.FindElement('_Black_').Update('Human')
             
-        return window, psg_board, engine_id_name
+        return window, psg_board, engine_id_name, layout_flip
     
     def main_loop(self):
         """ 
         This is where we build our GUI and read user inputs. When user presses Exit we also quit the engine.
         """
-        window, psg_board, engine_id_name = self.build_gui()
-        start_play_game = False
+        window, psg_board, engine_id_name, layout_flip = self.build_gui()
+        pop_cnt = 0
         
         while True:
             button, value = window.Read(timeout=100)
+            
+            if pop_cnt == 0:
+                sg.Popup('Game->New game to enter Play mode and start playing.\n ' + 
+                         'Or Board->Flip, Game->New Game and Engine->Go to play as black\n' + 
+                         'and engine plays as white', title = BOX_TITLE)
+                pop_cnt += 1
             
             # Menu->File->Exit
             if button in (None, 'Exit'):
                 break
             
-            # Enter the play mode immediately while other features are still not implemented
-            if not start_play_game:
-                start_play_game = True
-                while True:
-                    window.FindElement('_gamestatus_').Update('Status: Play mode ...')
-                    start_new_game = self.play_game(window, psg_board, engine_id_name)
-                    window.FindElement('_gamestatus_').Update('Status: Waiting ...')
-                    if not start_new_game:
-                        break
+            if button in (None, 'Exit Game'):
+                pass
+                
+            if button in (None, 'Flip'):
+                # Clear Text and Multiline elements
+                window.FindElement('_gamestatus_').Update('Status: waiting ...')
+                window.FindElement('_movelist_').Update('')
+                window.FindElement('_engineinfosummary_').Update('')
+                window.FindElement('_engineinfo_').Update('')                
+                
+                window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), 
+                                    self.black_layout if self.is_user_white else self.white_layout,
+                           default_button_element_size=(12, 1),
+                           auto_size_buttons=False,
+                           icon='')
+                self.is_user_white = not self.is_user_white
+                
+                # Update White/Black label values
+                if self.is_user_white:
+                    window.FindElement('_White_').Update('Human')
+                    window.FindElement('_Black_').Update(engine_id_name)
+                else:
+                    window.FindElement('_White_').Update(engine_id_name)
+                    window.FindElement('_Black_').Update('Human')
+                
+                window.Close()
+                psg_board = copy.deepcopy(initial_board)
+                board = chess.Board()
+                window = window1
                 continue
             
             # Menu->Help->Help
@@ -968,15 +1050,27 @@ class EasyChessGui():
             
             # Menu->Game->New Game
             if button in (None, 'New Game'):
+                psg_board = copy.deepcopy(initial_board)
+                board = chess.Board()
                 while True:
-                    button, value = window.Read(timeout=100)                
+                    button, value = window.Read(timeout=100)
+                    
                     window.FindElement('_gamestatus_').Update('Status: Play mode ...')
-                    start_new_game = self.play_game(window, psg_board, engine_id_name)
+                    window.FindElement('_engineinfosummary_').Update('')
+                    window.FindElement('_movelist_').Update('')
+                    
+                    start_new_game = self.play_game(window, psg_board, engine_id_name, board)
                     window.FindElement('_gamestatus_').Update('Status: Waiting ...')
-                    if not start_new_game:
+                    
+                    if start_new_game:
+                        psg_board = copy.deepcopy(initial_board)
+                        self.redraw_board(window, psg_board)
+                        board = chess.Board()
+                    else:
+                        self.redraw_board(window, psg_board)
                         break
                 continue
-
+            
         window.Close()
 
 
