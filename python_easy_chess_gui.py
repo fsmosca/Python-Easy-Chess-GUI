@@ -37,6 +37,7 @@ import sys
 import threading
 import queue
 import copy
+import time
 import chess
 import chess.pgn
 import chess.engine
@@ -48,7 +49,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.7'
+APP_VERSION = 'v0.8'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -164,7 +165,7 @@ class RunEngine(threading.Thread):
         self.max_time = max_time  # sec
         self.eng_queue = eng_queue
         self.engine = None
-        self.pv_length = 12
+        self.pv_length = 5
         self.board = None
         
     def get_board(self, board):
@@ -174,9 +175,15 @@ class RunEngine(threading.Thread):
     def run(self):
         # When converting .py to exe using pyinstaller use the following
         # self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path,
-        #         creationflags=subprocess.CREATE_NO_WINDOW)  
+        #         creationflags=subprocess.CREATE_NO_WINDOW) 
+        # This is only applicable for Python version >= 3.7
         
         self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
+        
+        # Use wall clock time to determine max time
+        start_thinking_time_sec = time.time()
+        is_time_check = False
+        
         with self.engine.analysis(self.board) as analysis:
             for info in analysis:
                 try:
@@ -213,14 +220,16 @@ class RunEngine(threading.Thread):
                         info_line = 'Speed {} positions/sec\n'.format(info['nps'])
                         self.eng_queue.put(info_line)
                         
-                    if 'time' in info:
-                        if float(info['time']) >= self.max_time:
-                            logging.info('time limit is reached')
-                            break
+                    # If we use "go infinite" we stop the search by time and depth
+                    if not is_time_check and \
+                        time.time() - start_thinking_time_sec >= self.max_time:
+                        logging.info('Max time limit is reached.')
+                        is_time_check = True
+                        break
                         
                     if 'depth' in info:
                         if int(info['depth']) >= self.max_depth:
-                            logging.info('depth limit is reached')
+                            logging.info('Max depth limit is reached.')
                             break
                 except:
                     pass
@@ -244,6 +253,8 @@ class EasyChessGui():
         self.white_layout = None
         self.black_layout = None
         self.window = None
+        self.pecg_game_fn = 'pecg_game.pgn'
+        self.player = [None, None]
         
     def change_square_color(self, row, col):
         """ 
@@ -480,6 +491,12 @@ class EasyChessGui():
         # Do not play immediately when stm is computer
         is_engine_ready = True if is_human_stm else False
         
+        # For saving game
+        move_cnt = 0
+        game = chess.pgn.Game()
+        game.headers['White'] = self.player[0]
+        game.headers['Black'] = self.player[1]
+        
         # Game loop
         while not board.is_game_over(claim_draw=True):
             moved_piece = None
@@ -535,12 +552,18 @@ class EasyChessGui():
                     if button in (None, 'Exit'):
                         logging.info('Exit app')
                         is_exit_app = True
-                        sys.exit(0)
+                        break
                     
                     if button in (None, 'New Game'):
                         is_new_game = True
                         break
                     
+                    if button in (None, 'Save Game'):
+                        logging.info('Saving game manually')
+                        with open(self.pecg_game_fn, mode = 'a+') as f:
+                            f.write('{}\n\n'.format(game))                        
+                        break                    
+
                     if button in (None, 'Exit Game'):
                         is_exit_game = True
                         break
@@ -659,6 +682,12 @@ class EasyChessGui():
                                 self.window.FindElement('_movelist_').Update(show_san_move, append=True)
     
                                 board.push(user_move)
+                                move_cnt += 1
+                                
+                                if move_cnt == 1:
+                                    node = game.add_variation(user_move)
+                                else:
+                                    node = node.add_variation(user_move)
                                 
                                 # Change the color of the "fr" and "to" board squares
                                 self.change_square_color(fr_row, fr_col)
@@ -749,7 +778,13 @@ class EasyChessGui():
                     
                 self.redraw_board(psg_board)
     
-                board.push(best_move)
+                board.push(best_move)                
+                move_cnt += 1
+                                
+                if move_cnt == 1:
+                    node = game.add_variation(best_move)
+                else:
+                    node = node.add_variation(best_move)
                 
                 # Change the color of the "fr" and "to" board squares
                 self.change_square_color(fr_row, fr_col)
@@ -759,6 +794,11 @@ class EasyChessGui():
                 
                 self.window.FindElement('_gamestatus_').Update('Status: Play mode ...')                
                 # Engine has done its move
+            
+        # Auto-save game
+        logging.info('Saving game automatically')
+        with open(self.pecg_game_fn, mode = 'a+') as f:
+            f.write('{}\n\n'.format(game)) 
             
         if is_exit_app:
             sys.exit(0)
@@ -919,9 +959,9 @@ class EasyChessGui():
             the black pieces are at the bottom.
         """
          
-        menu_def = [['&File', ['E&xit']],
+        menu_def = [['&File', ['Save Game', 'E&xit']],
                     ['&Game', ['&New Game', 'Exit Game']],
-                    ['Board', ['Flip']],
+                    ['&Board', ['Flip']],
                     ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings']],
                     ['&Help', ['Play']],
                     ]
@@ -986,9 +1026,13 @@ class EasyChessGui():
         if self.is_user_white:
             self.window.FindElement('_White_').Update('Human')
             self.window.FindElement('_Black_').Update(engine_id_name)
+            self.player[0] = 'Human'
+            self.player[1] = engine_id_name
         else:
             self.window.FindElement('_White_').Update(engine_id_name)
             self.window.FindElement('_Black_').Update('Human')
+            self.player[0] = engine_id_name
+            self.player[1] = 'Human'
             
         return psg_board, engine_id_name, layout_flip
     
@@ -1026,9 +1070,13 @@ class EasyChessGui():
                 if self.is_user_white:
                     self.window.FindElement('_White_').Update('Human')
                     self.window.FindElement('_Black_').Update(engine_id_name)
+                    self.player[0] = 'Human'
+                    self.player[1] = engine_id_name
                 else:
                     self.window.FindElement('_White_').Update(engine_id_name)
                     self.window.FindElement('_Black_').Update('Human')
+                    self.player[0] = engine_id_name
+                    self.player[1] = 'Human'
                 
                 self.window.Close()
                 psg_board = copy.deepcopy(initial_board)
