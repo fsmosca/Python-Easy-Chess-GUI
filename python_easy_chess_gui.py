@@ -38,6 +38,7 @@ import threading
 import queue
 import copy
 import time
+from datetime import datetime
 import chess
 import chess.pgn
 import chess.engine
@@ -49,7 +50,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.8'
+APP_VERSION = 'v0.9'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -254,7 +255,12 @@ class EasyChessGui():
         self.black_layout = None
         self.window = None
         self.pecg_game_fn = 'pecg_game.pgn'
-        self.player = [None, None]
+        self.pgn_tag = {
+                'Event': 'Human vs computer',
+                'Date': datetime.today().strftime('%Y.%m.%d'),
+                'White': 'Human',
+                'Black': 'Computer',
+        }
         
     def change_square_color(self, row, col):
         """ 
@@ -494,8 +500,10 @@ class EasyChessGui():
         # For saving game
         move_cnt = 0
         game = chess.pgn.Game()
-        game.headers['White'] = self.player[0]
-        game.headers['Black'] = self.player[1]
+        game.headers['Event'] = self.pgn_tag['Event']
+        game.headers['Date'] = datetime.today().strftime('%Y.%m.%d')
+        game.headers['White'] = self.pgn_tag['White']
+        game.headers['Black'] = self.pgn_tag['Black']        
         
         # Game loop
         while not board.is_game_over(claim_draw=True):
@@ -1026,13 +1034,13 @@ class EasyChessGui():
         if self.is_user_white:
             self.window.FindElement('_White_').Update('Human')
             self.window.FindElement('_Black_').Update(engine_id_name)
-            self.player[0] = 'Human'
-            self.player[1] = engine_id_name
+            self.pgn_tag['White'] = 'Human'
+            self.pgn_tag['Black'] = engine_id_name
         else:
             self.window.FindElement('_White_').Update(engine_id_name)
             self.window.FindElement('_Black_').Update('Human')
-            self.player[0] = engine_id_name
-            self.player[1] = 'Human'
+            self.pgn_tag['White'] = engine_id_name
+            self.pgn_tag['Black'] = 'Human'
             
         return psg_board, engine_id_name, layout_flip
     
@@ -1070,13 +1078,13 @@ class EasyChessGui():
                 if self.is_user_white:
                     self.window.FindElement('_White_').Update('Human')
                     self.window.FindElement('_Black_').Update(engine_id_name)
-                    self.player[0] = 'Human'
-                    self.player[1] = engine_id_name
+                    self.pgn_tag['White'] = 'Human'
+                    self.pgn_tag['Black'] = engine_id_name
                 else:
                     self.window.FindElement('_White_').Update(engine_id_name)
                     self.window.FindElement('_Black_').Update('Human')
-                    self.player[0] = engine_id_name
-                    self.player[1] = 'Human'
+                    self.pgn_tag['White'] = engine_id_name
+                    self.pgn_tag['Black'] = 'Human'
                 
                 self.window.Close()
                 psg_board = copy.deepcopy(initial_board)
