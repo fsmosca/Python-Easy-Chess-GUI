@@ -49,10 +49,14 @@ Typical command line:<br>
 * If you play as white, make your move
 * If you play as black, Engine->Go
 
+#### To flip board
+* Game->Exit Game
+* Board->Flip
+
 ### Credits
 * PySimpleGUI<br>
 https://github.com/PySimpleGUI/PySimpleGUI
 * Python-Chess<br>
 https://github.com/niklasf/python-chess
-* Pyperclip
+* Pyperclip<br>
 https://github.com/asweigart/pyperclip
