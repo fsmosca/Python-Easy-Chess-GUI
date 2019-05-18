@@ -10,6 +10,7 @@ I have not yet build an exe file for this GUI, not sure either if I can create i
 * Python 3.7 and up
 * Python-chess v0.27.3 and up
 * PySimpleGUI
+* Pyperclip
 
 ### Installation
 * Python Easy Chess GUI<br>
@@ -22,19 +23,36 @@ pip install python-chess
 * PySimpleGUI<br>
 https://github.com/PySimpleGUI/PySimpleGUI<br>
 pip install pysimplegui
+* Pyperclip<br>
+https://github.com/asweigart/pyperclip<br>
+pip install pyperclip
 
 ### How to play
 * Execute python_easy_chess_gui.py<br>
 Typical command line:<br>
 `python python_easy_chess_gui.py`
-* Select color and engine opponent
-* Press Game->New Game
-* If you selected to play as black, press Engine->Go to start the engine
-* To start a new game press Game->New Game
-* To exit, press File->Exit
+
+#### To play as white
+* Game->New Game
+* Move the piece you want to move
+* Press the square you want the piece to move to
+
+#### To play as black
+* Game->Exit Game
+* Board->Flip
+* Game->New Game
+* Engine->Go
+
+#### To paste a FEN
+* Game->Exit Game
+* FEN->Paste
+* If you play as white, make your move
+* If you play as black, Engine->Go
 
 ### Credits
 * PySimpleGUI<br>
 https://github.com/PySimpleGUI/PySimpleGUI
 * Python-Chess<br>
 https://github.com/niklasf/python-chess
+* Pyperclip
+https://github.com/asweigart/pyperclip
