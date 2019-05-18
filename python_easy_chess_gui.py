@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.10'
+APP_VERSION = 'v0.11'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -119,9 +119,22 @@ If you really want to flip the board and start the game from startpos do the fol
 """
 
 
-PLAY_MSG = """* To play:: Game->New Game
-* To flip board:: Game->Exit Game, Board->Flip
-* To play as black:: Game->Exit Game, Board->Flip, Game->New Game, Engine->Go
+PLAY_MSG = """* To play
+  Game->New Game
+  
+* To flip board
+  Game->Exit Game
+  Board->Flip
+  
+* To play as black
+  Game->Exit Game
+  Board->Flip
+  Game->New Game
+  Engine->Go
+  
+* To paste FEN
+  Game->Exit Game
+  FEN->Paste
 """
 
 
@@ -266,7 +279,7 @@ class EasyChessGui():
         self.psg_board = None
         
     def get_fen(self):
-        """ Get fen from clipboard and setup pcg board """
+        """ Get fen from clipboard and setup psg board """
         self.fen = pyperclip.paste()
         
         # Remove empty char at the end of FEN
@@ -282,15 +295,14 @@ class EasyChessGui():
         pc_locations = self.fen.split()[0]
         
         board = chess.BaseBoard(pc_locations)
-        old_psg_r = None
+        old_r = None
         
         for s in chess.SQUARES:
             r = chess.square_rank(s)
-            psg_r = r
             
-            if old_psg_r is None:
+            if old_r is None:
                 piece_r = []
-            elif old_psg_r != psg_r:
+            elif old_r != r:
                 psgboard.append(piece_r)
                 piece_r = []
             elif s == 63:
@@ -330,11 +342,13 @@ class EasyChessGui():
                         piece_r.append(QUEENB)
                     elif pt == chess.KING:
                         piece_r.append(KINGB)
+                        
+            # Else if pc is None or square is empty
             else:
                 piece_r.append(BLANK)
                 
-            old_psg_r = psg_r
-            
+            old_r = r
+
         self.psg_board = psgboard
         
     def change_square_color(self, row, col):
@@ -466,7 +480,7 @@ class EasyChessGui():
 
         self.psg_board[self.get_row(fr)][self.get_col(fr)] = BLANK
         self.psg_board[self.get_row(to)][self.get_col(to)] = pc
-        self.redraw_board(self.psg_board)        
+        self.redraw_board()        
     
     def update_ep(self, move, stm):
         """ 
@@ -484,7 +498,7 @@ class EasyChessGui():
             capture_sq = to + 8
     
         self.psg_board[self.get_row(capture_sq)][self.get_col(capture_sq)] = BLANK
-        self.redraw_board(self.psg_board)        
+        self.redraw_board()        
         
     def get_promo_piece(self, move, stm, human):
         """ 
@@ -1125,7 +1139,6 @@ class EasyChessGui():
         This is where we build our GUI and read user inputs. When user presses Exit we also quit the engine.
         """
         engine_id_name = self.build_gui()
-        init_board = chess.Board()
         
         while True:
             button, value = self.window.Read(timeout=100)
@@ -1165,7 +1178,7 @@ class EasyChessGui():
                 
                 self.window.Close()
                 self.psg_board = copy.deepcopy(initial_board)
-                board = copy.deepcopy(init_board)
+                board = chess.Board()
                 self.window = window1
                 continue
             
@@ -1189,14 +1202,11 @@ class EasyChessGui():
                     start_new_game = self.play_game(engine_id_name, board)
                     self.window.FindElement('_gamestatus_').Update('Status: Waiting ...')
                     
-                    if start_new_game:
-                        self.psg_board = copy.deepcopy(initial_board)
-                        self.redraw_board()
-                        board = chess.Board()
-                    else:
-                        self.psg_board = copy.deepcopy(initial_board)
-                        self.redraw_board()
-                        board = copy.deepcopy(init_board)
+                    self.psg_board = copy.deepcopy(initial_board)
+                    self.redraw_board()
+                    board = chess.Board()
+                    
+                    if not start_new_game:
                         break
                 continue
             
@@ -1214,14 +1224,11 @@ class EasyChessGui():
                     start_new_game = self.play_game(engine_id_name, board)
                     self.window.FindElement('_gamestatus_').Update('Status: Waiting ...')
                     
-                    if start_new_game:
-                        self.psg_board = copy.deepcopy(initial_board)
-                        self.redraw_board()
-                        board = chess.Board()
-                    else:
-                        self.psg_board = copy.deepcopy(initial_board)
-                        self.redraw_board()
-                        board = copy.deepcopy(init_board)
+                    self.psg_board = copy.deepcopy(initial_board)
+                    self.redraw_board()
+                    board = chess.Board()
+                    
+                    if not start_new_game:
                         break
                 continue
             
