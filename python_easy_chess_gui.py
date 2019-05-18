@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.11'
+APP_VERSION = 'v0.12'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -212,16 +212,16 @@ class RunEngine(threading.Thread):
                         # Use time in ms if time is below 1 sec
                         if self.time < 1.0:
                             self.time = int(self.time * 1000)
-                            info_line = '{:+0.2f}/{:02d} {:03d}ms {}\n'.format(self.score,
+                            info_line = '{:+0.2f}/{:02d} {:03d}ms {} pv\n'.format(self.score,
                                      self.depth, self.time, self.pv)
                         # Else if time is below 60 seconces or 1 minute
                         elif self.time < 60:
-                            info_line = '{:+0.2f}/{:02d} {:4.1f}s {}\n'.format(self.score,
+                            info_line = '{:+0.2f}/{:02d} {:4.1f}s {} pv\n'.format(self.score,
                                      self.depth, self.time, self.pv)
                         # Else if time is 1 minute or more
                         else:
                             self.time = self.time/60
-                            info_line = '{:+0.2f}/{:02d} {:4.1f}m {}\n'.format(self.score,
+                            info_line = '{:+0.2f}/{:02d} {:4.1f}m {} pv\n'.format(self.score,
                                      self.depth, self.time, self.pv)
                             
                         self.eng_queue.put(info_line)
@@ -233,6 +233,11 @@ class RunEngine(threading.Thread):
                         
                     if 'nps' in info:
                         info_line = 'Speed {} positions/sec\n'.format(info['nps'])
+                        self.eng_queue.put(info_line)
+                        
+                    if 'currmove' in info and 'currmovenumber' in info:
+                        info_line = 'Searching {}. {}\n'.format(info['currmovenumber'],
+                                               chess.Move.from_uci(info['currmove']))
                         self.eng_queue.put(info_line)
                         
                     # If we use "go infinite" we stop the search by time and depth
@@ -822,13 +827,16 @@ class EasyChessGui():
                     button, value = self.window.Read(timeout=200)
                     msg = self.queue.get()
                     if not 'bestmove ' in str(msg):
-                        self.window.FindElement('_engineinfo_').Update(msg, append=True)
+                        if 'pv' in str(msg):
+                            # Remove the pv marker
+                            msg_line = ' '.join(str(msg).split()[0:-1]).strip() + '\n'
+                        else:
+                            msg_line = str(msg)
+                        self.window.FindElement('_engineinfo_').Update(msg_line, append=True)
                         
                         # Show engine search info summary. [eval/depth] [time] [pv]
-                        if len(str(msg).split()) >= 4:
-                            pv_len = 10 if board.turn else 9
-                            msg_update = ' '.join(str(msg).split()[0:pv_len])
-                            self.window.FindElement('_engineinfosummary_').Update(msg_update,
+                        if 'pv' in str(msg):
+                            self.window.FindElement('_engineinfosummary_').Update(msg_line,
                                               text_color='blue')
                     else:
                         best_move = chess.Move.from_uci(msg.split()[1])
