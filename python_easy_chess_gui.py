@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.16'
+APP_VERSION = 'v0.17'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -168,6 +168,9 @@ promote_psg_to_pyc = {KNIGHTB: chess.KNIGHT, BISHOPB: chess.BISHOP,
 
 
 class RunEngine(threading.Thread):
+    pv_length = 5
+    move_delay_sec = 3.0
+    
     def __init__(self, eng_queue, engine_path, max_depth=1, max_time=1):
         threading.Thread.__init__(self)
         self.engine_path = engine_path
@@ -180,9 +183,7 @@ class RunEngine(threading.Thread):
         self.max_time = max_time  # sec
         self.eng_queue = eng_queue
         self.engine = None
-        self.pv_length = 5
         self.board = None
-        self.move_delay_sec = 3.0
         
     def get_board(self, board):
         """ Get board from user """
