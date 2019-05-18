@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.13'
+APP_VERSION = 'v0.14'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -554,8 +554,8 @@ class EasyChessGui():
     
     def modify_depth_limit(self):
         """ Returns max depth based from user setting """
-        user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[{} to {}]'.format(self.max_depth, 
-                                     MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE)
+        user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[{} to {}]'.format(
+                self.max_depth, MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE)
         
         try:
             user_depth = int(user_depth)
@@ -566,8 +566,8 @@ class EasyChessGui():
     
     def modify_time_limit(self):
         """ Update max time based on user input """
-        user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [{} to {}]'.format(self.max_time, 
-                                        MIN_TIME, MAX_TIME), title=BOX_TITLE)
+        user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [{} to {}]'.format(
+                self.max_time, MIN_TIME, MAX_TIME), title=BOX_TITLE)
         
         try:
             user_movetime = int(user_movetime)
@@ -994,12 +994,11 @@ class EasyChessGui():
 
     def create_board(self):
         """
-        Returns board layout for main layout. The board is oriented depending on
-        the value of is_user_white.
+        Returns board layouts both white and black point of view.
         """
-        # the main board display layout
-        board_layout, board_layout_flip = [], []
+        white_board_layout, black_board_layout = [], []
         
+        # Save the board with black at the top        
         start = 0
         end = 8
         step = 1
@@ -1020,10 +1019,10 @@ class EasyChessGui():
                 piece_image = images[self.psg_board[i][j]]
                 row.append(self.render_square(piece_image, key=(i, j), location=(i, j)))
     
-            board_layout.append(row)
+            white_board_layout.append(row)
             
         # add the labels across bottom of board
-        board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
+        white_board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
                             font='Any 11') for a in file_char_name])
         
         # Save the board with white at the top
@@ -1049,21 +1048,17 @@ class EasyChessGui():
                 piece_image = images[self.psg_board[i][j]]
                 row.append(self.render_square(piece_image, key=(i, j), location=(i, j)))
     
-            board_layout_flip.append(row)
+            black_board_layout.append(row)
             
         # add the labels across bottom of board
-        board_layout_flip.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
+        black_board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
                             font='Any 11') for a in file_char_name])
             
-        return board_layout, board_layout_flip
+        return white_board_layout, black_board_layout
         
     def build_main_layout(self):
         """
-        Build the main part of GUI, board is oriented based on the color of the side to move first.
-        is_user_white:
-            It this is True, the board is oriented such that the white pieces
-            are in the bottom. Otherwise the board will be oriented such that
-            the black pieces are at the bottom.
+        Build the main part of GUI, board is oriented with white at the bottom.
         """
          
         menu_def = [['&File', ['Save Game', 'E&xit']],
@@ -1078,7 +1073,7 @@ class EasyChessGui():
         self.psg_board = copy.deepcopy(initial_board)
         
         # Define board
-        board_layout, board_layout_flip = self.create_board()
+        white_board_layout, black_board_layout = self.create_board()
     
         board_controls = [
             [sg.Text('Status: Waiting ...', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
@@ -1095,31 +1090,32 @@ class EasyChessGui():
                     font=('Consolas', 10), key='_engineinfo_', visible = True)],            
         ]
     
-        board_tab = [[sg.Column(board_layout)]]
-        board_tab_flip = [[sg.Column(board_layout_flip)]]
+        white_board_tab = [[sg.Column(white_board_layout)]]
+        black_board_tab = [[sg.Column(black_board_layout)]]
     
-        # the main window layout
-        layout = [[sg.Menu(menu_def, tearoff=False)],
-                  [sg.TabGroup([[sg.Tab('Board', board_tab)]], title_color='red'),
+        # White board layout
+        white_layout = [[sg.Menu(menu_def, tearoff=False)],
+                  [sg.TabGroup([[sg.Tab('Board', white_board_tab)]], title_color='red'),
                    sg.Column(board_controls)],
                   ]
                   
-        layout_flip = [[sg.Menu(menu_def, tearoff=False)],
-                  [sg.TabGroup([[sg.Tab('Board', board_tab_flip)]], title_color='red'),
+        black_layout = [[sg.Menu(menu_def, tearoff=False)],
+                  [sg.TabGroup([[sg.Tab('Board', black_board_tab)]], title_color='red'),
                    sg.Column(board_controls)],
                   ]
-    
-        self.window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), layout,
+                  
+        # Use white layout as default window    
+        self.window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), white_layout,
                            default_button_element_size=(12, 1),
                            auto_size_buttons=False,
                            icon='')
         
-        self.white_layout = layout
-        self.black_layout = layout_flip
+        self.white_layout = white_layout
+        self.black_layout = black_layout
     
     def build_gui(self):
         """ 
-        Builds the main GUI, this includes board orientation and engine initialization.
+        Builds the main GUI, this includes board orientation and engine selection.
         """
         enginefn = self.init_user_option()
     
@@ -1144,7 +1140,7 @@ class EasyChessGui():
     
     def main_loop(self):
         """ 
-        This is where we build our GUI and read user inputs. When user presses Exit we also quit the engine.
+        This is where we build our GUI and read user inputs.
         """
         engine_id_name = self.build_gui()
         
