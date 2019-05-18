@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.12'
+APP_VERSION = 'v0.13'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -1203,7 +1203,12 @@ class EasyChessGui():
                 while True:
                     button, value = self.window.Read(timeout=100)
                     
-                    self.window.FindElement('_gamestatus_').Update('Status: Play mode ...')
+                    # Indicate side to move after FEN is pasted, because
+                    # we don't have a last move to highlight.
+                    self.window.FindElement('_gamestatus_').Update(
+                            'Status: Play mode ... side: {}'.format(
+                            'white' if board.turn else 'black'))
+                    
                     self.window.FindElement('_engineinfosummary_').Update('')
                     self.window.FindElement('_movelist_').Update('')
                     
