@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.14'
+APP_VERSION = 'v0.15'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -182,6 +182,7 @@ class RunEngine(threading.Thread):
         self.engine = None
         self.pv_length = 5
         self.board = None
+        self.move_delay_sec = 3.0
         
     def get_board(self, board):
         """ Get board from user """
@@ -196,7 +197,7 @@ class RunEngine(threading.Thread):
         self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
         
         # Use wall clock time to determine max time
-        start_thinking_time_sec = time.time()
+        start_thinking_time = time.time()
         is_time_check = False
         
         with self.engine.analysis(self.board) as analysis:
@@ -242,7 +243,7 @@ class RunEngine(threading.Thread):
                         
                     # If we use "go infinite" we stop the search by time and depth
                     if not is_time_check and \
-                        time.time() - start_thinking_time_sec >= self.max_time:
+                        time.time() - start_thinking_time >= self.max_time:
                         logging.info('Max time limit is reached.')
                         is_time_check = True
                         break
@@ -253,6 +254,13 @@ class RunEngine(threading.Thread):
                             break
                 except:
                     pass
+                
+        # Apply engine move delay
+        while True:
+            if time.time() - start_thinking_time >= self.move_delay_sec:
+                break
+            logging.info('Delay sending of best move')
+            time.sleep(0.25)
 
         self.eng_queue.put('bestmove {}' .format(self.bm))
         logging.info('bestmove {}'.format(self.bm))
