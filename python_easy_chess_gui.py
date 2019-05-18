@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.15'
+APP_VERSION = 'v0.16'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -272,12 +272,13 @@ class RunEngine(threading.Thread):
 
 
 class EasyChessGui():
-    def __init__(self):
-        self.is_user_white = True
-        self.max_depth = 1
-        self.max_time = 1
-        self.engine_full_path_and_name = None
-        self.queue = queue.Queue()
+    queue = queue.Queue()
+    is_user_white = True
+
+    def __init__(self, max_depth, max_time_sec):
+        self.max_depth = max_depth
+        self.max_time = max_time_sec
+        self.engine_full_path_and_name = None    
         self.white_layout = None
         self.black_layout = None
         self.window = None
@@ -1253,7 +1254,9 @@ class EasyChessGui():
 
 
 def main():
-    pecg = EasyChessGui()
+    max_depth = 1
+    max_time_sec = 1.0
+    pecg = EasyChessGui(max_depth, max_time_sec)
     pecg.main_loop()
 
 
