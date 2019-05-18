@@ -39,6 +39,7 @@ import queue
 import copy
 import time
 from datetime import datetime
+import pyperclip
 import chess
 import chess.pgn
 import chess.engine
@@ -50,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.9'
+APP_VERSION = 'v0.10'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -261,6 +262,80 @@ class EasyChessGui():
                 'White': 'Human',
                 'Black': 'Computer',
         }
+        self.fen = None
+        self.psg_board = None
+        
+    def get_fen(self):
+        """ Get fen from clipboard and setup pcg board """
+        self.fen = pyperclip.paste()
+        
+        # Remove empty char at the end of FEN
+        if self.fen.endswith(' '):
+            self.fen = self.fen[:-1]
+        self.fen_to_psg_board()
+
+    def fen_to_psg_board(self):
+        """ Update psg_board based on FEN """
+        psgboard = []
+        
+        # Get piece locations only to build psg board
+        pc_locations = self.fen.split()[0]
+        
+        board = chess.BaseBoard(pc_locations)
+        old_psg_r = None
+        
+        for s in chess.SQUARES:
+            r = chess.square_rank(s)
+            psg_r = r
+            
+            if old_psg_r is None:
+                piece_r = []
+            elif old_psg_r != psg_r:
+                psgboard.append(piece_r)
+                piece_r = []
+            elif s == 63:
+                psgboard.append(piece_r)                
+            
+            try:
+                pc = board.piece_at(s^56)
+            except:
+                pc = None
+            
+            if pc is not None:
+                pt = pc.piece_type
+                c = pc.color
+                if c:
+                    if pt == chess.PAWN:
+                        piece_r.append(PAWNW)
+                    elif pt == chess.KNIGHT:
+                        piece_r.append(KNIGHTW)
+                    elif pt == chess.BISHOP:
+                        piece_r.append(BISHOPW)
+                    elif pt == chess.ROOK:
+                        piece_r.append(ROOKW)
+                    elif pt == chess.QUEEN:
+                        piece_r.append(QUEENW)
+                    elif pt == chess.KING:
+                        piece_r.append(KINGW)
+                else:
+                    if pt == chess.PAWN:
+                        piece_r.append(PAWNB)
+                    elif pt == chess.KNIGHT:
+                        piece_r.append(KNIGHTB)
+                    elif pt == chess.BISHOP:
+                        piece_r.append(BISHOPB)
+                    elif pt == chess.ROOK:
+                        piece_r.append(ROOKB)
+                    elif pt == chess.QUEEN:
+                        piece_r.append(QUEENB)
+                    elif pt == chess.KING:
+                        piece_r.append(KINGB)
+            else:
+                piece_r.append(BLANK)
+                
+            old_psg_r = psg_r
+            
+        self.psg_board = psgboard
         
     def change_square_color(self, row, col):
         """ 
@@ -307,12 +382,12 @@ class EasyChessGui():
         """ Returns col given square s """
         return chess.square_file(s)
         
-    def redraw_board(self, psg_board):
+    def redraw_board(self):
         """ Redraw the chess board at the begining of the game or after a move """
         for i in range(8):
             for j in range(8):
                 color = '#B58863' if (i + j) % 2 else '#F0D9B5'
-                piece_image = images[psg_board[i][j]]
+                piece_image = images[self.psg_board[i][j]]
                 elem = self.window.FindElement(key=(i, j))
                 elem.Update(button_color=('white', color),
                             image_filename=piece_image, )
@@ -366,7 +441,7 @@ class EasyChessGui():
         
         return piece
         
-    def update_rook(self, psg_board, move):
+    def update_rook(self, move):
         """ 
         Update rook location on the board for a castle move.
         move:
@@ -389,11 +464,11 @@ class EasyChessGui():
             to = chess.D8
             pc = ROOKB
 
-        psg_board[self.get_row(fr)][self.get_col(fr)] = BLANK
-        psg_board[self.get_row(to)][self.get_col(to)] = pc
-        self.redraw_board(psg_board)        
+        self.psg_board[self.get_row(fr)][self.get_col(fr)] = BLANK
+        self.psg_board[self.get_row(to)][self.get_col(to)] = pc
+        self.redraw_board(self.psg_board)        
     
-    def update_ep(self, psg_board, move, stm):
+    def update_ep(self, move, stm):
         """ 
         Update board if move is an ep capture. Remove the piece at 
         to-8 (stm is white) or to+8 (stm is black)
@@ -408,10 +483,10 @@ class EasyChessGui():
         else:
             capture_sq = to + 8
     
-        psg_board[self.get_row(capture_sq)][self.get_col(capture_sq)] = BLANK
-        self.redraw_board(psg_board)        
+        self.psg_board[self.get_row(capture_sq)][self.get_col(capture_sq)] = BLANK
+        self.redraw_board(self.psg_board)        
         
-    def get_promo_piece(self, psg_board, move, stm, human):
+    def get_promo_piece(self, move, stm, human):
         """ 
         Returns:
             promotion piece based on python-chess module (pyc_promo) and
@@ -482,7 +557,7 @@ class EasyChessGui():
 
         self.max_time = min(MAX_TIME, max(MIN_TIME, user_movetime))
         
-    def play_game(self, psg_board, engine_id_name, board):
+    def play_game(self, engine_id_name, board):
         """ 
         Plays a game against an engine. Move legality is handled by python-chess.
         """ 
@@ -503,7 +578,10 @@ class EasyChessGui():
         game.headers['Event'] = self.pgn_tag['Event']
         game.headers['Date'] = datetime.today().strftime('%Y.%m.%d')
         game.headers['White'] = self.pgn_tag['White']
-        game.headers['Black'] = self.pgn_tag['Black']        
+        game.headers['Black'] = self.pgn_tag['Black']      
+        
+        if board != chess.Board():
+            game.headers['FEN'] = self.fen
         
         # Game loop
         while not board.is_game_over(claim_draw=True):
@@ -612,7 +690,7 @@ class EasyChessGui():
                         if move_state == 0:
                             move_from = button
                             fr_row, fr_col = move_from
-                            piece = psg_board[fr_row][fr_col]  # get the move-from piece
+                            piece = self.psg_board[fr_row][fr_col]  # get the move-from piece
                             
                             # Change the color of the "fr" board square
                             self.change_square_color(fr_row, fr_col)
@@ -651,8 +729,7 @@ class EasyChessGui():
                             if self.relative_row(to_sq, board.turn) == RANK_8 and \
                                     moved_piece == chess.PAWN:
                                 is_promote = True
-                                pyc_promo, psg_promo = self.get_promo_piece(psg_board,
-                                        user_move, board.turn, True)
+                                pyc_promo, psg_promo = self.get_promo_piece(user_move, board.turn, True)
                                 user_move = chess.Move(fr_sq, to_sq, promotion=pyc_promo)
                             else:
                                 user_move = chess.Move(fr_sq, to_sq)
@@ -669,24 +746,24 @@ class EasyChessGui():
                                     
                                 # Update rook location if this is a castle move
                                 if board.is_castling(user_move):
-                                    self.update_rook(psg_board, str(user_move))
+                                    self.update_rook(str(user_move))
                                     
                                 # Update board if e.p capture
                                 elif board.is_en_passant(user_move):
-                                    self.update_ep(psg_board, user_move, board.turn)                                
+                                    self.update_ep(user_move, board.turn)                                
                                     
                                 # Empty the board from_square, applied to any types of move
-                                psg_board[move_from[0]][move_from[1]] = BLANK
+                                self.psg_board[move_from[0]][move_from[1]] = BLANK
                                 
                                 # Update board to_square if move is a promotion
                                 if is_promote:
-                                    psg_board[to_row][to_col] = psg_promo
+                                    self.psg_board[to_row][to_col] = psg_promo
                                 # Update the to_square if not a promote move
                                 else:
                                     # Place piece in the move to_square
-                                    psg_board[to_row][to_col] = piece
+                                    self.psg_board[to_row][to_col] = piece
                                     
-                                self.redraw_board(psg_board)
+                                self.redraw_board()
                                 self.window.FindElement('_movelist_').Update(show_san_move, append=True)
     
                                 board.push(user_move)
@@ -760,31 +837,31 @@ class EasyChessGui():
                     show_san_move = '{} '.format(san_move)
                 self.window.FindElement('_movelist_').Update(show_san_move, append=True)
     
-                piece = psg_board[fr_row][fr_col]
-                psg_board[fr_row][fr_col] = BLANK            
+                piece = self.psg_board[fr_row][fr_col]
+                self.psg_board[fr_row][fr_col] = BLANK            
                 
                 # Update rook location if this is a castle move
                 if board.is_castling(best_move):
-                    self.update_rook(psg_board, move_str)
+                    self.update_rook(move_str)
                     
                 # Update board if e.p capture
                 elif board.is_en_passant(best_move):
-                    self.update_ep(psg_board, best_move, board.turn)
+                    self.update_ep(best_move, board.turn)
                     
                 # Update board if move is a promotion
                 elif best_move.promotion is not None:
                     is_promote = True
-                    _, psg_promo = self.get_promo_piece(psg_board, best_move, board.turn, False)
+                    _, psg_promo = self.get_promo_piece(best_move, board.turn, False)
                     
                 # Update board to_square if move is a promotion
                 if is_promote:
-                    psg_board[to_row][to_col] = psg_promo
+                    self.psg_board[to_row][to_col] = psg_promo
                 # Update the to_square if not a promote move
                 else:
                     # Place piece in the move to_square
-                    psg_board[to_row][to_col] = piece
+                    self.psg_board[to_row][to_col] = piece
                     
-                self.redraw_board(psg_board)
+                self.redraw_board()
     
                 board.push(best_move)                
                 move_cnt += 1
@@ -893,7 +970,7 @@ class EasyChessGui():
         
         return enginefn
 
-    def create_board(self, psg_board):
+    def create_board(self):
         """
         Returns board layout for main layout. The board is oriented depending on
         the value of is_user_white.
@@ -918,7 +995,7 @@ class EasyChessGui():
             row = [sg.T(str(8 - i) + '  ', font='Any 11')]
             
             for j in range(start, end, step):
-                piece_image = images[psg_board[i][j]]
+                piece_image = images[self.psg_board[i][j]]
                 row.append(self.render_square(piece_image, key=(i, j), location=(i, j)))
     
             board_layout.append(row)
@@ -947,7 +1024,7 @@ class EasyChessGui():
             row = [sg.T(str(8 - i) + '  ', font='Any 11')]
             
             for j in range(start, end, step):
-                piece_image = images[psg_board[i][j]]
+                piece_image = images[self.psg_board[i][j]]
                 row.append(self.render_square(piece_image, key=(i, j), location=(i, j)))
     
             board_layout_flip.append(row)
@@ -970,15 +1047,16 @@ class EasyChessGui():
         menu_def = [['&File', ['Save Game', 'E&xit']],
                     ['&Game', ['&New Game', 'Exit Game']],
                     ['&Board', ['Flip']],
+                    ['FEN', ['Paste']],
                     ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings']],
                     ['&Help', ['Play']],
                     ]
         
         sg.ChangeLookAndFeel('Reddit')
-        psg_board = copy.deepcopy(initial_board)
+        self.psg_board = copy.deepcopy(initial_board)
         
         # Define board
-        board_layout, board_layout_flip = self.create_board(psg_board)
+        board_layout, board_layout_flip = self.create_board()
     
         board_controls = [
             [sg.Text('Status: Waiting ...', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
@@ -1016,8 +1094,6 @@ class EasyChessGui():
         
         self.white_layout = layout
         self.black_layout = layout_flip
-        
-        return psg_board, layout_flip
     
     def build_gui(self):
         """ 
@@ -1025,7 +1101,7 @@ class EasyChessGui():
         """
         enginefn = self.init_user_option()
     
-        psg_board, layout_flip = self.build_main_layout()
+        self.build_main_layout()
         
         # Start engine and get its id name
         engine_id_name = self.get_engine_id_name(enginefn)
@@ -1042,13 +1118,14 @@ class EasyChessGui():
             self.pgn_tag['White'] = engine_id_name
             self.pgn_tag['Black'] = 'Human'
             
-        return psg_board, engine_id_name, layout_flip
+        return engine_id_name
     
     def main_loop(self):
         """ 
         This is where we build our GUI and read user inputs. When user presses Exit we also quit the engine.
         """
-        psg_board, engine_id_name, layout_flip = self.build_gui()
+        engine_id_name = self.build_gui()
+        init_board = chess.Board()
         
         while True:
             button, value = self.window.Read(timeout=100)
@@ -1087,8 +1164,8 @@ class EasyChessGui():
                     self.pgn_tag['Black'] = 'Human'
                 
                 self.window.Close()
-                psg_board = copy.deepcopy(initial_board)
-                board = chess.Board()
+                self.psg_board = copy.deepcopy(initial_board)
+                board = copy.deepcopy(init_board)
                 self.window = window1
                 continue
             
@@ -1097,9 +1174,35 @@ class EasyChessGui():
                 sg.Popup(PLAY_MSG, title=BOX_TITLE)
                 continue
             
+            if button in (None, 'Paste'):
+                self.get_fen()  # self.psg_board is updated here
+                self.redraw_board()
+                board = chess.Board(self.fen)
+                
+                while True:
+                    button, value = self.window.Read(timeout=100)
+                    
+                    self.window.FindElement('_gamestatus_').Update('Status: Play mode ...')
+                    self.window.FindElement('_engineinfosummary_').Update('')
+                    self.window.FindElement('_movelist_').Update('')
+                    
+                    start_new_game = self.play_game(engine_id_name, board)
+                    self.window.FindElement('_gamestatus_').Update('Status: Waiting ...')
+                    
+                    if start_new_game:
+                        self.psg_board = copy.deepcopy(initial_board)
+                        self.redraw_board()
+                        board = chess.Board()
+                    else:
+                        self.psg_board = copy.deepcopy(initial_board)
+                        self.redraw_board()
+                        board = copy.deepcopy(init_board)
+                        break
+                continue
+            
             # Menu->Game->New Game
             if button in (None, 'New Game'):
-                psg_board = copy.deepcopy(initial_board)
+                self.psg_board = copy.deepcopy(initial_board)
                 board = chess.Board()
                 while True:
                     button, value = self.window.Read(timeout=100)
@@ -1108,17 +1211,17 @@ class EasyChessGui():
                     self.window.FindElement('_engineinfosummary_').Update('')
                     self.window.FindElement('_movelist_').Update('')
                     
-                    start_new_game = self.play_game(psg_board, engine_id_name, board)
+                    start_new_game = self.play_game(engine_id_name, board)
                     self.window.FindElement('_gamestatus_').Update('Status: Waiting ...')
                     
                     if start_new_game:
-                        psg_board = copy.deepcopy(initial_board)
-                        self.redraw_board(psg_board)
+                        self.psg_board = copy.deepcopy(initial_board)
+                        self.redraw_board()
                         board = chess.Board()
                     else:
-                        psg_board = copy.deepcopy(initial_board)
-                        self.redraw_board(psg_board)
-                        board = chess.Board()
+                        self.psg_board = copy.deepcopy(initial_board)
+                        self.redraw_board()
+                        board = copy.deepcopy(init_board)
                         break
                 continue
             
