@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.19'
+APP_VERSION = 'v0.20'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -1217,9 +1217,13 @@ class EasyChessGui():
                 continue
             
             if button in (None, 'Paste'):
-                self.get_fen()  # self.psg_board is updated here
-                self.redraw_board()
-                board = chess.Board(self.fen)
+                try:
+                    self.get_fen()
+                    self.redraw_board()
+                    board = chess.Board(self.fen)
+                except:
+                    logging.info('Error in parsing FEN from clipboard.')
+                    continue
                 
                 while True:
                     button, value = self.window.Read(timeout=100)
