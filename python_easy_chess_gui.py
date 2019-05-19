@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.21'
+APP_VERSION = 'v0.22'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -307,13 +307,12 @@ class EasyChessGui():
             self.pgn_tag['Black'] = human
         
     def get_fen(self):
-        """ Get fen from clipboard and setup psg board """
+        """ Get fen from clipboard """
         self.fen = pyperclip.paste()
         
         # Remove empty char at the end of FEN
         if self.fen.endswith(' '):
             self.fen = self.fen[:-1]
-        self.fen_to_psg_board()
 
     def fen_to_psg_board(self):
         """ Update psg_board based on FEN """
@@ -1211,12 +1210,14 @@ class EasyChessGui():
             
             if button in (None, 'Paste'):
                 try:
-                    self.get_fen()
-                    self.redraw_board()
+                    self.get_fen()                    
                     board = chess.Board(self.fen)
                 except:
                     logging.info('Error in parsing FEN from clipboard.')
                     continue
+                    
+                self.fen_to_psg_board()
+                self.redraw_board()
                 
                 while True:
                     button, value = self.window.Read(timeout=100)
