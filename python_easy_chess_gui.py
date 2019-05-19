@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.22'
+APP_VERSION = 'v0.23'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -598,7 +598,12 @@ class EasyChessGui():
             user_movetime = self.max_time
 
         self.max_time = min(MAX_TIME, max(MIN_TIME, user_movetime))
-        
+
+    def get_engine_settings(self, engine_id_name):
+        """ Display engine settings """
+        sg.PopupOK('Depth = {}\nMovetime = {} sec\n\nEngine = {}\n'.format(self.max_depth,
+                   self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+
     def play_game(self, engine_id_name, board):
         """ 
         Plays a game against an engine. Move legality is handled by python-chess.
@@ -655,8 +660,7 @@ class EasyChessGui():
                         self.modify_time_limit()
                     
                     if button in (None, 'Get Settings'):
-                        sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth, 
-                                self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+                        self.get_engine_settings(engine_id_name)
                         
                     if button in (None, 'Play'):
                         sg.Popup(PLAY_MSG, title=BOX_TITLE)
@@ -715,8 +719,7 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'Get Settings'):
-                        sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth,
-                                   self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+                        self.get_engine_settings(engine_id_name)
                         break
                     
                     if button in (None, 'Set Depth'):
@@ -967,16 +970,14 @@ class EasyChessGui():
         return engine_list
         
     def init_user_option(self):
-        """ Shows user options for user color and engine opponent """
+        """ Allows user to select engine opponent.
+            Returns engine filename selected.
+        """
         engine_list = self.get_engines()
         
         layout = [
             [sg.Text('Engine opponent', size=(16, 1), font=('Consolas', 10)), 
              sg.Drop(engine_list, size=(34, 1), font=('Consolas', 10), key='_enginefn_')],
-            [sg.Text('Max Depth', size=(16, 1), font=('Consolas', 10)), 
-             sg.InputText('1', font=('Consolas', 10), key='_maxdepth_', size=(8, 1)),
-             sg.Text('Max Time (sec)', size=(14, 1), font=('Consolas', 10)), 
-             sg.InputText('1', font=('Consolas', 10), key='_maxtime_', size=(10, 1))],
             [sg.Button('OK', size=(6, 1), font=('Consolas', 10), key='_ok_')],
         ]
         
@@ -994,22 +995,9 @@ class EasyChessGui():
                 sys.exit(0)
             
             enginefn = value['_enginefn_']
-            
-            try:
-                max_depth = int(value['_maxdepth_'])
-            except:
-                max_depth = self.max_depth
-
-            try:
-                max_time = int(value['_maxtime_'])
-            except:
-                max_time = self.max_time
 
             if button == '_ok_':
                 break
-
-        self.max_depth = min(MAX_DEPTH, max(MIN_DEPTH, max_depth))
-        self.max_time = min(MAX_TIME, max(MIN_TIME, max_time))
         
         init_window.Close()
         
@@ -1177,8 +1165,7 @@ class EasyChessGui():
                 continue
             
             if button in (None, 'Get Settings'):
-                sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth, 
-                        self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+                self.get_engine_settings(engine_id_name)
                 continue
                 
             if button in (None, 'Flip'):
