@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.18'
+APP_VERSION = 'v0.19'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -564,7 +564,7 @@ class EasyChessGui():
     
     def modify_depth_limit(self):
         """ Returns max depth based from user setting """
-        user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth[{} to {}]'.format(
+        user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth [{} to {}]'.format(
                 self.max_depth, MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE)
         
         try:
@@ -576,8 +576,9 @@ class EasyChessGui():
     
     def modify_time_limit(self):
         """ Update max time based on user input """
-        user_movetime = sg.PopupGetText('Current move time is {}s\n\nInput move time [{} to {}]'.format(
-                self.max_time, MIN_TIME, MAX_TIME), title=BOX_TITLE)
+        user_movetime = sg.PopupGetText(
+            'Current move time is {} sec\n\nInput move time [{} to {}] sec'.format(
+            self.max_time, MIN_TIME, MAX_TIME), title=BOX_TITLE)
         
         try:
             user_movetime = int(user_movetime)
@@ -1163,6 +1164,20 @@ class EasyChessGui():
             
             if button in (None, 'Exit Game'):
                 pass
+            
+            # Engine settings
+            if button in (None, 'Set Depth'):
+                self.modify_depth_limit()
+                continue
+            
+            if button in (None, 'Set Movetime'):
+                self.modify_time_limit()
+                continue
+            
+            if button in (None, 'Get Settings'):
+                sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth, 
+                        self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+                continue
                 
             if button in (None, 'Flip'):
                 # Clear Text and Multiline elements
