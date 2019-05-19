@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.23'
+APP_VERSION = 'v0.24'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -965,8 +965,9 @@ class EasyChessGui():
         engine_path = './Engines/'
         files = os.listdir(engine_path)
         for file in files:
-            engine_list.append(file)
-            
+            if not file.endswith('.gz') and not file.endswith('.dll'):
+                engine_list.append(file)
+
         return engine_list
         
     def init_user_option(self):
