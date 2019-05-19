@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.17'
+APP_VERSION = 'v0.18'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -635,13 +635,13 @@ class EasyChessGui():
                                          non_blocking=True, title = BOX_TITLE)
                         continue
                     
-                    if button in (None, 'Depth'):
+                    if button in (None, 'Set Depth'):
                         self.modify_depth_limit()
                     
-                    if button in (None, 'Movetime'):
+                    if button in (None, 'Set Movetime'):
                         self.modify_time_limit()
                     
-                    if button in (None, 'Settings'):
+                    if button in (None, 'Get Settings'):
                         sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth, 
                                 self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
                         
@@ -701,16 +701,16 @@ class EasyChessGui():
                         self.window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
                         break
                     
-                    if button in (None, 'Settings'):
+                    if button in (None, 'Get Settings'):
                         sg.PopupOK('Depth = {}\nMovetime(s) = {}\n\nEngine = {}\n'.format(self.max_depth,
                                    self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
                         break
                     
-                    if button in (None, 'Depth'):
+                    if button in (None, 'Set Depth'):
                         self.modify_depth_limit()
                         break
                     
-                    if button in (None, 'Movetime'):
+                    if button in (None, 'Set Movetime'):
                         self.modify_time_limit()
                         break
                     
@@ -1075,7 +1075,7 @@ class EasyChessGui():
                     ['&Game', ['&New Game', 'Exit Game']],
                     ['&Board', ['Flip']],
                     ['FEN', ['Paste']],
-                    ['&Engine', ['Go', 'Depth', 'Movetime', 'Settings']],
+                    ['&Engine', ['Go', 'Set Depth', 'Set Movetime', 'Get Settings']],
                     ['&Help', ['Play']],
                     ]
         
