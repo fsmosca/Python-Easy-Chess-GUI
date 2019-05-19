@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.20'
+APP_VERSION = 'v0.21'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -292,6 +292,19 @@ class EasyChessGui():
         }
         self.fen = None
         self.psg_board = None
+        
+    def update_white_black_labels(self, human='Human', engine_id='engine id name'):
+        """ Update player names """
+        if self.is_user_white:
+            self.window.FindElement('_White_').Update(human)
+            self.window.FindElement('_Black_').Update(engine_id)
+            self.pgn_tag['White'] = human
+            self.pgn_tag['Black'] = engine_id
+        else:
+            self.window.FindElement('_White_').Update(engine_id)
+            self.window.FindElement('_Black_').Update(human)
+            self.pgn_tag['White'] = engine_id
+            self.pgn_tag['Black'] = human
         
     def get_fen(self):
         """ Get fen from clipboard and setup psg board """
@@ -1134,18 +1147,8 @@ class EasyChessGui():
         
         # Start engine and get its id name
         engine_id_name = self.get_engine_id_name(enginefn)
-        
-        # Update White/Black label values
-        if self.is_user_white:
-            self.window.FindElement('_White_').Update('Human')
-            self.window.FindElement('_Black_').Update(engine_id_name)
-            self.pgn_tag['White'] = 'Human'
-            self.pgn_tag['Black'] = engine_id_name
-        else:
-            self.window.FindElement('_White_').Update(engine_id_name)
-            self.window.FindElement('_Black_').Update('Human')
-            self.pgn_tag['White'] = engine_id_name
-            self.pgn_tag['Black'] = 'Human'
+
+        self.update_white_black_labels(human='Human', engine_id=engine_id_name)
             
         return engine_id_name
     
@@ -1193,17 +1196,7 @@ class EasyChessGui():
                            icon='')
                 self.is_user_white = not self.is_user_white
                 
-                # Update White/Black label values
-                if self.is_user_white:
-                    self.window.FindElement('_White_').Update('Human')
-                    self.window.FindElement('_Black_').Update(engine_id_name)
-                    self.pgn_tag['White'] = 'Human'
-                    self.pgn_tag['Black'] = engine_id_name
-                else:
-                    self.window.FindElement('_White_').Update(engine_id_name)
-                    self.window.FindElement('_Black_').Update('Human')
-                    self.pgn_tag['White'] = engine_id_name
-                    self.pgn_tag['Black'] = 'Human'
+                self.update_white_black_labels(human='Human', engine_id=engine_id_name)
                 
                 self.window.Close()
                 self.psg_board = copy.deepcopy(initial_board)
