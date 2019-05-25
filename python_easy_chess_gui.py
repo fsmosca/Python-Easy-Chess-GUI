@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.26'
+APP_VERSION = 'v0.27'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -628,10 +628,7 @@ class EasyChessGui():
         game.headers['Event'] = self.pgn_tag['Event']
         game.headers['Date'] = datetime.today().strftime('%Y.%m.%d')
         game.headers['White'] = self.pgn_tag['White']
-        game.headers['Black'] = self.pgn_tag['Black']      
-        
-        if board != chess.Board():
-            game.headers['FEN'] = self.fen
+        game.headers['Black'] = self.pgn_tag['Black']
         
         # Game loop
         while not board.is_game_over(claim_draw=True):
@@ -695,6 +692,8 @@ class EasyChessGui():
                             self.window.FindElement('_gamestatus_').Update('Mode: Play, press Engine->Go')
 
                         is_engine_ready = True if is_human_stm else False
+                        
+                        game.headers['FEN'] = self.fen
                         break
                     
                     if button in (None, 'Go'):
@@ -778,6 +777,8 @@ class EasyChessGui():
                         
                         self.window.FindElement('_gamestatus_').Update(
                                 'Mode: Play, side: {}'.format('white' if board.turn else 'black'))
+                        
+                        game.headers['FEN'] = self.fen
                         break
                     
                     if type(button) is tuple:
@@ -892,7 +893,7 @@ class EasyChessGui():
                     break
     
             # Else if side to move is not human
-            elif not is_human_stm and is_engine_ready:                
+            elif not is_human_stm and is_engine_ready:             
                 is_promote = False
                 search = RunEngine(self.queue, self.engine_full_path_and_name,
                                    self.max_depth, self.max_time)
