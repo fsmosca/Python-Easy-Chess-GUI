@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.25'
+APP_VERSION = 'v0.26'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -648,6 +648,10 @@ class EasyChessGui():
                         is_exit_app = True
                         break
                     
+                    if button in (None, 'New Game'):
+                        is_new_game = True
+                        break
+                    
                     if button in (None, 'Neutral'):
                         is_exit_game = True
                         break
@@ -697,7 +701,7 @@ class EasyChessGui():
                         is_engine_ready = True
                         break
                     
-                if is_exit_app or is_exit_game:
+                if is_exit_app or is_exit_game or is_new_game:
                     break
     
             # If side to move is human
@@ -771,6 +775,9 @@ class EasyChessGui():
                         
                         is_human_stm = True if board.turn else False
                         is_engine_ready = True if is_human_stm else False
+                        
+                        self.window.FindElement('_gamestatus_').Update(
+                                'Mode: Play, side: {}'.format('white' if board.turn else 'black'))
                         break
                     
                     if type(button) is tuple:
