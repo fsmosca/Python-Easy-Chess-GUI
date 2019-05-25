@@ -1,9 +1,9 @@
 # Python Easy Chess GUI
 A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users can also load a chess engine and play with it. This program is based on a [demo chess against ai](https://github.com/PySimpleGUI/PySimpleGUI/tree/master/Chess) from PySimpleGUI.<br>
 
-![](https://i.imgur.com/H4FzPdk.png)
+![](https://i.imgur.com/Mi9wvso.png)
 
-![](https://i.imgur.com/MdKGWHO.png)
+![](https://i.imgur.com/YNny308.png)
 
 ### Requirements
 I have not yet build an exe file for this GUI, not sure either if I can create it. In the meantime to get it running the following are required.
@@ -33,25 +33,25 @@ Typical command line:<br>
 `python python_easy_chess_gui.py`
 
 #### To play as white
-* Game->New Game
+* Mode->Play
 * Move the piece you want to move
 * Press the square you want the piece to move to
 
 #### To play as black
-* Game->Exit Game
-* Board->Flip
-* Game->New Game
+* If current mode is Nuetral, Board->Flip, flip such that black pieces are at the bottom
+* If current mode is Play, Mode->Neutral, then Board->Flip
+* Mode->Play
 * Engine->Go
 
 #### To paste a FEN
-* Game->Exit Game
+* You should be in Play mode. If not, then Mode->Play
 * FEN->Paste
-* If you play as white, make your move
+* If you play as white, you can make your move
 * If you play as black, Engine->Go
 
 #### To flip board
-* Game->Exit Game
-* Board->Flip
+* If current mode is Nuetral, Board->Flip
+* If current mode is Play, Mode->Neutral, then Board->Flip
 
 ### Credits
 * PySimpleGUI<br>
