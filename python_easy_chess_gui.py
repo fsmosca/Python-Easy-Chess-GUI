@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.24'
+APP_VERSION = 'v0.25'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -274,7 +274,7 @@ class RunEngine(threading.Thread):
 
 class EasyChessGui():
     queue = queue.Queue()
-    is_user_white = True
+    is_user_white = True  # White is at the bottom in board layout
 
     def __init__(self, max_depth, max_time_sec):
         self.max_depth = max_depth
@@ -282,6 +282,8 @@ class EasyChessGui():
         self.engine_full_path_and_name = None    
         self.white_layout = None
         self.black_layout = None
+        self.white_layout_play = None
+        self.black_layout_play = None
         self.window = None
         self.pecg_game_fn = 'pecg_game.pgn'
         self.pgn_tag = {
@@ -612,6 +614,7 @@ class EasyChessGui():
         self.window.FindElement('_engineinfo_').Update('')
                 
         is_human_stm = True if self.is_user_white else False
+        
         move_state = 0
         move_from, move_to = None, None
         is_new_game, is_exit_game, is_exit_app = False, False, False
@@ -637,6 +640,7 @@ class EasyChessGui():
             # If engine is to play first, allow the user to configure the engine
             # and exit this loop when user presses the Engine->Go button
             if not is_engine_ready:
+                self.window.FindElement('_gamestatus_').Update('Mode: Play, press Engine->Go')
                 while True:
                     button, value = self.window.Read(timeout=100)
                     
@@ -644,7 +648,7 @@ class EasyChessGui():
                         is_exit_app = True
                         break
                     
-                    if button in (None, 'Exit Game'):
+                    if button in (None, 'Neutral'):
                         is_exit_game = True
                         break
                     
@@ -662,8 +666,32 @@ class EasyChessGui():
                     if button in (None, 'Get Settings'):
                         self.get_engine_settings(engine_id_name)
                         
-                    if button in (None, 'Play'):
+                    if button in (None, 'About'):
                         sg.Popup(PLAY_MSG, title=BOX_TITLE)
+                        
+                    if button in (None, 'Paste'):
+                        try:
+                            self.get_fen()                    
+                            board = chess.Board(self.fen)
+                        except:
+                            logging.info('Error in parsing FEN from clipboard.')
+                            continue
+                            
+                        self.fen_to_psg_board()
+                        self.redraw_board()
+                        
+                        # If user is black and side to move based from pasted FEN is black
+                        if not self.is_user_white and not board.turn:
+                            is_human_stm = True
+                            self.window.FindElement('_gamestatus_').Update('Mode: Play')
+
+                        # Elif user is black and side to move based from pasted FEN is white
+                        elif not self.is_user_white and board.turn:
+                            is_human_stm = False
+                            self.window.FindElement('_gamestatus_').Update('Mode: Play, press Engine->Go')
+
+                        is_engine_ready = True if is_human_stm else False
+                        break
                     
                     if button in (None, 'Go'):
                         is_engine_ready = True
@@ -696,11 +724,11 @@ class EasyChessGui():
                             f.write('{}\n\n'.format(game))                        
                         break                    
 
-                    if button in (None, 'Exit Game'):
+                    if button in (None, 'Neutral'):
                         is_exit_game = True
                         break
                     
-                    if button in (None, 'Play'):
+                    if button in (None, 'About'):
                         sg.Popup(PLAY_MSG, title=BOX_TITLE)
                         break
                     
@@ -715,7 +743,7 @@ class EasyChessGui():
                         else:
                             is_human_stm = True
                         is_engine_ready = True
-                        self.window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
+                        self.window.FindElement('_gamestatus_').Update('Mode: Play, Engine is thinking ...')
                         break
                     
                     if button in (None, 'Get Settings'):
@@ -728,6 +756,21 @@ class EasyChessGui():
                     
                     if button in (None, 'Set Movetime'):
                         self.modify_time_limit()
+                        break
+                    
+                    if button in (None, 'Paste'):
+                        try:
+                            self.get_fen()                    
+                            board = chess.Board(self.fen)
+                        except:
+                            logging.info('Error in parsing FEN from clipboard.')
+                            continue
+                            
+                        self.fen_to_psg_board()
+                        self.redraw_board()
+                        
+                        is_human_stm = True if board.turn else False
+                        is_engine_ready = True if is_human_stm else False
                         break
                     
                     if type(button) is tuple:
@@ -842,13 +885,13 @@ class EasyChessGui():
                     break
     
             # Else if side to move is not human
-            elif not is_human_stm:                
+            elif not is_human_stm and is_engine_ready:                
                 is_promote = False
                 search = RunEngine(self.queue, self.engine_full_path_and_name,
                                    self.max_depth, self.max_time)
                 search.get_board(board)
                 search.start() 
-                self.window.FindElement('_gamestatus_').Update('Status: Engine is thinking ...')
+                self.window.FindElement('_gamestatus_').Update('Mode: Play, Engine is thinking ...')
                 while True:
                     button, value = self.window.Read(timeout=200)
                     msg = self.queue.get()
@@ -925,7 +968,7 @@ class EasyChessGui():
                 
                 is_human_stm ^= 1
                 
-                self.window.FindElement('_gamestatus_').Update('Status: Play mode ...')                
+                self.window.FindElement('_gamestatus_').Update('Mode: Play')                
                 # Engine has done its move
             
         # Auto-save game
@@ -938,6 +981,7 @@ class EasyChessGui():
             
         # Exit game over loop        
         if is_exit_game:
+            # Build another board
             return False
         
         if not is_new_game:
@@ -1072,14 +1116,27 @@ class EasyChessGui():
         """
         Build the main part of GUI, board is oriented with white at the bottom.
         """
-         
-        menu_def = [['&File', ['Save Game', 'E&xit']],
-                    ['&Game', ['&New Game', 'Exit Game']],
+
+        # (1) Main menu, mode: Neutral
+        menu_def = [['&File', ['!Save Game', 'E&xit']],
+                    ['&Mode', ['!Neutral', 'Play', '!Analysis']],
+                    ['!&Game', ['&New Game',]],
                     ['&Board', ['Flip']],
-                    ['FEN', ['Paste']],
+                    ['!FEN', ['Paste']],
                     ['&Engine', ['Go', 'Set Depth', 'Set Movetime', 'Get Settings']],
-                    ['&Help', ['Play']],
+                    ['&Help', ['About']],
                     ]
+        
+        # (2) Play menu, mode: Play
+        menu_def_play = [
+                ['&File', ['Save Game', 'E&xit']],
+                ['&Mode', ['Neutral', '!Play', '!Analysis']],
+                ['&Game', ['&New Game',]],
+                ['!&Board', ['Flip']],
+                ['FEN', ['Paste']],
+                ['&Engine', ['Go', 'Set Depth', 'Set Movetime', 'Get Settings']],
+                ['&Help', ['About']],
+        ]
         
         sg.ChangeLookAndFeel('Reddit')
         self.psg_board = copy.deepcopy(initial_board)
@@ -1088,11 +1145,11 @@ class EasyChessGui():
         white_board_layout, black_board_layout = self.create_board()
     
         board_controls = [
-            [sg.Text('Status: Waiting ...', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
-            [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('',
-                    font=('Consolas', 10), key='_White_', size=(34, 1))],
-            [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.InputText('',
-                    font=('Consolas', 10), key='_Black_', size=(34, 1))],
+            [sg.Text('Mode: Neutral', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
+            [sg.Text('White', size=(5, 1), font=('Consolas', 10)), sg.InputText('',
+                    font=('Consolas', 10), key='_White_', size=(35, 1))],
+            [sg.Text('Black', size=(5, 1), font=('Consolas', 10)), sg.InputText('',
+                    font=('Consolas', 10), key='_Black_', size=(35, 1))],
             [sg.Text('MOVE LIST', font=('Consolas', 10))],            
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 8),
                     font=('Consolas', 10), key='_movelist_')],
@@ -1105,13 +1162,26 @@ class EasyChessGui():
         white_board_tab = [[sg.Column(white_board_layout)]]
         black_board_tab = [[sg.Column(black_board_layout)]]
     
-        # White board layout
+        # White board layout, mode: Neutral
         white_layout = [[sg.Menu(menu_def, tearoff=False)],
                   [sg.TabGroup([[sg.Tab('Board', white_board_tab)]], title_color='red'),
                    sg.Column(board_controls)],
                   ]
                   
+        # Black board layout, mode: Neutral
         black_layout = [[sg.Menu(menu_def, tearoff=False)],
+                  [sg.TabGroup([[sg.Tab('Board', black_board_tab)]], title_color='red'),
+                   sg.Column(board_controls)],
+                  ]
+                  
+        # White board layout, mode: Play
+        white_layout_play = [[sg.Menu(menu_def_play, tearoff=False)],
+                  [sg.TabGroup([[sg.Tab('Board', white_board_tab)]], title_color='red'),
+                   sg.Column(board_controls)],
+                  ]
+                  
+        # Black board layout, mode: Play
+        black_layout_play = [[sg.Menu(menu_def_play, tearoff=False)],
                   [sg.TabGroup([[sg.Tab('Board', black_board_tab)]], title_color='red'),
                    sg.Column(board_controls)],
                   ]
@@ -1124,6 +1194,9 @@ class EasyChessGui():
         
         self.white_layout = white_layout
         self.black_layout = black_layout
+        
+        self.white_layout_play = white_layout_play
+        self.black_layout_play = black_layout_play
     
     def build_gui(self):
         """ 
@@ -1153,9 +1226,6 @@ class EasyChessGui():
             if button in (None, 'Exit'):
                 break
             
-            if button in (None, 'Exit Game'):
-                pass
-            
             # Engine settings
             if button in (None, 'Set Depth'):
                 self.modify_depth_limit()
@@ -1171,16 +1241,16 @@ class EasyChessGui():
                 
             if button in (None, 'Flip'):
                 # Clear Text and Multiline elements
-                self.window.FindElement('_gamestatus_').Update('Status: waiting ...')
+                self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
                 self.window.FindElement('_movelist_').Update('')
                 self.window.FindElement('_engineinfosummary_').Update('')
                 self.window.FindElement('_engineinfo_').Update('')                
                 
-                window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), 
-                                    self.black_layout if self.is_user_white else self.white_layout,
-                           default_button_element_size=(12, 1),
-                           auto_size_buttons=False,
-                           icon='')
+                window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
+                    self.black_layout if self.is_user_white else self.white_layout,
+                    default_button_element_size=(12, 1),
+                    auto_size_buttons=False,
+                    icon='')
                 self.is_user_white = not self.is_user_white
                 
                 self.update_white_black_labels(human='Human', engine_id=engine_id_name)
@@ -1192,35 +1262,31 @@ class EasyChessGui():
                 continue
             
             # Menu->Help->Help
-            if button in (None, 'Play'):
+            if button in (None, 'About'):
                 sg.Popup(PLAY_MSG, title=BOX_TITLE)
                 continue
             
-            if button in (None, 'Paste'):
-                try:
-                    self.get_fen()                    
-                    board = chess.Board(self.fen)
-                except:
-                    logging.info('Error in parsing FEN from clipboard.')
-                    continue
-                    
-                self.fen_to_psg_board()
-                self.redraw_board()
+            if button in (None, 'Play'):
+                window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
+                    self.white_layout_play if self.is_user_white else self.black_layout_play,
+                    default_button_element_size=(12, 1),
+                    auto_size_buttons=False,
+                    icon='')
+                
+                self.window.Close()
+                self.psg_board = copy.deepcopy(initial_board)
+                board = chess.Board()
+                self.window = window1
                 
                 while True:
                     button, value = self.window.Read(timeout=100)
                     
-                    # Indicate side to move after FEN is pasted, because
-                    # we don't have a last move to highlight.
-                    self.window.FindElement('_gamestatus_').Update(
-                            'Status: Play mode ... side: {}'.format(
-                            'white' if board.turn else 'black'))
-                    
+                    self.window.FindElement('_gamestatus_').Update('Mode: Play')
                     self.window.FindElement('_engineinfosummary_').Update('')
                     self.window.FindElement('_movelist_').Update('')
                     
                     start_new_game = self.play_game(engine_id_name, board)
-                    self.window.FindElement('_gamestatus_').Update('Status: Waiting ...')
+                    self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
                     
                     self.psg_board = copy.deepcopy(initial_board)
                     self.redraw_board()
@@ -1228,28 +1294,18 @@ class EasyChessGui():
                     
                     if not start_new_game:
                         break
-                continue
-            
-            # Menu->Game->New Game
-            if button in (None, 'New Game'):
+                    
+                window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
+                    self.white_layout if self.is_user_white else self.black_layout,
+                    default_button_element_size=(12, 1),
+                    auto_size_buttons=False,
+                    icon='')
+                
+                # Restore main layout
+                self.window.Close()
                 self.psg_board = copy.deepcopy(initial_board)
                 board = chess.Board()
-                while True:
-                    button, value = self.window.Read(timeout=100)
-                    
-                    self.window.FindElement('_gamestatus_').Update('Status: Play mode ...')
-                    self.window.FindElement('_engineinfosummary_').Update('')
-                    self.window.FindElement('_movelist_').Update('')
-                    
-                    start_new_game = self.play_game(engine_id_name, board)
-                    self.window.FindElement('_gamestatus_').Update('Status: Waiting ...')
-                    
-                    self.psg_board = copy.deepcopy(initial_board)
-                    self.redraw_board()
-                    board = chess.Board()
-                    
-                    if not start_new_game:
-                        break
+                self.window = window1
                 continue
             
         self.window.Close()
