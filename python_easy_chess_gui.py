@@ -119,22 +119,28 @@ If you really want to flip the board and start the game from startpos do the fol
 """
 
 
-PLAY_MSG = """* To play
-  Game->New Game
+HELP_MSG = """
+// To play a game
+You should be in Play mode.
+1. Mode->Play
+2. Make move on the board
+If you are already in Play mode, Game->New Game
+
+// To play as black
+You should be in Neutral mode
+1. Board->Flip
+2. Mode->Play
+3. Engine->Go
+If you are already in Play mode, Mode->Neutral
+
+// To flip board
+You should be in Neutral mode
+1. Board->Flip
   
-* To flip board
-  Game->Exit Game
-  Board->Flip
-  
-* To play as black
-  Game->Exit Game
-  Board->Flip
-  Game->New Game
-  Engine->Go
-  
-* To paste FEN
-  Game->Exit Game
-  FEN->Paste
+// To paste FEN
+You should be in Play mode
+1. Mode->Play
+2. FEN->Paste
 """
 
 
@@ -668,7 +674,7 @@ class EasyChessGui():
                         self.get_engine_settings(engine_id_name)
                         
                     if button in (None, 'About'):
-                        sg.Popup(PLAY_MSG, title=BOX_TITLE)
+                        sg.Popup(HELP_MSG, title=BOX_TITLE)
                         
                     if button in (None, 'Paste'):
                         try:
@@ -732,7 +738,7 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'About'):
-                        sg.Popup(PLAY_MSG, title=BOX_TITLE)
+                        sg.Popup(HELP_MSG, title=BOX_TITLE)
                         break
                     
                     if button in (None, 'Flip'):
@@ -981,6 +987,7 @@ class EasyChessGui():
             
         # Auto-save game
         logging.info('Saving game automatically')
+        game.headers['Result'] = board.result(claim_draw = True)          
         with open(self.pecg_game_fn, mode = 'a+') as f:
             f.write('{}\n\n'.format(game)) 
             
@@ -1271,7 +1278,7 @@ class EasyChessGui():
             
             # Menu->Help->Help
             if button in (None, 'About'):
-                sg.Popup(PLAY_MSG, title=BOX_TITLE)
+                sg.Popup(HELP_MSG, title=BOX_TITLE)
                 continue
             
             if button in (None, 'Play'):
