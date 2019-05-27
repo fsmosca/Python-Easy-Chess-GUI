@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.27'
+APP_VERSION = 'v0.28'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -173,13 +173,22 @@ promote_psg_to_pyc = {KNIGHTB: chess.KNIGHT, BISHOPB: chess.BISHOP,
                       ROOKW: chess.ROOK, QUEENW: chess.QUEEN,}
 
 
+def get_time_mm_ss_ms(time_ms):
+    """ Returns time in min:sec:millisec given time in millisec """
+    s, ms = divmod(int(time_ms), 1000)
+    m, s = divmod(s, 60)
+    
+    return '{:02d}:{:02d}:{:03d}'.format(m, s, ms)
+
+
 class RunEngine(threading.Thread):
     pv_length = 5
     move_delay_sec = 3.0
     
-    def __init__(self, eng_queue, engine_path, max_depth=1, max_time=1):
+    def __init__(self, eng_queue, engine_path, max_depth=1, max_time=1, threads=1):
         threading.Thread.__init__(self)
         self.engine_path = engine_path
+        self.threads = threads
         self.bm = None
         self.pv = None
         self.score = None
@@ -202,6 +211,10 @@ class RunEngine(threading.Thread):
         # This is only applicable for Python version >= 3.7
         
         self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
+        try:
+            self.engine.configure({'Threads': self.threads})
+        except:
+            pass
         
         # Use wall clock time to determine max time
         start_thinking_time = time.time()
@@ -210,42 +223,29 @@ class RunEngine(threading.Thread):
         with self.engine.analysis(self.board) as analysis:
             for info in analysis:
                 try:
-                    if 'pv' in info and 'score' in info and 'depth' in info and 'time' in info:
+                    if 'depth' in info:
                         self.depth = int(info['depth'])
-                        self.time = float(info['time'])  # sec
+                        self.eng_queue.put('{} depth'.format(self.depth))
+                        
+                    if 'score' in info:
                         self.score = int(info['score'].relative.score(mate_score=32000))/100
+                        self.eng_queue.put('{:+0.2f} score'.format(self.score))
+                        
+                    self.time = time.time() - start_thinking_time
+                    self.eng_queue.put('{} time'.format(self.time))
+                        
+                    if 'pv' in info:
                         self.pv = info['pv'][0:self.pv_length]
                         self.pv = self.board.variation_san(self.pv)
-                        
-                        # Use time in ms if time is below 1 sec
-                        if self.time < 1.0:
-                            self.time = int(self.time * 1000)
-                            info_line = '{:+0.2f}/{:02d} {:03d}ms {} pv\n'.format(self.score,
-                                     self.depth, self.time, self.pv)
-                        # Else if time is below 60 seconces or 1 minute
-                        elif self.time < 60:
-                            info_line = '{:+0.2f}/{:02d} {:4.1f}s {} pv\n'.format(self.score,
-                                     self.depth, self.time, self.pv)
-                        # Else if time is 1 minute or more
-                        else:
-                            self.time = self.time/60
-                            info_line = '{:+0.2f}/{:02d} {:4.1f}m {} pv\n'.format(self.score,
-                                     self.depth, self.time, self.pv)
-                            
-                        self.eng_queue.put(info_line)
+                        self.eng_queue.put('{} pv'.format(self.pv))
                         self.bm = info['pv'][0]
+                        
+                    if 'nps' in info:
+                        info_line = info['nps']
+                        self.eng_queue.put('{} nps'.format(info_line))                                          
                         
                     if 'nodes' in info:
                         info_line = 'Positions searched {}\n'.format(info['nodes'])
-                        self.eng_queue.put(info_line)
-                        
-                    if 'nps' in info:
-                        info_line = 'Speed {} positions/sec\n'.format(info['nps'])
-                        self.eng_queue.put(info_line)
-                        
-                    if 'currmove' in info and 'currmovenumber' in info:
-                        info_line = 'Searching {}. {}\n'.format(info['currmovenumber'],
-                                               chess.Move.from_uci(info['currmove']))
                         self.eng_queue.put(info_line)
                         
                     # If we use "go infinite" we stop the search by time and depth
@@ -260,7 +260,9 @@ class RunEngine(threading.Thread):
                             logging.info('Max depth limit is reached.')
                             break
                 except:
-                    pass
+                    raise
+                
+                time.sleep(0.1)
                 
         # Apply engine move delay
         while True:
@@ -282,9 +284,10 @@ class EasyChessGui():
     queue = queue.Queue()
     is_user_white = True  # White is at the bottom in board layout
 
-    def __init__(self, max_depth, max_time_sec):
+    def __init__(self, max_depth, max_time_sec, threads):
         self.max_depth = max_depth
         self.max_time = max_time_sec
+        self.threads = threads
         self.engine_full_path_and_name = None    
         self.white_layout = None
         self.black_layout = None
@@ -897,30 +900,58 @@ class EasyChessGui():
                     
                 if is_new_game or is_exit_game or is_exit_app:
                     break
-    
+
             # Else if side to move is not human
             elif not is_human_stm and is_engine_ready:             
                 is_promote = False
                 search = RunEngine(self.queue, self.engine_full_path_and_name,
-                                   self.max_depth, self.max_time)
+                                   self.max_depth, self.max_time, self.threads)
                 search.get_board(board)
                 search.start() 
                 self.window.FindElement('_gamestatus_').Update('Mode: Play, Engine is thinking ...')
                 while True:
                     button, value = self.window.Read(timeout=200)
                     msg = self.queue.get()
-                    if not 'bestmove ' in str(msg):
-                        if 'pv' in str(msg):
-                            # Remove the pv marker
-                            msg_line = ' '.join(str(msg).split()[0:-1]).strip() + '\n'
-                        else:
-                            msg_line = str(msg)
-                        self.window.FindElement('_engineinfo_').Update(msg_line, append=True)
-                        
-                        # Show engine search info summary. [eval/depth] [time] [pv]
-                        if 'pv' in str(msg):
-                            self.window.FindElement('_engineinfosummary_').Update(msg_line,
-                                              text_color='blue')
+                    msg_str = str(msg)
+                    if not 'bestmove ' in msg_str:                        
+                        if 'score' in msg_str:
+                            score = float(' '.join(msg_str.split()[0:-1]).strip())
+                            msg_line = '{:+0.2f}\n'.format(score)
+
+                            # If score is good change color to green, if bad it is red
+                            tcolor = 'green'
+                            if score < 0.0:
+                                tcolor = 'red'
+                            elif score == 0.0:
+                                tcolor = 'black'
+
+                            self.window.FindElement('info_score_k').Update(msg_line, text_color=tcolor)
+                            
+                        if 'pv' in msg_str:
+                            pv = ' '.join(msg_str.split()[0:-1]).strip()
+                            msg_line = '{}\n'.format(pv)
+                            self.window.FindElement('info_pv_k').Update(msg_line)
+
+                        if 'depth' in msg_str:
+                            depth = int(' '.join(msg_str.split()[0:-1]).strip())
+                            msg_line = 'Depth: {}\n'.format(depth)
+                            self.window.FindElement('info_depth_k').Update(msg_line)
+
+                        if 'time' in msg_str:
+                            tsec = float(' '.join(msg_str.split()[0:-1]).strip())
+                            msg_line = 'Time: {}\n'.format(get_time_mm_ss_ms(tsec*1000))
+                            self.window.FindElement('info_time_k').Update(msg_line)
+                            
+                        if 'nps' in msg_str:
+                            nps = int(' '.join(msg_str.split()[0:-1]).strip())
+                            
+                            # Add suffix K if nps is 1 Million or more
+                            if nps >= 1000000:
+                                msg_line = 'Nps: {:0.0f}K\n'.format(nps/1000)
+                            else:
+                                msg_line = 'Nps: {}\n'.format(nps)
+
+                            self.window.FindElement('info_nps_k').Update(msg_line)
                     else:
                         best_move = chess.Move.from_uci(msg.split()[1])
                         break
@@ -1158,6 +1189,7 @@ class EasyChessGui():
         
         # Define board
         white_board_layout, black_board_layout = self.create_board()
+        bc = '#d3dae4'
     
         board_controls = [
             [sg.Text('Mode: Neutral', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
@@ -1168,10 +1200,17 @@ class EasyChessGui():
             [sg.Text('MOVE LIST', font=('Consolas', 10))],            
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 8),
                     font=('Consolas', 10), key='_movelist_')],
+
             [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10))],
-            [sg.Text('', key='_engineinfosummary_', size=(36, 1))],
+            [sg.Text('', key='info_score_k', size=(8, 1), background_color = bc),
+             sg.Text('', key='info_pv_k', size=(27, 1), background_color = bc)],
+             
+            [sg.Text('', key='info_depth_k', size=(8, 1), background_color = bc),
+             sg.Text('', key='info_time_k', size=(12, 1), background_color = bc),
+             sg.Text('', key='info_nps_k', size=(13, 1), background_color = bc)],
+              
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 10),
-                    font=('Consolas', 10), key='_engineinfo_', visible = True)],            
+                    font=('Consolas', 10), key='_engineinfo_', visible = False)],            
         ]
     
         white_board_tab = [[sg.Column(white_board_layout)]]
@@ -1258,7 +1297,7 @@ class EasyChessGui():
                 # Clear Text and Multiline elements
                 self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
                 self.window.FindElement('_movelist_').Update('')
-                self.window.FindElement('_engineinfosummary_').Update('')
+#                self.window.FindElement('_engineinfosummary_').Update('')
                 self.window.FindElement('_engineinfo_').Update('')                
                 
                 window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
@@ -1297,7 +1336,6 @@ class EasyChessGui():
                     button, value = self.window.Read(timeout=100)
                     
                     self.window.FindElement('_gamestatus_').Update('Mode: Play')
-                    self.window.FindElement('_engineinfosummary_').Update('')
                     self.window.FindElement('_movelist_').Update('')
                     
                     start_new_game = self.play_game(engine_id_name, board)
@@ -1327,9 +1365,10 @@ class EasyChessGui():
 
 
 def main():
-    max_depth = 1
-    max_time_sec = 1.0
-    pecg = EasyChessGui(max_depth, max_time_sec)
+    max_depth = 128
+    max_time_sec = 5.0
+    threads = 1
+    pecg = EasyChessGui(max_depth, max_time_sec, threads)
     pecg.main_loop()
 
 
