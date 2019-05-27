@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.28'
+APP_VERSION = 'v0.29'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -288,7 +288,8 @@ class EasyChessGui():
         self.max_depth = max_depth
         self.max_time = max_time_sec
         self.threads = threads
-        self.engine_full_path_and_name = None    
+        self.engine_full_path_and_name = None
+        self.engine_file = None
         self.white_layout = None
         self.black_layout = None
         self.white_layout_play = None
@@ -303,6 +304,7 @@ class EasyChessGui():
         }
         self.fen = None
         self.psg_board = None
+        self.engine_list = self.get_engines()
         
     def update_white_black_labels(self, human='Human', engine_id='engine id name'):
         """ Update player names """
@@ -639,6 +641,8 @@ class EasyChessGui():
         game.headers['White'] = self.pgn_tag['White']
         game.headers['Black'] = self.pgn_tag['Black']
         
+        self.window.FindElement('_enginefn_').Update(values=self.engine_list)
+        
         # Game loop
         while not board.is_game_over(claim_draw=True):
             moved_piece = None
@@ -738,6 +742,13 @@ class EasyChessGui():
 
                     if button in (None, 'Neutral'):
                         is_exit_game = True
+                        break
+                    
+                    if button in (None, 'select_engine_k'):
+                        self.engine_file = value['_enginefn_']
+                        engine_id_name = self.get_engine_id_name()
+                        self.update_white_black_labels(human='Human', engine_id=engine_id_name)
+                        self.update_engine_list()
                         break
                     
                     if button in (None, 'About'):
@@ -1036,13 +1047,15 @@ class EasyChessGui():
         
         return is_new_game
 
-    def get_engine_id_name(self, enginefn):
-        """ Start engine """
-        eng_filename = './Engines/' + enginefn
+    def get_engine_id_name(self):
+        """ Set the engine path and return id name """
+        eng_filename = './Engines/' + self.engine_file
         self.engine_full_path_and_name = eng_filename
         if eng_filename is None:
             logging.info('Failed to load engine')
             sys.exit(0)
+            
+        # Start the engine and get its id name for update to GUI
         engine = chess.engine.SimpleEngine.popen_uci(eng_filename)
         engine_id_name = engine.id['name']
         engine.quit()
@@ -1059,40 +1072,19 @@ class EasyChessGui():
                 engine_list.append(file)
 
         return engine_list
-        
-    def init_user_option(self):
-        """ Allows user to select engine opponent.
-            Returns engine filename selected.
-        """
-        engine_list = self.get_engines()
-        
-        layout = [
-            [sg.Text('Engine opponent', size=(16, 1), font=('Consolas', 10)), 
-             sg.Drop(engine_list, size=(34, 1), font=('Consolas', 10), key='_enginefn_')],
-            [sg.Button('OK', size=(6, 1), font=('Consolas', 10), key='_ok_')],
-        ]
-        
-        init_window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION), layout,
-                           default_button_element_size=(12, 1),
-                           auto_size_buttons=False,
-                           icon='')
     
-        enginefn = None
-        while True:        
-            button, value = init_window.Read(timeout=0) 
-            
-            if button is None:
-                logging.info('User pressed x')
-                sys.exit(0)
-            
-            enginefn = value['_enginefn_']
-
-            if button == '_ok_':
-                break
+    def update_engine_list(self):
+        """ Reorder engine list, the first engine in the list
+        is the engine selected by user """
+        engine_list = []
+        engine_list.append(self.engine_file)
         
-        init_window.Close()
-        
-        return enginefn
+        for n in self.engine_list:
+            if n == self.engine_file:
+                continue
+            engine_list.append(n)
+            
+        self.engine_list = engine_list
 
     def create_board(self):
         """
@@ -1169,7 +1161,7 @@ class EasyChessGui():
                     ['!&Game', ['&New Game',]],
                     ['&Board', ['Flip']],
                     ['!FEN', ['Paste']],
-                    ['&Engine', ['Go', 'Set Depth', 'Set Movetime', 'Get Settings']],
+                    ['&Engine', ['Go', 'Set Engine', 'Set Depth', 'Set Movetime', 'Get Settings']],
                     ['&Help', ['About']],
                     ]
         
@@ -1193,10 +1185,15 @@ class EasyChessGui():
     
         board_controls = [
             [sg.Text('Mode: Neutral', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
-            [sg.Text('White', size=(5, 1), font=('Consolas', 10)), sg.InputText('',
+            [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('',
                     font=('Consolas', 10), key='_White_', size=(35, 1))],
-            [sg.Text('Black', size=(5, 1), font=('Consolas', 10)), sg.InputText('',
+            [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.InputText('',
                     font=('Consolas', 10), key='_Black_', size=(35, 1))],
+        
+            [sg.Text('Engine', size=(6, 1), font=('Consolas', 10)),
+             sg.Drop(self.engine_list, size=(22, 1), font=('Consolas', 10), key='_enginefn_'),
+             sg.OK('Select', size=(6,1), key='select_engine_k')],
+        
             [sg.Text('MOVE LIST', font=('Consolas', 10))],            
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 8),
                     font=('Consolas', 10), key='_movelist_')],
@@ -1255,32 +1252,37 @@ class EasyChessGui():
     def build_gui(self):
         """ 
         Builds the main GUI, this includes board orientation and engine selection.
-        """
-        enginefn = self.init_user_option()
-    
+        """    
         self.build_main_layout()
-        
-        # Start engine and get its id name
-        engine_id_name = self.get_engine_id_name(enginefn)
-
-        self.update_white_black_labels(human='Human', engine_id=engine_id_name)
-            
-        return engine_id_name
     
     def main_loop(self):
         """ 
         This is where we build our GUI and read user inputs.
         """
-        engine_id_name = self.build_gui()
+        self.build_gui()
+
+        # Init engine to use, this is the first engine in the list
+        self.engine_file = self.engine_list[0]
+        engine_id_name = self.get_engine_id_name()
+        self.update_white_black_labels(human='Human', engine_id=engine_id_name)
         
         while True:
-            button, value = self.window.Read(timeout=100)
+            button, value = self.window.Read(timeout=200)
             
             # Menu->File->Exit
             if button in (None, 'Exit'):
                 break
             
+            self.engine_file = value['_enginefn_']
+            
             # Engine settings
+            if button in (None, 'select_engine_k'):
+                self.engine_file = value['_enginefn_']
+                engine_id_name = self.get_engine_id_name()
+                self.update_white_black_labels(human='Human', engine_id=engine_id_name)
+                self.update_engine_list()
+                continue
+            
             if button in (None, 'Set Depth'):
                 self.modify_depth_limit()
                 continue
@@ -1297,7 +1299,6 @@ class EasyChessGui():
                 # Clear Text and Multiline elements
                 self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
                 self.window.FindElement('_movelist_').Update('')
-#                self.window.FindElement('_engineinfosummary_').Update('')
                 self.window.FindElement('_engineinfo_').Update('')                
                 
                 window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
@@ -1340,6 +1341,7 @@ class EasyChessGui():
                     
                     start_new_game = self.play_game(engine_id_name, board)
                     self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
+                    self.window.FindElement('_enginefn_').Update(values=self.engine_list)
                     
                     self.psg_board = copy.deepcopy(initial_board)
                     self.redraw_board()
@@ -1366,7 +1368,7 @@ class EasyChessGui():
 
 def main():
     max_depth = 128
-    max_time_sec = 5.0
+    max_time_sec = 2.0
     threads = 1
     pecg = EasyChessGui(max_depth, max_time_sec, threads)
     pecg.main_loop()
