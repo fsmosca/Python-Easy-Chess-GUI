@@ -1161,7 +1161,7 @@ class EasyChessGui():
                     ['!&Game', ['&New Game',]],
                     ['&Board', ['Flip']],
                     ['!FEN', ['Paste']],
-                    ['&Engine', ['Go', 'Set Engine', 'Set Depth', 'Set Movetime', 'Get Settings']],
+                    ['&Engine', ['Go', 'Set Depth', 'Set Movetime', 'Get Settings']],
                     ['&Help', ['About']],
                     ]
         
