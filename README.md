@@ -1,9 +1,7 @@
 # Python Easy Chess GUI
 A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users can also load a chess engine and play with it. This program is based on a [demo chess against ai](https://github.com/PySimpleGUI/PySimpleGUI/tree/master/Chess) from PySimpleGUI.<br>
 
-![](https://i.imgur.com/Mi9wvso.png)
-
-![](https://i.imgur.com/YNny308.png)
+![](https://i.imgur.com/mAyP8Za.png)
 
 ### Requirements
 I have not yet build an exe file for this GUI, not sure either if I can create it. In the meantime to get it running the following are required.
