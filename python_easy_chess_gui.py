@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.29'
+APP_VERSION = 'v0.30'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -305,6 +305,15 @@ class EasyChessGui():
         self.fen = None
         self.psg_board = None
         self.engine_list = self.get_engines()
+        
+    def clear_elements(self):
+        """ Clear movelist, score, pv, time, depth and nps boxes """
+        self.window.FindElement('info_score_k').Update('')
+        self.window.FindElement('info_pv_k').Update('')
+        self.window.FindElement('info_depth_k').Update('')
+        self.window.FindElement('info_time_k').Update('')
+        self.window.FindElement('info_nps_k').Update('')
+        self.window.FindElement('_movelist_').Update('')        
         
     def update_white_black_labels(self, human='Human', engine_id='engine id name'):
         """ Update player names """
@@ -666,6 +675,15 @@ class EasyChessGui():
                         is_exit_game = True
                         break
                     
+                    if button in (None, 'select_engine_k'):
+                        self.engine_file = value['_enginefn_']
+                        engine_id_name = self.get_engine_id_name()
+                        self.update_white_black_labels(human='Human', engine_id=engine_id_name)
+                        game.headers['White'] = self.pgn_tag['White']
+                        game.headers['Black'] = self.pgn_tag['Black']
+                        self.update_engine_list()
+                        continue
+                    
                     if button in (None, 'Flip'):
                         sg.PopupScrolled(FLIP_MSG, size=(80, 5),
                                          non_blocking=True, title = BOX_TITLE)
@@ -732,6 +750,7 @@ class EasyChessGui():
                     
                     if button in (None, 'New Game'):
                         is_new_game = True
+                        self.clear_elements()
                         break
                     
                     if button in (None, 'Save Game'):
@@ -742,12 +761,15 @@ class EasyChessGui():
 
                     if button in (None, 'Neutral'):
                         is_exit_game = True
+                        self.clear_elements()
                         break
                     
                     if button in (None, 'select_engine_k'):
                         self.engine_file = value['_enginefn_']
                         engine_id_name = self.get_engine_id_name()
                         self.update_white_black_labels(human='Human', engine_id=engine_id_name)
+                        game.headers['White'] = self.pgn_tag['White']
+                        game.headers['Black'] = self.pgn_tag['Black']
                         self.update_engine_list()
                         break
                     
@@ -1026,26 +1048,28 @@ class EasyChessGui():
                 
                 self.window.FindElement('_gamestatus_').Update('Mode: Play')                
                 # Engine has done its move
-            
+
         # Auto-save game
         logging.info('Saving game automatically')
-        game.headers['Result'] = board.result(claim_draw = True)          
-        with open(self.pecg_game_fn, mode = 'a+') as f:
-            f.write('{}\n\n'.format(game)) 
-            
+        game.headers['Result'] = board.result(claim_draw = True)
+        self.save_game(game)
+
         if is_exit_app:
             sys.exit(0)
-            
-        # Exit game over loop        
+
         if is_exit_game:
-            # Build another board
             return False
-        
+
         if not is_new_game:
             result = board.result(claim_draw=True)
             sg.Popup('Game over!\n\nResult is {}\nThank you for playing'.format(result), title=BOX_TITLE)
-        
+
         return is_new_game
+
+    def save_game(self, game):
+        """ Save game in append mode """
+        with open(self.pecg_game_fn, mode = 'a+') as f:
+            f.write('{}\n\n'.format(game)) 
 
     def get_engine_id_name(self):
         """ Set the engine path and return id name """
@@ -1272,8 +1296,6 @@ class EasyChessGui():
             # Menu->File->Exit
             if button in (None, 'Exit'):
                 break
-            
-            self.engine_file = value['_enginefn_']
             
             # Engine settings
             if button in (None, 'select_engine_k'):
