@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.30'
+APP_VERSION = 'v0.31'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -231,9 +231,10 @@ class RunEngine(threading.Thread):
                         self.score = int(info['score'].relative.score(mate_score=32000))/100
                         self.eng_queue.put('{:+0.2f} score'.format(self.score))
                         
-                    self.time = time.time() - start_thinking_time
-                    self.eng_queue.put('{} time'.format(self.time))
-                        
+                    
+                    self.time = info['time'] if 'time' in info else time.time() - start_thinking_time
+                    self.eng_queue.put('{} time'.format(self.time))                      
+
                     if 'pv' in info:
                         self.pv = info['pv'][0:self.pv_length]
                         self.pv = self.board.variation_san(self.pv)
@@ -261,8 +262,6 @@ class RunEngine(threading.Thread):
                             break
                 except:
                     raise
-                
-                time.sleep(0.1)
                 
         # Apply engine move delay
         while True:
@@ -943,7 +942,7 @@ class EasyChessGui():
                 search.start() 
                 self.window.FindElement('_gamestatus_').Update('Mode: Play, Engine is thinking ...')
                 while True:
-                    button, value = self.window.Read(timeout=200)
+                    button, value = self.window.Read(timeout=20)
                     msg = self.queue.get()
                     msg_str = str(msg)
                     if not 'bestmove ' in msg_str:                        
