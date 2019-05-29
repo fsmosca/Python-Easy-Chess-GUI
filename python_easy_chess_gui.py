@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.31'
+APP_VERSION = 'v0.32'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -171,6 +171,13 @@ promote_psg_to_pyc = {KNIGHTB: chess.KNIGHT, BISHOPB: chess.BISHOP,
                       ROOKB: chess.ROOK, QUEENB: chess.QUEEN,
                       KNIGHTW: chess.KNIGHT, BISHOPW: chess.BISHOP,
                       ROOKW: chess.ROOK, QUEENW: chess.QUEEN,}
+
+
+INIT_PGN_TAG = {
+        'Event': 'Human vs computer',
+        'White': 'Human',
+        'Black': 'Computer',
+}
 
 
 def get_time_mm_ss_ms(time_ms):
@@ -293,18 +300,39 @@ class EasyChessGui():
         self.black_layout = None
         self.white_layout_play = None
         self.black_layout_play = None
-        self.window = None
+        self.window = None        
         self.pecg_game_fn = 'pecg_game.pgn'
-        self.pgn_tag = {
-                'Event': 'Human vs computer',
-                'Date': datetime.today().strftime('%Y.%m.%d'),
-                'White': 'Human',
-                'Black': 'Computer',
-        }
+        self.init_game()        
         self.fen = None
         self.psg_board = None
         self.engine_list = self.get_engines()
         
+    def get_tag_date(self):
+        """ Return date in pgn tag date format """
+        return datetime.today().strftime('%Y.%m.%d')
+
+    def init_game(self):
+        """ Initialize game with initial pgn tag values """
+        self.game = chess.pgn.Game()
+        self.game.headers['Event'] = INIT_PGN_TAG['Event']
+        self.game.headers['Date'] = self.get_tag_date()
+        self.game.headers['White'] = INIT_PGN_TAG['White']
+        self.game.headers['Black'] = INIT_PGN_TAG['Black']
+        
+    def set_new_game(self):
+        """ Initialize new game but save old pgn tag values"""
+        old_event = self.game.headers['Event']
+        old_white = self.game.headers['White']
+        old_black = self.game.headers['Black']
+        
+        # Define a game object for saving game in pgn format
+        self.game = chess.pgn.Game()
+        
+        self.game.headers['Event'] = old_event
+        self.game.headers['Date'] = self.get_tag_date()
+        self.game.headers['White'] = old_white
+        self.game.headers['Black'] = old_black
+
     def clear_elements(self):
         """ Clear movelist, score, pv, time, depth and nps boxes """
         self.window.FindElement('info_score_k').Update('')
@@ -314,18 +342,18 @@ class EasyChessGui():
         self.window.FindElement('info_nps_k').Update('')
         self.window.FindElement('_movelist_').Update('')        
         
-    def update_white_black_labels(self, human='Human', engine_id='engine id name'):
+    def update_labels_and_game_tags(self, human='Human', engine_id='engine id name'):
         """ Update player names """
         if self.is_user_white:
             self.window.FindElement('_White_').Update(human)
             self.window.FindElement('_Black_').Update(engine_id)
-            self.pgn_tag['White'] = human
-            self.pgn_tag['Black'] = engine_id
+            self.game.headers['White'] = human
+            self.game.headers['Black'] = engine_id
         else:
             self.window.FindElement('_White_').Update(engine_id)
             self.window.FindElement('_Black_').Update(human)
-            self.pgn_tag['White'] = engine_id
-            self.pgn_tag['Black'] = human
+            self.game.headers['White'] = engine_id
+            self.game.headers['Black'] = human
         
     def get_fen(self):
         """ Get fen from clipboard """
@@ -642,13 +670,7 @@ class EasyChessGui():
         is_engine_ready = True if is_human_stm else False
         
         # For saving game
-        move_cnt = 0
-        game = chess.pgn.Game()
-        game.headers['Event'] = self.pgn_tag['Event']
-        game.headers['Date'] = datetime.today().strftime('%Y.%m.%d')
-        game.headers['White'] = self.pgn_tag['White']
-        game.headers['Black'] = self.pgn_tag['Black']
-        
+        move_cnt = 0        
         self.window.FindElement('_enginefn_').Update(values=self.engine_list)
         
         # Game loop
@@ -677,9 +699,7 @@ class EasyChessGui():
                     if button in (None, 'select_engine_k'):
                         self.engine_file = value['_enginefn_']
                         engine_id_name = self.get_engine_id_name()
-                        self.update_white_black_labels(human='Human', engine_id=engine_id_name)
-                        game.headers['White'] = self.pgn_tag['White']
-                        game.headers['Black'] = self.pgn_tag['Black']
+                        self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
                         self.update_engine_list()
                         continue
                     
@@ -702,7 +722,8 @@ class EasyChessGui():
                         
                     if button in (None, 'Paste'):
                         try:
-                            self.get_fen()                    
+                            self.get_fen()
+                            self.set_new_game()
                             board = chess.Board(self.fen)
                         except:
                             logging.info('Error in parsing FEN from clipboard.')
@@ -723,7 +744,7 @@ class EasyChessGui():
 
                         is_engine_ready = True if is_human_stm else False
                         
-                        game.headers['FEN'] = self.fen
+                        self.game.headers['FEN'] = self.fen
                         break
                     
                     if button in (None, 'Go'):
@@ -755,7 +776,7 @@ class EasyChessGui():
                     if button in (None, 'Save Game'):
                         logging.info('Saving game manually')
                         with open(self.pecg_game_fn, mode = 'a+') as f:
-                            f.write('{}\n\n'.format(game))                        
+                            f.write('{}\n\n'.format(self.game))                        
                         break                    
 
                     if button in (None, 'Neutral'):
@@ -766,9 +787,7 @@ class EasyChessGui():
                     if button in (None, 'select_engine_k'):
                         self.engine_file = value['_enginefn_']
                         engine_id_name = self.get_engine_id_name()
-                        self.update_white_black_labels(human='Human', engine_id=engine_id_name)
-                        game.headers['White'] = self.pgn_tag['White']
-                        game.headers['Black'] = self.pgn_tag['Black']
+                        self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
                         self.update_engine_list()
                         break
                     
@@ -804,7 +823,8 @@ class EasyChessGui():
                     
                     if button in (None, 'Paste'):
                         try:
-                            self.get_fen()                    
+                            self.get_fen()
+                            self.set_new_game()
                             board = chess.Board(self.fen)
                         except:
                             logging.info('Error in parsing FEN from clipboard.')
@@ -819,7 +839,7 @@ class EasyChessGui():
                         self.window.FindElement('_gamestatus_').Update(
                                 'Mode: Play, side: {}'.format('white' if board.turn else 'black'))
                         
-                        game.headers['FEN'] = self.fen
+                        self.game.headers['FEN'] = self.fen
                         break
                     
                     if type(button) is tuple:
@@ -907,7 +927,7 @@ class EasyChessGui():
                                 move_cnt += 1
                                 
                                 if move_cnt == 1:
-                                    node = game.add_variation(user_move)
+                                    node = self.game.add_variation(user_move)
                                 else:
                                     node = node.add_variation(user_move)
                                 
@@ -1035,7 +1055,7 @@ class EasyChessGui():
                 move_cnt += 1
                                 
                 if move_cnt == 1:
-                    node = game.add_variation(best_move)
+                    node = self.game.add_variation(best_move)
                 else:
                     node = node.add_variation(best_move)
                 
@@ -1050,8 +1070,8 @@ class EasyChessGui():
 
         # Auto-save game
         logging.info('Saving game automatically')
-        game.headers['Result'] = board.result(claim_draw = True)
-        self.save_game(game)
+        self.game.headers['Result'] = board.result(claim_draw = True)
+        self.save_game()
 
         if is_exit_app:
             sys.exit(0)
@@ -1065,10 +1085,10 @@ class EasyChessGui():
 
         return is_new_game
 
-    def save_game(self, game):
+    def save_game(self):
         """ Save game in append mode """
         with open(self.pecg_game_fn, mode = 'a+') as f:
-            f.write('{}\n\n'.format(game)) 
+            f.write('{}\n\n'.format(self.game)) 
 
     def get_engine_id_name(self):
         """ Set the engine path and return id name """
@@ -1287,7 +1307,8 @@ class EasyChessGui():
         # Init engine to use, this is the first engine in the list
         self.engine_file = self.engine_list[0]
         engine_id_name = self.get_engine_id_name()
-        self.update_white_black_labels(human='Human', engine_id=engine_id_name)
+        self.init_game()
+        self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
         
         while True:
             button, value = self.window.Read(timeout=200)
@@ -1300,7 +1321,7 @@ class EasyChessGui():
             if button in (None, 'select_engine_k'):
                 self.engine_file = value['_enginefn_']
                 engine_id_name = self.get_engine_id_name()
-                self.update_white_black_labels(human='Human', engine_id=engine_id_name)
+                self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
                 self.update_engine_list()
                 continue
             
@@ -1329,7 +1350,7 @@ class EasyChessGui():
                     icon='')
                 self.is_user_white = not self.is_user_white
                 
-                self.update_white_black_labels(human='Human', engine_id=engine_id_name)
+                self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
                 
                 self.window.Close()
                 self.psg_board = copy.deepcopy(initial_board)
@@ -1367,6 +1388,7 @@ class EasyChessGui():
                     self.psg_board = copy.deepcopy(initial_board)
                     self.redraw_board()
                     board = chess.Board()
+                    self.set_new_game()
                     
                     if not start_new_game:
                         break
@@ -1381,6 +1403,7 @@ class EasyChessGui():
                 self.window.Close()
                 self.psg_board = copy.deepcopy(initial_board)
                 board = chess.Board()
+                self.set_new_game()
                 self.window = window1
                 continue
             
