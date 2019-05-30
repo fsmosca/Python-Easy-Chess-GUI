@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.32'
+APP_VERSION = 'v0.33'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -59,6 +59,10 @@ MIN_TIME = 0.5  # sec
 MAX_TIME = 300.0  # sec
 MIN_DEPTH = 1
 MAX_DEPTH = 128
+MIN_THREADS = 1
+MAX_THREADS = 128
+MIN_HASH = 1  # mb
+MAX_HASH = 1024
 
 
 IMAGE_PATH = 'Images/60'  # path to the chess pieces
@@ -192,10 +196,12 @@ class RunEngine(threading.Thread):
     pv_length = 5
     move_delay_sec = 3.0
     
-    def __init__(self, eng_queue, engine_path, max_depth=1, max_time=1, threads=1):
+    def __init__(self, eng_queue, engine_path, max_depth=1, max_time=1,
+                 threads=1, memory_mb=32):
         threading.Thread.__init__(self)
         self.engine_path = engine_path
         self.threads = threads
+        self.hash = memory_mb
         self.bm = None
         self.pv = None
         self.score = None
@@ -218,10 +224,16 @@ class RunEngine(threading.Thread):
         # This is only applicable for Python version >= 3.7
         
         self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
+        
         try:
             self.engine.configure({'Threads': self.threads})
         except:
-            pass
+            logging.info('{} does not support Threads option.'.format(self.engine_path))
+        
+        try:
+            self.engine.configure({'Hash': self.hash})
+        except:
+            logging.info('{} does not support Hash option.'.format(self.engine_path))
         
         # Use wall clock time to determine max time
         start_thinking_time = time.time()
@@ -290,10 +302,11 @@ class EasyChessGui():
     queue = queue.Queue()
     is_user_white = True  # White is at the bottom in board layout
 
-    def __init__(self, max_depth, max_time_sec, threads):
+    def __init__(self, max_depth, max_time_sec, threads, memory_mb):
         self.max_depth = max_depth
         self.max_time = max_time_sec
         self.threads = threads
+        self.memory_mb = memory_mb
         self.engine_full_path_and_name = None
         self.engine_file = None
         self.white_layout = None
@@ -647,11 +660,42 @@ class EasyChessGui():
             user_movetime = self.max_time
 
         self.max_time = min(MAX_TIME, max(MIN_TIME, user_movetime))
+        
+    def set_threads(self):
+        """ Update engine threads """
+        old_value = self.threads
+
+        user_input = sg.PopupGetText(
+            'Current threads is {}\n\nInput threads [{} to {}]'.format(
+            self.threads, MIN_THREADS, MAX_THREADS), title=BOX_TITLE)
+
+        try:
+            user_input = int(user_input)
+        except:
+            user_input = old_value
+
+        self.threads = min(MAX_THREADS, max(MIN_THREADS, user_input))
+
+    def set_hash(self):
+        """ Update engine hash size in mb """
+        old_value = self.memory_mb
+        
+        user_input = sg.PopupGetText(
+            'Current hash is {} mb\n\nInput hash size in mb [{} to {}]'.format(
+            self.threads, MIN_HASH, MAX_HASH), title=BOX_TITLE)
+        
+        try:
+            user_input = int(user_input)
+        except:
+            user_input = old_value
+
+        self.memory_mb = min(MAX_HASH, max(MIN_HASH, user_input))
 
     def get_engine_settings(self, engine_id_name):
         """ Display engine settings """
-        sg.PopupOK('Depth = {}\nMovetime = {} sec\n\nEngine = {}\n'.format(self.max_depth,
-                   self.max_time, engine_id_name), title=BOX_TITLE, keep_on_top=True)
+        sg.PopupOK('Threads = {}\nHash = {} mb\nDepth = {}\nMovetime = {} sec\n\nEngine = {}\n'.format(
+            self.threads, self.memory_mb, self.max_depth, self.max_time,
+            engine_id_name), title=BOX_TITLE, keep_on_top=True)
 
     def play_game(self, engine_id_name, board):
         """ 
@@ -957,7 +1001,8 @@ class EasyChessGui():
             elif not is_human_stm and is_engine_ready:             
                 is_promote = False
                 search = RunEngine(self.queue, self.engine_full_path_and_name,
-                                   self.max_depth, self.max_time, self.threads)
+                                   self.max_depth, self.max_time, self.threads,
+                                   self.memory_mb)
                 search.get_board(board)
                 search.start() 
                 self.window.FindElement('_gamestatus_').Update('Mode: Play, Engine is thinking ...')
@@ -1204,9 +1249,10 @@ class EasyChessGui():
                     ['!&Game', ['&New Game',]],
                     ['&Board', ['Flip']],
                     ['!FEN', ['Paste']],
-                    ['&Engine', ['Go', 'Set Depth', 'Set Movetime', 'Get Settings']],
+                    ['&Engine', ['Set Threads', 'Set Hash', 'Set Depth',
+                                 'Set Movetime', 'Get Settings']],
                     ['&Help', ['About']],
-                    ]
+        ]
         
         # (2) Play menu, mode: Play
         menu_def_play = [
@@ -1292,17 +1338,11 @@ class EasyChessGui():
         self.white_layout_play = white_layout_play
         self.black_layout_play = black_layout_play
     
-    def build_gui(self):
-        """ 
-        Builds the main GUI, this includes board orientation and engine selection.
-        """    
-        self.build_main_layout()
-    
     def main_loop(self):
         """ 
         This is where we build our GUI and read user inputs.
         """
-        self.build_gui()
+        self.build_main_layout()
 
         # Init engine to use, this is the first engine in the list
         self.engine_file = self.engine_list[0]
@@ -1311,7 +1351,7 @@ class EasyChessGui():
         self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
         
         while True:
-            button, value = self.window.Read(timeout=200)
+            button, value = self.window.Read(timeout=50)
             
             # Menu->File->Exit
             if button in (None, 'Exit'):
@@ -1331,6 +1371,14 @@ class EasyChessGui():
             
             if button in (None, 'Set Movetime'):
                 self.modify_time_limit()
+                continue
+            
+            if button in (None, 'Set Threads'):
+                self.set_threads()
+                continue
+            
+            if button in (None, 'Set Hash'):
+                self.set_hash()
                 continue
             
             if button in (None, 'Get Settings'):
@@ -1414,7 +1462,8 @@ def main():
     max_depth = 128
     max_time_sec = 2.0
     threads = 1
-    pecg = EasyChessGui(max_depth, max_time_sec, threads)
+    memory_mb = 32
+    pecg = EasyChessGui(max_depth, max_time_sec, threads, memory_mb)
     pecg.main_loop()
 
 
