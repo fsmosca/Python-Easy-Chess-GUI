@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.33'
+APP_VERSION = 'v0.34'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -306,8 +306,8 @@ class EasyChessGui():
         self.max_depth = max_depth
         self.max_time = max_time_sec
         self.threads = threads
-        self.memory_mb = memory_mb
-        self.engine_full_path_and_name = None
+        self.hash = memory_mb
+        self.engine_path_and_name = None
         self.engine_file = None
         self.white_layout = None
         self.black_layout = None
@@ -678,7 +678,7 @@ class EasyChessGui():
 
     def set_hash(self):
         """ Update engine hash size in mb """
-        old_value = self.memory_mb
+        old_value = self.hash
         
         user_input = sg.PopupGetText(
             'Current hash is {} mb\n\nInput hash size in mb [{} to {}]'.format(
@@ -689,12 +689,12 @@ class EasyChessGui():
         except:
             user_input = old_value
 
-        self.memory_mb = min(MAX_HASH, max(MIN_HASH, user_input))
+        self.hash = min(MAX_HASH, max(MIN_HASH, user_input))
 
     def get_engine_settings(self, engine_id_name):
         """ Display engine settings """
         sg.PopupOK('Threads = {}\nHash = {} mb\nDepth = {}\nMovetime = {} sec\n\nEngine = {}\n'.format(
-            self.threads, self.memory_mb, self.max_depth, self.max_time,
+            self.threads, self.hash, self.max_depth, self.max_time,
             engine_id_name), title=BOX_TITLE, keep_on_top=True)
 
     def play_game(self, engine_id_name, board):
@@ -1000,9 +1000,9 @@ class EasyChessGui():
             # Else if side to move is not human
             elif not is_human_stm and is_engine_ready:             
                 is_promote = False
-                search = RunEngine(self.queue, self.engine_full_path_and_name,
+                search = RunEngine(self.queue, self.engine_path_and_name,
                                    self.max_depth, self.max_time, self.threads,
-                                   self.memory_mb)
+                                   self.hash)
                 search.get_board(board)
                 search.start() 
                 self.window.FindElement('_gamestatus_').Update('Mode: Play, Engine is thinking ...')
@@ -1137,14 +1137,14 @@ class EasyChessGui():
 
     def get_engine_id_name(self):
         """ Set the engine path and return id name """
-        eng_filename = './Engines/' + self.engine_file
-        self.engine_full_path_and_name = eng_filename
-        if eng_filename is None:
+        engine_path_and_name = './Engines/' + self.engine_file
+        self.engine_path_and_name = engine_path_and_name
+        if engine_path_and_name is None:
             logging.info('Failed to load engine')
             sys.exit(0)
             
         # Start the engine and get its id name for update to GUI
-        engine = chess.engine.SimpleEngine.popen_uci(eng_filename)
+        engine = chess.engine.SimpleEngine.popen_uci(engine_path_and_name)
         engine_id_name = engine.id['name']
         engine.quit()
         
