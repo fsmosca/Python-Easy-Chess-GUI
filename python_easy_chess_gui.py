@@ -636,7 +636,7 @@ class EasyChessGui():
         
         return pyc_promo, psg_promo
     
-    def modify_depth_limit(self):
+    def set_depth_limit(self):
         """ Returns max depth based from user setting """
         user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth [{} to {}]'.format(
                 self.max_depth, MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE)
@@ -648,7 +648,7 @@ class EasyChessGui():
 
         self.max_depth = min(MAX_DEPTH, max(MIN_DEPTH, user_depth))
     
-    def modify_time_limit(self):
+    def set_time_limit(self):
         """ Update max time based on user input """
         user_movetime = sg.PopupGetText(
             'Current move time is {} sec\n\nInput move time [{} to {}] sec'.format(
@@ -753,10 +753,10 @@ class EasyChessGui():
                         continue
                     
                     if button in (None, 'Set Depth'):
-                        self.modify_depth_limit()
+                        self.set_depth_limit()
                     
                     if button in (None, 'Set Movetime'):
-                        self.modify_time_limit()
+                        self.set_time_limit()
                     
                     if button in (None, 'Get Settings'):
                         self.get_engine_settings(engine_id_name)
@@ -858,11 +858,11 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'Set Depth'):
-                        self.modify_depth_limit()
+                        self.set_depth_limit()
                         break
                     
                     if button in (None, 'Set Movetime'):
-                        self.modify_time_limit()
+                        self.set_time_limit()
                         break
                     
                     if button in (None, 'Paste'):
@@ -1366,11 +1366,11 @@ class EasyChessGui():
                 continue
             
             if button in (None, 'Set Depth'):
-                self.modify_depth_limit()
+                self.set_depth_limit()
                 continue
             
             if button in (None, 'Set Movetime'):
-                self.modify_time_limit()
+                self.set_time_limit()
                 continue
             
             if button in (None, 'Set Threads'):
