@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.35'
+APP_VERSION = 'v0.36'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -196,8 +196,8 @@ class RunEngine(threading.Thread):
     pv_length = 5
     move_delay_sec = 3.0
     
-    def __init__(self, eng_queue, engine_path, max_depth=1, max_time=1,
-                 threads=1, memory_mb=32):
+    def __init__(self, eng_queue, engine_path, max_depth=128, max_time=2.0,
+                 threads=1, memory_mb=16):
         threading.Thread.__init__(self)
         self.engine_path = engine_path
         self.threads = threads
@@ -207,6 +207,7 @@ class RunEngine(threading.Thread):
         self.score = None
         self.depth = None
         self.time = None
+        self.nps = 0
         self.max_depth = max_depth
         self.max_time = max_time  # sec
         self.eng_queue = eng_queue
@@ -254,19 +255,15 @@ class RunEngine(threading.Thread):
                     self.time = info['time'] if 'time' in info else time.time() - start_thinking_time
                     self.eng_queue.put('{} time'.format(self.time))                      
 
-                    if 'pv' in info:
+                    if 'pv' in info and not ('upperbound' in info or 'lowerbound' in info):
                         self.pv = info['pv'][0:self.pv_length]
                         self.pv = self.board.variation_san(self.pv)
                         self.eng_queue.put('{} pv'.format(self.pv))
                         self.bm = info['pv'][0]
                         
                     if 'nps' in info:
-                        info_line = info['nps']
-                        self.eng_queue.put('{} nps'.format(info_line))                                          
-                        
-                    if 'nodes' in info:
-                        info_line = 'Positions searched {}\n'.format(info['nodes'])
-                        self.eng_queue.put(info_line)
+                        self.nps = info['nps']
+                        self.eng_queue.put('{} nps'.format(self.nps))
                         
                     # If we use "go infinite" we stop the search by time and depth
                     if not is_time_check and \
@@ -302,7 +299,7 @@ class EasyChessGui():
     queue = queue.Queue()
     is_user_white = True  # White is at the bottom in board layout
 
-    def __init__(self, max_depth, max_time_sec, threads, memory_mb):
+    def __init__(self, max_depth, max_time_sec, threads=1, memory_mb=16):
         self.max_depth = max_depth
         self.max_time = max_time_sec
         self.threads = threads
@@ -682,7 +679,7 @@ class EasyChessGui():
         
         user_input = sg.PopupGetText(
             'Current hash is {} mb\n\nInput hash size in mb [{} to {}]'.format(
-            self.threads, MIN_HASH, MAX_HASH), title=BOX_TITLE)
+            self.hash, MIN_HASH, MAX_HASH), title=BOX_TITLE)
         
         try:
             user_input = int(user_input)
@@ -1042,12 +1039,12 @@ class EasyChessGui():
 
                         if 'depth' in msg_str:
                             depth = int(' '.join(msg_str.split()[0:-1]).strip())
-                            msg_line = 'Depth: {}\n'.format(depth)
+                            msg_line = 'Depth {}\n'.format(depth)
                             self.window.FindElement('info_depth_k').Update(msg_line)
 
                         if 'time' in msg_str:
                             tsec = float(' '.join(msg_str.split()[0:-1]).strip())
-                            msg_line = 'Time: {}\n'.format(get_time_mm_ss_ms(tsec*1000))
+                            msg_line = 'Time {}\n'.format(get_time_mm_ss_ms(tsec*1000))
                             self.window.FindElement('info_time_k').Update(msg_line)
                             
                         if 'nps' in msg_str:
@@ -1055,9 +1052,9 @@ class EasyChessGui():
                             
                             # Add suffix K if nps is 1 Million or more
                             if nps >= 1000000:
-                                msg_line = 'Nps: {:0.0f}K\n'.format(nps/1000)
+                                msg_line = 'Knps {:0.0f}\n'.format(nps/1000)
                             else:
-                                msg_line = 'Nps: {}\n'.format(nps)
+                                msg_line = 'Nps {}\n'.format(nps)
 
                             self.window.FindElement('info_nps_k').Update(msg_line)
                     else:
@@ -1473,9 +1470,7 @@ class EasyChessGui():
 def main():
     max_depth = 128
     max_time_sec = 2.0
-    threads = 1
-    memory_mb = 32
-    pecg = EasyChessGui(max_depth, max_time_sec, threads, memory_mb)
+    pecg = EasyChessGui(max_depth, max_time_sec)
     pecg.main_loop()
 
 
