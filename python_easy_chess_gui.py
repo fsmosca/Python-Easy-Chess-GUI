@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.34'
+APP_VERSION = 'v0.35'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -1004,11 +1004,22 @@ class EasyChessGui():
                                    self.max_depth, self.max_time, self.threads,
                                    self.hash)
                 search.get_board(board)
-                search.start() 
+                search.daemon = True
+                search.start()
                 self.window.FindElement('_gamestatus_').Update('Mode: Play, Engine is thinking ...')
+
                 while True:
-                    button, value = self.window.Read(timeout=20)
-                    msg = self.queue.get()
+                    button, value = self.window.Read(timeout=50)
+                    
+                    # Exit app while engine is thinking                    
+                    if button == 'Exit':
+                        logging.info('Exit app while engine is searching')
+                        sys.exit(0)                  
+                    
+                    try:
+                        msg = self.queue.get_nowait()
+                    except:
+                        continue                    
                     msg_str = str(msg)
                     if not 'bestmove ' in msg_str:                        
                         if 'score' in msg_str:
@@ -1052,6 +1063,7 @@ class EasyChessGui():
                     else:
                         best_move = chess.Move.from_uci(msg.split()[1])
                         break
+                    
                 search.join()
                 search.quit_engine()
 
