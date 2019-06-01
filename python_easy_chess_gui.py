@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.36'
+APP_VERSION = 'v0.37'
 BOX_TITLE = APP_NAME + ' ' + APP_VERSION
 
 
@@ -240,7 +240,7 @@ class RunEngine(threading.Thread):
         start_thinking_time = time.time()
         is_time_check = False
         
-        with self.engine.analysis(self.board) as analysis:
+        with self.engine.analysis(self.board, chess.engine.Limit(time=self.max_time, depth=self.max_depth)) as analysis:
             for info in analysis:
                 try:
                     if 'depth' in info:
@@ -1255,9 +1255,7 @@ class EasyChessGui():
         # (1) Main menu, mode: Neutral
         menu_def = [['&File', ['!Save Game', 'E&xit']],
                     ['&Mode', ['!Neutral', 'Play', '!Analysis']],
-                    ['!&Game', ['&New Game',]],
                     ['&Board', ['Flip']],
-                    ['!FEN', ['Paste']],
                     ['&Engine', ['Set Threads', 'Set Hash', 'Set Depth',
                                  'Set Movetime', 'Get Settings']],
                     ['&Help', ['About']],
@@ -1268,9 +1266,8 @@ class EasyChessGui():
                 ['&File', ['Save Game', 'E&xit']],
                 ['&Mode', ['Neutral', '!Play', '!Analysis']],
                 ['&Game', ['&New Game',]],
-                ['!&Board', ['Flip']],
                 ['FEN', ['Paste']],
-                ['&Engine', ['Go', 'Set Depth', 'Set Movetime', 'Get Settings']],
+                ['&Engine', ['Go', '!Set Depth', '!Set Movetime', 'Get Settings']],
                 ['&Help', ['About']],
         ]
         
