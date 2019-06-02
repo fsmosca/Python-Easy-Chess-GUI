@@ -4,7 +4,7 @@ A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users 
 ![](https://i.imgur.com/mAyP8Za.png)
 
 ### Requirements
-I have not yet build an exe file for this GUI, not sure either if I can create it. In the meantime to get it running the following are required.
+Windows exe file it will be avilable upon release. In the meantime to get it running the following are required.
 * Python 3.7 and up
 * Python-chess v0.27.3 and up
 * PySimpleGUI
@@ -36,7 +36,7 @@ Typical command line:<br>
 * Press the square you want the piece to move to
 
 #### To play as black
-* If current mode is Nuetral, Board->Flip, flip such that black pieces are at the bottom
+* If current mode is Neutral, Board->Flip, flip such that black pieces are at the bottom
 * If current mode is Play, Mode->Neutral, then Board->Flip
 * Mode->Play
 * Engine->Go
