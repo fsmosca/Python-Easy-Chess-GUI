@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.38'
+APP_VERSION = 'v0.39'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -316,6 +316,47 @@ class EasyChessGui():
         self.fen = None
         self.psg_board = None
         self.engine_list = self.get_engines()
+        
+    def update_text_box(self, msg, is_hide):
+        """ Update text elements """
+        best_move = None
+        msg_str = str(msg)
+
+        if not 'bestmove ' in msg_str:
+            if 'score' in msg_str:
+                score = float(' '.join(msg_str.split()[0:-1]).strip())
+                msg_line = '{:+0.2f}\n'.format(score)
+                self.window.FindElement('info_score_k').Update('' if is_hide else msg_line)
+
+            if 'pv' in msg_str:
+                pv = ' '.join(msg_str.split()[0:-1]).strip()
+                msg_line = '{}\n'.format(pv)
+                self.window.FindElement('info_pv_k').Update('' if is_hide else msg_line)
+
+            if 'depth' in msg_str:
+                depth = int(' '.join(msg_str.split()[0:-1]).strip())
+                msg_line = 'Depth {}\n'.format(depth)
+                self.window.FindElement('info_depth_k').Update('' if is_hide else msg_line)
+
+            if 'time' in msg_str:
+                tsec = float(' '.join(msg_str.split()[0:-1]).strip())
+                msg_line = 'Time {}\n'.format(get_time_mm_ss_ms(tsec*1000))
+                self.window.FindElement('info_time_k').Update('' if is_hide else msg_line)
+                
+            if 'nps' in msg_str:
+                nps = int(' '.join(msg_str.split()[0:-1]).strip())
+                
+                # Add suffix K if nps is 1 Million or more
+                if nps >= 1000000:
+                    msg_line = 'Knps {:0.0f}\n'.format(nps/1000)
+                else:
+                    msg_line = 'Nps {}\n'.format(nps)
+                
+                self.window.FindElement('info_nps_k').Update('' if is_hide else msg_line)
+        else:
+            best_move = chess.Move.from_uci(msg.split()[1])
+
+        return best_move
         
     def get_tag_date(self):
         """ Return date in pgn tag date format """
@@ -1020,64 +1061,17 @@ class EasyChessGui():
                     # Exit app while engine is thinking                    
                     if button == 'Exit':
                         logging.info('Exit app while engine is searching')
-                        sys.exit(0)                  
-                    
+                        sys.exit(0)
+                        
+                    # Get the engine search info and display it in GUI text boxes                    
                     try:
                         msg = self.queue.get_nowait()
                     except:
-                        continue                    
+                        continue
+
                     msg_str = str(msg)
-                    if not 'bestmove ' in msg_str:                        
-                        if 'score' in msg_str:
-                            score = float(' '.join(msg_str.split()[0:-1]).strip())
-                            msg_line = '{:+0.2f}\n'.format(score)
-                            if is_hide_engine_analysis:
-                                self.window.FindElement('info_score_k').Update('')
-                            else:
-                                self.window.FindElement('info_score_k').Update(msg_line)                                
-                            
-                        if 'pv' in msg_str:
-                            pv = ' '.join(msg_str.split()[0:-1]).strip()
-                            msg_line = '{}\n'.format(pv)
-                            
-                            if is_hide_engine_analysis:
-                                self.window.FindElement('info_pv_k').Update('')
-                            else:
-                                self.window.FindElement('info_pv_k').Update(msg_line)                                
-
-                        if 'depth' in msg_str:
-                            depth = int(' '.join(msg_str.split()[0:-1]).strip())
-                            msg_line = 'Depth {}\n'.format(depth)
-                            
-                            if is_hide_engine_analysis:
-                                self.window.FindElement('info_depth_k').Update('')
-                            else:
-                                self.window.FindElement('info_depth_k').Update(msg_line)
-
-                        if 'time' in msg_str:
-                            tsec = float(' '.join(msg_str.split()[0:-1]).strip())
-                            msg_line = 'Time {}\n'.format(get_time_mm_ss_ms(tsec*1000))
-                            
-                            if is_hide_engine_analysis:
-                                self.window.FindElement('info_time_k').Update('')
-                            else:
-                                self.window.FindElement('info_time_k').Update(msg_line)
-                            
-                        if 'nps' in msg_str:
-                            nps = int(' '.join(msg_str.split()[0:-1]).strip())
-                            
-                            # Add suffix K if nps is 1 Million or more
-                            if nps >= 1000000:
-                                msg_line = 'Knps {:0.0f}\n'.format(nps/1000)
-                            else:
-                                msg_line = 'Nps {}\n'.format(nps)
-                                
-                            if is_hide_engine_analysis:
-                                self.window.FindElement('info_nps_k').Update('')
-                            else:
-                                self.window.FindElement('info_nps_k').Update(msg_line)
-                    else:
-                        best_move = chess.Move.from_uci(msg.split()[1])
+                    best_move = self.update_text_box(msg, is_hide_engine_analysis)
+                    if 'bestmove' in msg_str:
                         break
                     
                 search.join()
