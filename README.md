@@ -4,7 +4,7 @@ A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users 
 ![](https://i.imgur.com/mAyP8Za.png)
 
 ### Requirements
-Windows exe file it will be avilable upon release. In the meantime to get it running the following are required.
+Windows exe file will be available upon release. In the meantime to get it running the following are required.
 * Python 3.7 and up
 * Python-chess v0.27.3 and up
 * PySimpleGUI
