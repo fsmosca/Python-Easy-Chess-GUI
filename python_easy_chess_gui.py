@@ -51,8 +51,8 @@ logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.37'
-BOX_TITLE = APP_NAME + ' ' + APP_VERSION
+APP_VERSION = 'v0.38'
+BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
 MIN_TIME = 0.5  # sec
@@ -714,6 +714,8 @@ class EasyChessGui():
         move_cnt = 0        
         self.window.FindElement('_enginefn_').Update(values=self.engine_list)
         
+        is_hide_engine_analysis = True
+        
         # Game loop
         while not board.is_game_over(claim_draw=True):
             moved_piece = None
@@ -803,6 +805,10 @@ class EasyChessGui():
                     
                     if not is_human_stm:
                         break
+                    
+                    if button in (None, 'Hide/Unhide Search Info'):
+                        # Toggle Hide/Unhide
+                        is_hide_engine_analysis = False if is_hide_engine_analysis else True
                     
                     if button in (None, 'Exit'):
                         logging.info('Exit app')
@@ -1006,7 +1012,10 @@ class EasyChessGui():
                 self.window.FindElement('_gamestatus_').Update('Mode: Play, Engine is thinking ...')
 
                 while True:
-                    button, value = self.window.Read(timeout=50)
+                    button, value = self.window.Read(timeout=10)
+                    
+                    if button in (None, 'Hide/Unhide Search Info'):
+                        is_hide_engine_analysis = False if is_hide_engine_analysis else True
                     
                     # Exit app while engine is thinking                    
                     if button == 'Exit':
@@ -1022,30 +1031,37 @@ class EasyChessGui():
                         if 'score' in msg_str:
                             score = float(' '.join(msg_str.split()[0:-1]).strip())
                             msg_line = '{:+0.2f}\n'.format(score)
-
-                            # If score is good change color to green, if bad it is red
-                            tcolor = 'green'
-                            if score < 0.0:
-                                tcolor = 'red'
-                            elif score == 0.0:
-                                tcolor = 'black'
-
-                            self.window.FindElement('info_score_k').Update(msg_line, text_color=tcolor)
+                            if is_hide_engine_analysis:
+                                self.window.FindElement('info_score_k').Update('')
+                            else:
+                                self.window.FindElement('info_score_k').Update(msg_line)                                
                             
                         if 'pv' in msg_str:
                             pv = ' '.join(msg_str.split()[0:-1]).strip()
                             msg_line = '{}\n'.format(pv)
-                            self.window.FindElement('info_pv_k').Update(msg_line)
+                            
+                            if is_hide_engine_analysis:
+                                self.window.FindElement('info_pv_k').Update('')
+                            else:
+                                self.window.FindElement('info_pv_k').Update(msg_line)                                
 
                         if 'depth' in msg_str:
                             depth = int(' '.join(msg_str.split()[0:-1]).strip())
                             msg_line = 'Depth {}\n'.format(depth)
-                            self.window.FindElement('info_depth_k').Update(msg_line)
+                            
+                            if is_hide_engine_analysis:
+                                self.window.FindElement('info_depth_k').Update('')
+                            else:
+                                self.window.FindElement('info_depth_k').Update(msg_line)
 
                         if 'time' in msg_str:
                             tsec = float(' '.join(msg_str.split()[0:-1]).strip())
                             msg_line = 'Time {}\n'.format(get_time_mm_ss_ms(tsec*1000))
-                            self.window.FindElement('info_time_k').Update(msg_line)
+                            
+                            if is_hide_engine_analysis:
+                                self.window.FindElement('info_time_k').Update('')
+                            else:
+                                self.window.FindElement('info_time_k').Update(msg_line)
                             
                         if 'nps' in msg_str:
                             nps = int(' '.join(msg_str.split()[0:-1]).strip())
@@ -1055,8 +1071,11 @@ class EasyChessGui():
                                 msg_line = 'Knps {:0.0f}\n'.format(nps/1000)
                             else:
                                 msg_line = 'Nps {}\n'.format(nps)
-
-                            self.window.FindElement('info_nps_k').Update(msg_line)
+                                
+                            if is_hide_engine_analysis:
+                                self.window.FindElement('info_nps_k').Update('')
+                            else:
+                                self.window.FindElement('info_nps_k').Update(msg_line)
                     else:
                         best_move = chess.Move.from_uci(msg.split()[1])
                         break
@@ -1136,6 +1155,8 @@ class EasyChessGui():
         if not is_new_game:
             result = board.result(claim_draw=True)
             sg.Popup('Game over!\n\nResult is {}\nThank you for playing'.format(result), title=BOX_TITLE)
+
+        self.clear_elements()
 
         return is_new_game
 
@@ -1267,7 +1288,8 @@ class EasyChessGui():
                 ['&Mode', ['Neutral', '!Play', '!Analysis']],
                 ['&Game', ['&New Game',]],
                 ['FEN', ['Paste']],
-                ['&Engine', ['Go', '!Set Depth', '!Set Movetime', 'Get Settings']],
+                ['&Engine', ['Go', '!Set Threads', '!Set Hash', '!Set Depth',
+                             '!Set Movetime', 'Get Settings', 'Hide/Unhide Search Info']],
                 ['&Help', ['About']],
         ]
         
@@ -1293,7 +1315,7 @@ class EasyChessGui():
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 8),
                     font=('Consolas', 10), key='_movelist_')],
 
-            [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10))],
+            [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10), size=(28, 1))],
             [sg.Text('', key='info_score_k', size=(8, 1), background_color = bc),
              sg.Text('', key='info_pv_k', size=(27, 1), background_color = bc)],
              
