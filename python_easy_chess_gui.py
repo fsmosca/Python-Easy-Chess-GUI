@@ -46,12 +46,12 @@ import chess.engine
 import logging
 
 
-logging.basicConfig(filename='pecg.log', filemode='w', level=logging.DEBUG,
+logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
                     format='%(asctime)s :: %(levelname)s :: %(message)s')
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.39'
+APP_VERSION = 'v0.40'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -115,14 +115,6 @@ DARK_SQ_MOVE_COLOR = '#B8AF4E'
 LIGHT_SQ_MOVE_COLOR = '#E8E18E'
 
 
-FLIP_MSG = """Flipping a board while status is Play mode is not possible at the moment.
-If you really want to flip the board and start the game from startpos do the following:
-1. Game->Exit Game
-2. Board->Flip
-3. Game->New Game
-"""
-
-
 HELP_MSG = """
 // To play a game
 You should be in Play mode.
@@ -145,6 +137,12 @@ You should be in Neutral mode
 You should be in Play mode
 1. Mode->Play
 2. FEN->Paste
+
+// To use other uci engine
+1. Copy exe file in the engines directory
+
+// To show engine search info
+1. Engine->Hide/Unhide...
 """
 
 
@@ -740,7 +738,6 @@ class EasyChessGui():
         Plays a game against an engine. Move legality is handled by python-chess.
         """ 
         self.window.FindElement('_movelist_').Update('')
-        self.window.FindElement('_engineinfo_').Update('')
                 
         is_human_stm = True if self.is_user_white else False
         
@@ -785,11 +782,6 @@ class EasyChessGui():
                         engine_id_name = self.get_engine_id_name()
                         self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
                         self.update_engine_list()
-                        continue
-                    
-                    if button in (None, 'Flip'):
-                        sg.PopupScrolled(FLIP_MSG, size=(80, 5),
-                                         non_blocking=True, title = BOX_TITLE)
                         continue
                     
                     if button in (None, 'Set Depth'):
@@ -882,11 +874,6 @@ class EasyChessGui():
                     if button in (None, 'About'):
                         sg.Popup(HELP_MSG, title=BOX_TITLE)
                         break
-                    
-                    if button in (None, 'Flip'):
-                        sg.PopupScrolled(FLIP_MSG, size=(80, 5),
-                                         non_blocking=True, title = BOX_TITLE)
-                        continue
                     
                     if button in (None, 'Go'):
                         if is_human_stm:
@@ -1023,10 +1010,7 @@ class EasyChessGui():
                                 self.change_square_color(fr_row, fr_col)
                                 self.change_square_color(to_row, to_col)
     
-                                is_human_stm ^= 1
-                                
-                                self.window.FindElement('_engineinfo_').Update('', append=False)
-                                
+                                is_human_stm ^= 1                                
                                 # Human has done its move
                          
                             # Else if move is illegal
@@ -1315,10 +1299,7 @@ class EasyChessGui():
              
             [sg.Text('', key='info_depth_k', size=(8, 1), background_color = bc),
              sg.Text('', key='info_time_k', size=(12, 1), background_color = bc),
-             sg.Text('', key='info_nps_k', size=(13, 1), background_color = bc)],
-              
-            [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 10),
-                    font=('Consolas', 10), key='_engineinfo_', visible = False)],            
+             sg.Text('', key='info_nps_k', size=(13, 1), background_color = bc)],           
         ]
     
         white_board_tab = [[sg.Column(white_board_layout)]]
@@ -1410,8 +1391,7 @@ class EasyChessGui():
             if button in (None, 'Flip'):
                 # Clear Text and Multiline elements
                 self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
-                self.window.FindElement('_movelist_').Update('')
-                self.window.FindElement('_engineinfo_').Update('')                
+                self.clear_elements()
                 
                 window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
                     self.black_layout if self.is_user_white else self.white_layout,
