@@ -4,6 +4,7 @@
 *.exe
 *.log
 *.csv
+*.bat
 
 # Ignore files inside the dirs created by setup.py
 build/*
