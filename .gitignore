@@ -1,0 +1,20 @@
+# Ignore test files
+*.pgn
+*.epd
+*.exe
+*.log
+*.csv
+
+# Ignore files inside the dirs created by setup.py
+build/*
+dist/*
+
+# Ignore files inside Engines dir
+Engines/*
+
+# Ignore opening books such as polyglot
+*.bin
+
+# Ignore text files, except README.txt
+*.txt
+!README.md
