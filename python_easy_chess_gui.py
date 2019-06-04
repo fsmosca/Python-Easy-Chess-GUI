@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.41'
+APP_VERSION = 'v0.42'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -778,10 +778,15 @@ class EasyChessGui():
                         break
                     
                     if button in (None, 'select_engine_k'):
-                        self.engine_file = value['_enginefn_']
-                        engine_id_name = self.get_engine_id_name()
-                        self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
-                        self.update_engine_list()
+                        try:
+                            self.engine_file = value['_enginefn_']
+                            engine_id_name = self.get_engine_id_name()
+                            self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
+                            self.update_engine_list()
+                        except:
+                            logging.warning('Select the engine and press Select')
+                            sg.Popup('Select the engine from DropDown and press Select button',
+                                     title=BOX_TITLE)
                         continue
                     
                     if button in (None, 'Set Depth'):
@@ -886,11 +891,16 @@ class EasyChessGui():
                         self.clear_elements()
                         break
                     
-                    if button in (None, 'select_engine_k'):
-                        self.engine_file = value['_enginefn_']
-                        engine_id_name = self.get_engine_id_name()
-                        self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
-                        self.update_engine_list()
+                    if button in (None, 'select_engine_k'):                    
+                        try:
+                            self.engine_file = value['_enginefn_']
+                            engine_id_name = self.get_engine_id_name()
+                            self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
+                            self.update_engine_list()
+                        except:
+                            logging.warning('Select the engine and press Select')
+                            sg.Popup('Select the engine from DropDown and press Select button',
+                                     title=BOX_TITLE)
                         break
                     
                     if button in (None, 'About'):
@@ -1018,7 +1028,6 @@ class EasyChessGui():
                                     self.psg_board[to_row][to_col] = piece
                                     
                                 self.redraw_board()
-                                self.window.FindElement('_movelist_').Update(show_san_move, append=True)
     
                                 board.push(user_move)
                                 move_cnt += 1
@@ -1027,6 +1036,9 @@ class EasyChessGui():
                                     node = self.game.add_variation(user_move)
                                 else:
                                     node = node.add_variation(user_move)
+                                    
+                                self.window.FindElement('_movelist_').Update('')
+                                self.window.FindElement('_movelist_').Update(self.game, append=True)
                                 
                                 # Change the color of the "fr" and "to" board squares
                                 self.change_square_color(fr_row, fr_col)
@@ -1096,7 +1108,6 @@ class EasyChessGui():
                     show_san_move = '{}. {} '.format(fmvn, san_move)
                 else:
                     show_san_move = '{} '.format(san_move)
-                self.window.FindElement('_movelist_').Update(show_san_move, append=True)
     
                 piece = self.psg_board[fr_row][fr_col]
                 self.psg_board[fr_row][fr_col] = BLANK            
@@ -1131,6 +1142,9 @@ class EasyChessGui():
                     node = self.game.add_variation(best_move)
                 else:
                     node = node.add_variation(best_move)
+                    
+                self.window.FindElement('_movelist_').Update('')
+                self.window.FindElement('_movelist_').Update(self.game, append=True)
                 
                 # Change the color of the "fr" and "to" board squares
                 self.change_square_color(fr_row, fr_col)
@@ -1313,7 +1327,7 @@ class EasyChessGui():
              sg.OK('Select', size=(6,1), key='select_engine_k')],
         
             [sg.Text('MOVE LIST', font=('Consolas', 10))],            
-            [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 8),
+            [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 12),
                     font=('Consolas', 10), key='_movelist_')],
 
             [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10), size=(28, 1))],
@@ -1390,10 +1404,15 @@ class EasyChessGui():
             
             # Engine settings
             if button in (None, 'select_engine_k'):
-                self.engine_file = value['_enginefn_']
-                engine_id_name = self.get_engine_id_name()
-                self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
-                self.update_engine_list()
+                try:
+                    self.engine_file = value['_enginefn_']
+                    engine_id_name = self.get_engine_id_name()
+                    self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
+                    self.update_engine_list()
+                except:
+                    logging.warning('Select the engine and press Select')
+                    sg.Popup('Select the engine from DropDown and press Select button',
+                             title=BOX_TITLE)
                 continue
             
             if button in (None, 'Set Depth'):
