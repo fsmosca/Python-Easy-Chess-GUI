@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.40'
+APP_VERSION = 'v0.41'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -790,6 +790,12 @@ class EasyChessGui():
                     if button in (None, 'Set Movetime'):
                         self.set_time_limit()
                     
+                    if button in (None, 'Set Threads'):
+                        self.set_threads()
+                    
+                    if button in (None, 'Set Hash'):
+                        self.set_hash()
+                    
                     if button in (None, 'Get Settings'):
                         self.get_engine_settings(engine_id_name)
                         
@@ -846,6 +852,22 @@ class EasyChessGui():
                     if button in (None, 'Exit'):
                         logging.info('Exit app')
                         is_exit_app = True
+                        break
+                    
+                    if button in (None, 'Set Depth'):
+                        self.set_depth_limit()
+                        break
+                    
+                    if button in (None, 'Set Movetime'):
+                        self.set_time_limit()
+                        break
+                    
+                    if button in (None, 'Set Threads'):
+                        self.set_threads()
+                        break
+                    
+                    if button in (None, 'Set Hash'):
+                        self.set_hash()
                         break
                     
                     if button in (None, 'New Game'):
@@ -1266,8 +1288,8 @@ class EasyChessGui():
                 ['&Mode', ['Neutral', '!Play', '!Analysis']],
                 ['&Game', ['&New Game',]],
                 ['FEN', ['Paste']],
-                ['&Engine', ['Go', '!Set Threads', '!Set Hash', '!Set Depth',
-                             '!Set Movetime', 'Get Settings', 'Hide/Unhide Search Info']],
+                ['&Engine', ['Go', 'Set Threads', 'Set Hash', 'Set Depth',
+                             'Set Movetime', 'Get Settings', 'Hide/Unhide Search Info']],
                 ['&Help', ['About']],
         ]
         
@@ -1280,13 +1302,14 @@ class EasyChessGui():
     
         board_controls = [
             [sg.Text('Mode: Neutral', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
-            [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.InputText('',
-                    font=('Consolas', 10), key='_White_', size=(35, 1))],
-            [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.InputText('',
-                    font=('Consolas', 10), key='_Black_', size=(35, 1))],
+            [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.Text('Human',
+                    font=('Consolas', 10), key='_White_', size=(35, 1), relief='sunken')],
+            [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.Text('Computer',
+                    font=('Consolas', 10), key='_Black_', size=(35, 1), relief='sunken')],
         
             [sg.Text('Engine', size=(6, 1), font=('Consolas', 10)),
-             sg.Drop(self.engine_list, size=(22, 1), font=('Consolas', 10), key='_enginefn_'),
+             sg.Drop(self.engine_list, size=(22, 1), font=('Consolas', 10), 
+                     key='_enginefn_'),
              sg.OK('Select', size=(6,1), key='select_engine_k')],
         
             [sg.Text('MOVE LIST', font=('Consolas', 10))],            
@@ -1351,7 +1374,12 @@ class EasyChessGui():
         self.engine_file = self.engine_list[0]
         engine_id_name = self.get_engine_id_name()
         self.init_game()
-        self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
+
+        # Initialize White and black boxes
+        while True:
+            button, value = self.window.Read(timeout=50)
+            self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
+            break
         
         while True:
             button, value = self.window.Read(timeout=50)
