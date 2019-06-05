@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.45'
+APP_VERSION = 'v0.46'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -239,7 +239,8 @@ class RunEngine(threading.Thread):
         start_thinking_time = time.time()
         is_time_check = False
         
-        with self.engine.analysis(self.board, chess.engine.Limit(time=self.max_time, depth=self.max_depth)) as analysis:
+        with self.engine.analysis(self.board, chess.engine.Limit(
+                time=self.max_time, depth=self.max_depth)) as analysis:
             for info in analysis:
                 try:
                     if 'depth' in info:
@@ -251,7 +252,8 @@ class RunEngine(threading.Thread):
                         self.eng_queue.put('{:+0.2f} score'.format(self.score))
                         
                     
-                    self.time = info['time'] if 'time' in info else time.time() - start_thinking_time
+                    self.time = info['time'] if 'time' in info else \
+                            time.time() - start_thinking_time
                     self.eng_queue.put('{} time'.format(self.time))                      
 
                     if 'pv' in info and not ('upperbound' in info or 'lowerbound' in info):
@@ -325,22 +327,26 @@ class EasyChessGui():
             if 'score' in msg_str:
                 score = float(' '.join(msg_str.split()[0:-1]).strip())
                 msg_line = '{:+0.2f}\n'.format(score)
-                self.window.FindElement('info_score_k').Update('' if is_hide else msg_line)
+                self.window.FindElement('info_score_k').Update(
+                        '' if is_hide else msg_line)
 
             if 'pv' in msg_str:
                 pv = ' '.join(msg_str.split()[0:-1]).strip()
                 msg_line = '{}\n'.format(pv)
-                self.window.FindElement('info_pv_k').Update('' if is_hide else msg_line)
+                self.window.FindElement('info_pv_k').Update(
+                        '' if is_hide else msg_line)
 
             if 'depth' in msg_str:
                 depth = int(' '.join(msg_str.split()[0:-1]).strip())
                 msg_line = 'Depth {}\n'.format(depth)
-                self.window.FindElement('info_depth_k').Update('' if is_hide else msg_line)
+                self.window.FindElement('info_depth_k').Update(
+                        '' if is_hide else msg_line)
 
             if 'time' in msg_str:
                 tsec = float(' '.join(msg_str.split()[0:-1]).strip())
                 msg_line = 'Time {}\n'.format(get_time_mm_ss_ms(tsec*1000))
-                self.window.FindElement('info_time_k').Update('' if is_hide else msg_line)
+                self.window.FindElement('info_time_k').Update(
+                        '' if is_hide else msg_line)
                 
             if 'nps' in msg_str:
                 nps = int(' '.join(msg_str.split()[0:-1]).strip())
@@ -351,7 +357,8 @@ class EasyChessGui():
                 else:
                     msg_line = 'Nps {}\n'.format(nps)
                 
-                self.window.FindElement('info_nps_k').Update('' if is_hide else msg_line)
+                self.window.FindElement('info_nps_k').Update(
+                        '' if is_hide else msg_line)
         else:
             best_move = chess.Move.from_uci(msg.split()[1])
 
@@ -676,8 +683,9 @@ class EasyChessGui():
     
     def set_depth_limit(self):
         """ Returns max depth based from user setting """
-        user_depth = sg.PopupGetText('Current depth is {}\n\nInput depth [{} to {}]'.format(
-                self.max_depth, MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE)
+        user_depth = sg.PopupGetText(
+                    'Current depth is {}\n\nInput depth [{} to {}]'.format(
+                    self.max_depth, MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE)
         
         try:
             user_depth = int(user_depth)
@@ -731,7 +739,8 @@ class EasyChessGui():
 
     def get_engine_settings(self, engine_id_name):
         """ Display engine settings """
-        sg.PopupOK('Threads = {}\nHash = {} mb\nDepth = {}\nMovetime = {} sec\n\nEngine = {}\n'.format(
+        sg.PopupOK(
+            'Threads = {}\nHash = {} mb\nDepth = {}\nMovetime = {} sec\n\nEngine = {}\n'.format(
             self.threads, self.hash, self.max_depth, self.max_time,
             engine_id_name), title=BOX_TITLE, keep_on_top=True)
 
@@ -765,7 +774,8 @@ class EasyChessGui():
             # If engine is to play first, allow the user to configure the engine
             # and exit this loop when user presses the Engine->Go button
             if not is_engine_ready:
-                self.window.FindElement('_gamestatus_').Update('Mode: Play, press Engine->Go')
+                self.window.FindElement('_gamestatus_').Update(
+                        'Mode: Play, press Engine->Go')
                 while True:
                     button, value = self.window.Read(timeout=100)
                     
@@ -781,12 +791,14 @@ class EasyChessGui():
                         try:
                             self.engine_file = value['_enginefn_']
                             engine_id_name = self.get_engine_id_name()
-                            self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
+                            self.update_labels_and_game_tags(human='Human',
+                                                    engine_id=engine_id_name)
                             self.update_engine_list()
                         except:
                             logging.warning('Select the engine and press Select')
-                            sg.Popup('Select the engine from DropDown and press Select button',
-                                     title=BOX_TITLE)
+                            sg.Popup(
+                            'Select the engine from DropDown and press Select button',
+                            title=BOX_TITLE)
                         continue
                     
                     if button == 'Set Depth':
@@ -827,7 +839,8 @@ class EasyChessGui():
                         # Elif user is black and side to move based from pasted FEN is white
                         elif not self.is_user_white and board.turn:
                             is_human_stm = False
-                            self.window.FindElement('_gamestatus_').Update('Mode: Play, press Engine->Go')
+                            self.window.FindElement('_gamestatus_').Update(
+                                    'Mode: Play, press Engine->Go')
 
                         is_engine_ready = True if is_human_stm else False
                         
@@ -862,7 +875,8 @@ class EasyChessGui():
                     
                     if button == 'Hide/Unhide Search Info':
                         # Toggle Hide/Unhide
-                        is_hide_engine_analysis = False if is_hide_engine_analysis else True
+                        is_hide_engine_analysis = False \
+                            if is_hide_engine_analysis else True
                         continue
                         
                     if button is None:
@@ -916,12 +930,14 @@ class EasyChessGui():
                         try:
                             self.engine_file = value['_enginefn_']
                             engine_id_name = self.get_engine_id_name()
-                            self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
+                            self.update_labels_and_game_tags(human='Human',
+                                                    engine_id=engine_id_name)
                             self.update_engine_list()
                         except:
                             logging.warning('Select the engine and press Select')
-                            sg.Popup('Select the engine from DropDown and press Select button',
-                                     title=BOX_TITLE)
+                            sg.Popup(
+                            'Select the engine from DropDown and press Select button',
+                            title=BOX_TITLE)
                         break
                     
                     if button == 'About':
@@ -934,7 +950,8 @@ class EasyChessGui():
                         else:
                             is_human_stm = True
                         is_engine_ready = True
-                        self.window.FindElement('_gamestatus_').Update('Mode: Play, Engine is thinking ...')
+                        self.window.FindElement('_gamestatus_').Update(
+                                'Mode: Play, Engine is thinking ...')
                         break
                     
                     if button == 'Get Settings':
@@ -965,7 +982,8 @@ class EasyChessGui():
                         is_engine_ready = True if is_human_stm else False
                         
                         self.window.FindElement('_gamestatus_').Update(
-                                'Mode: Play, side: {}'.format('white' if board.turn else 'black'))
+                                'Mode: Play, side: {}'.format(
+                                        'white' if board.turn else 'black'))
                         
                         self.game.headers['FEN'] = self.fen
                         break
@@ -1014,7 +1032,8 @@ class EasyChessGui():
                             if self.relative_row(to_sq, board.turn) == RANK_8 and \
                                     moved_piece == chess.PAWN:
                                 is_promote = True
-                                pyc_promo, psg_promo = self.get_promo_piece(user_move, board.turn, True)
+                                pyc_promo, psg_promo = self.get_promo_piece(
+                                        user_move, board.turn, True)
                                 user_move = chess.Move(fr_sq, to_sq, promotion=pyc_promo)
                             else:
                                 user_move = chess.Move(fr_sq, to_sq)
@@ -1052,7 +1071,8 @@ class EasyChessGui():
                                     
                                 self.window.FindElement('_movelist_').Update(disabled=False)
                                 self.window.FindElement('_movelist_').Update('')
-                                self.window.FindElement('_movelist_').Update(self.game, append=True, disabled=True)
+                                self.window.FindElement('_movelist_').Update(
+                                    self.game.variations[0], append=True, disabled=True)
                                 
                                 # Change the color of the "fr" and "to" board squares
                                 self.change_square_color(fr_row, fr_col)
@@ -1064,7 +1084,8 @@ class EasyChessGui():
                             # Else if move is illegal
                             else:
                                 move_state = 0
-                                color = '#B58863' if (move_from[0] + move_from[1]) % 2 else '#F0D9B5'
+                                color = '#B58863' \
+                                    if (move_from[0] + move_from[1]) % 2 else '#F0D9B5'
                                 
                                 # Restore the color of the fr square
                                 button_square.Update(button_color=('white', color))
@@ -1082,13 +1103,15 @@ class EasyChessGui():
                 search.get_board(board)
                 search.daemon = True
                 search.start()
-                self.window.FindElement('_gamestatus_').Update('Mode: Play, Engine is thinking ...')
+                self.window.FindElement('_gamestatus_').Update(
+                        'Mode: Play, Engine is thinking ...')
 
                 while True:
                     button, value = self.window.Read(timeout=10)
                     
                     if button == 'Hide/Unhide Search Info':
-                        is_hide_engine_analysis = False if is_hide_engine_analysis else True
+                        is_hide_engine_analysis = False \
+                            if is_hide_engine_analysis else True
                     
                     # Exit app while engine is thinking                    
                     if button == 'Exit':
@@ -1151,7 +1174,8 @@ class EasyChessGui():
                     
                 self.window.FindElement('_movelist_').Update(disabled=False)
                 self.window.FindElement('_movelist_').Update('')
-                self.window.FindElement('_movelist_').Update(self.game, append=True, disabled=True)
+                self.window.FindElement('_movelist_').Update(
+                    self.game.variations[0], append=True, disabled=True)
                 
                 # Change the color of the "fr" and "to" board squares
                 self.change_square_color(fr_row, fr_col)
@@ -1254,8 +1278,8 @@ class EasyChessGui():
             white_board_layout.append(row)
             
         # add the labels across bottom of board
-        white_board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
-                            font='Any 11') for a in file_char_name])
+        white_board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a),
+                pad=((23, 27), 0), font='Any 11') for a in file_char_name])
         
         # Save the board with white at the top
         file_char_name = 'abcdefgh'
@@ -1283,8 +1307,8 @@ class EasyChessGui():
             black_board_layout.append(row)
             
         # add the labels across bottom of board
-        black_board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a), pad=((23, 27), 0),
-                            font='Any 11') for a in file_char_name])
+        black_board_layout.append([sg.T('     ')] + [sg.T('{}'.format(a),
+                pad=((23, 27), 0), font='Any 11') for a in file_char_name])
             
         return white_board_layout, black_board_layout
         
@@ -1306,10 +1330,12 @@ class EasyChessGui():
         menu_def_play = [
                 ['&File', ['E&xit']],
                 ['&Mode', ['Neutral', '!Play', '!Analysis']],
-                ['&Game', ['&New::new_game_k','Save::save_game_k', 'Resign::resign_game_k']],
+                ['&Game', ['&New::new_game_k','Save::save_game_k',
+                           'Resign::resign_game_k']],
                 ['FEN', ['Paste']],
                 ['&Engine', ['Go', 'Set Threads', 'Set Hash', 'Set Depth',
-                             'Set Movetime', 'Get Settings', 'Hide/Unhide Search Info']],
+                             'Set Movetime', 'Get Settings',
+                             'Hide/Unhide Search Info']],
                 ['&Help', ['About']],
         ]
         
@@ -1418,7 +1444,8 @@ class EasyChessGui():
                 try:
                     self.engine_file = value['_enginefn_']
                     engine_id_name = self.get_engine_id_name()
-                    self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
+                    self.update_labels_and_game_tags(human='Human',
+                                                     engine_id=engine_id_name)
                     self.update_engine_list()
                 except:
                     logging.warning('Select the engine and press Select')
@@ -1458,7 +1485,8 @@ class EasyChessGui():
                     icon='')
                 self.is_user_white = not self.is_user_white
                 
-                self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
+                self.update_labels_and_game_tags(human='Human',
+                                                 engine_id=engine_id_name)
                 
                 self.window.Close()
                 self.psg_board = copy.deepcopy(initial_board)
