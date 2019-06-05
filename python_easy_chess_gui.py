@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.44'
+APP_VERSION = 'v0.45'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -390,7 +390,8 @@ class EasyChessGui():
         self.window.FindElement('info_depth_k').Update('')
         self.window.FindElement('info_time_k').Update('')
         self.window.FindElement('info_nps_k').Update('')
-        self.window.FindElement('_movelist_').Update('')        
+        self.window.FindElement('_movelist_').Update(disabled=False)
+        self.window.FindElement('_movelist_').Update('', disabled=True)        
         
     def update_labels_and_game_tags(self, human='Human', engine_id='engine id name'):
         """ Update player names """
@@ -738,7 +739,8 @@ class EasyChessGui():
         """ 
         Plays a game against an engine. Move legality is handled by python-chess.
         """ 
-        self.window.FindElement('_movelist_').Update('')
+        self.window.FindElement('_movelist_').Update(disabled=False)
+        self.window.FindElement('_movelist_').Update('', disabled=True)
                 
         is_human_stm = True if self.is_user_white else False
         
@@ -767,15 +769,15 @@ class EasyChessGui():
                 while True:
                     button, value = self.window.Read(timeout=100)
                     
-                    if button in (None, 'New::new_game_k'):
+                    if button == 'New::new_game_k':
                         is_new_game = True
                         break
                     
-                    if button in (None, 'Neutral'):
+                    if button == 'Neutral':
                         is_exit_game = True
                         break
                     
-                    if button in (None, 'select_engine_k'):
+                    if button == 'select_engine_k':
                         try:
                             self.engine_file = value['_enginefn_']
                             engine_id_name = self.get_engine_id_name()
@@ -787,25 +789,25 @@ class EasyChessGui():
                                      title=BOX_TITLE)
                         continue
                     
-                    if button in (None, 'Set Depth'):
+                    if button == 'Set Depth':
                         self.set_depth_limit()
                     
-                    if button in (None, 'Set Movetime'):
+                    if button == 'Set Movetime':
                         self.set_time_limit()
                     
-                    if button in (None, 'Set Threads'):
+                    if button == 'Set Threads':
                         self.set_threads()
                     
-                    if button in (None, 'Set Hash'):
+                    if button == 'Set Hash':
                         self.set_hash()
                     
-                    if button in (None, 'Get Settings'):
+                    if button == 'Get Settings':
                         self.get_engine_settings(engine_id_name)
                         
-                    if button in (None, 'About'):
+                    if button == 'About':
                         sg.Popup(HELP_MSG, title=BOX_TITLE)
                         
-                    if button in (None, 'Paste'):
+                    if button == 'Paste':
                         try:
                             self.get_fen()
                             self.set_new_game()
@@ -832,7 +834,7 @@ class EasyChessGui():
                         self.game.headers['FEN'] = self.fen
                         break
                     
-                    if button in (None, 'Go'):
+                    if button == 'Go':
                         is_engine_ready = True
                         break
                     
@@ -841,7 +843,7 @@ class EasyChessGui():
                         is_exit_app = True
                         break
                     
-                    if button in (None, 'Exit'):
+                    if button == 'Exit':
                         logging.info('Quit app Exit is pressed.')
                         is_exit_app = True
                         break
@@ -868,49 +870,49 @@ class EasyChessGui():
                         is_exit_app = True
                         break
                     
-                    if button in (None, 'Exit'):
+                    if button == 'Exit':
                         logging.info('Quit app Exit is pressed.')
                         is_exit_app = True
                         break
                     
-                    if button in (None, 'Set Depth'):
+                    if button == 'Set Depth':
                         self.set_depth_limit()
                         break
                     
-                    if button in (None, 'Set Movetime'):
+                    if button == 'Set Movetime':
                         self.set_time_limit()
                         break
                     
-                    if button in (None, 'Set Threads'):
+                    if button == 'Set Threads':
                         self.set_threads()
                         break
                     
-                    if button in (None, 'Set Hash'):
+                    if button == 'Set Hash':
                         self.set_hash()
                         break
                     
-                    if button in (None, 'New::new_game_k'):
+                    if button == 'New::new_game_k':
                         is_new_game = True
                         self.clear_elements()
                         break
                     
-                    if button in (None, 'Save::save_game_k'):
+                    if button == 'Save::save_game_k':
                         logging.info('Saving game manually')
                         with open(self.pecg_game_fn, mode = 'a+') as f:
                             f.write('{}\n\n'.format(self.game))                        
                         break
                     
-                    if button in (None, 'Resign::resign_game_k'):
+                    if button == 'Resign::resign_game_k':
                         logging.info('User resigns')
                         is_user_resign = True
                         break
 
-                    if button in (None, 'Neutral'):
+                    if button == 'Neutral':
                         is_exit_game = True
                         self.clear_elements()
                         break
                     
-                    if button in (None, 'select_engine_k'):                    
+                    if button == 'select_engine_k':
                         try:
                             self.engine_file = value['_enginefn_']
                             engine_id_name = self.get_engine_id_name()
@@ -922,11 +924,11 @@ class EasyChessGui():
                                      title=BOX_TITLE)
                         break
                     
-                    if button in (None, 'About'):
+                    if button == 'About':
                         sg.Popup(HELP_MSG, title=BOX_TITLE)
                         break
                     
-                    if button in (None, 'Go'):
+                    if button == 'Go':
                         if is_human_stm:
                             is_human_stm = False
                         else:
@@ -935,19 +937,19 @@ class EasyChessGui():
                         self.window.FindElement('_gamestatus_').Update('Mode: Play, Engine is thinking ...')
                         break
                     
-                    if button in (None, 'Get Settings'):
+                    if button == 'Get Settings':
                         self.get_engine_settings(engine_id_name)
                         break
                     
-                    if button in (None, 'Set Depth'):
+                    if button == 'Set Depth':
                         self.set_depth_limit()
                         break
                     
-                    if button in (None, 'Set Movetime'):
+                    if button == 'Set Movetime':
                         self.set_time_limit()
                         break
                     
-                    if button in (None, 'Paste'):
+                    if button == 'Paste':
                         try:
                             self.get_fen()
                             self.set_new_game()
@@ -1019,14 +1021,6 @@ class EasyChessGui():
                             
                             # Check if user move is legal
                             if user_move in board.legal_moves:
-                                # Convert user move to san move for display in movelist
-                                san_move = board.san(user_move)
-                                fmvn = board.fullmove_number
-                                if board.turn:
-                                    show_san_move = '{}. {} '.format(fmvn, san_move)                              
-                                else:
-                                    show_san_move = '{} '.format(san_move)                                
-                                    
                                 # Update rook location if this is a castle move
                                 if board.is_castling(user_move):
                                     self.update_rook(str(user_move))
@@ -1056,8 +1050,9 @@ class EasyChessGui():
                                 else:
                                     node = node.add_variation(user_move)
                                     
+                                self.window.FindElement('_movelist_').Update(disabled=False)
                                 self.window.FindElement('_movelist_').Update('')
-                                self.window.FindElement('_movelist_').Update(self.game, append=True)
+                                self.window.FindElement('_movelist_').Update(self.game, append=True, disabled=True)
                                 
                                 # Change the color of the "fr" and "to" board squares
                                 self.change_square_color(fr_row, fr_col)
@@ -1092,7 +1087,7 @@ class EasyChessGui():
                 while True:
                     button, value = self.window.Read(timeout=10)
                     
-                    if button in (None, 'Hide/Unhide Search Info'):
+                    if button == 'Hide/Unhide Search Info':
                         is_hide_engine_analysis = False if is_hide_engine_analysis else True
                     
                     # Exit app while engine is thinking                    
@@ -1119,14 +1114,6 @@ class EasyChessGui():
                 fr_row = 8 - int(move_str[1])
                 to_col = ord(move_str[2]) - ord('a')
                 to_row = 8 - int(move_str[3])
-                
-                # Convert user move to san move for display in movelist
-                san_move = board.san(best_move)
-                fmvn = board.fullmove_number
-                if board.turn:
-                    show_san_move = '{}. {} '.format(fmvn, san_move)
-                else:
-                    show_san_move = '{} '.format(san_move)
     
                 piece = self.psg_board[fr_row][fr_col]
                 self.psg_board[fr_row][fr_col] = BLANK            
@@ -1162,8 +1149,9 @@ class EasyChessGui():
                 else:
                     node = node.add_variation(best_move)
                     
+                self.window.FindElement('_movelist_').Update(disabled=False)
                 self.window.FindElement('_movelist_').Update('')
-                self.window.FindElement('_movelist_').Update(self.game, append=True)
+                self.window.FindElement('_movelist_').Update(self.game, append=True, disabled=True)
                 
                 # Change the color of the "fr" and "to" board squares
                 self.change_square_color(fr_row, fr_col)
@@ -1346,7 +1334,7 @@ class EasyChessGui():
         
             [sg.Text('MOVE LIST', font=('Consolas', 10))],            
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 12),
-                    font=('Consolas', 10), key='_movelist_')],
+                    font=('Consolas', 10), key='_movelist_', disabled=True)],
 
             [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10), size=(28, 1))],
             [sg.Text('', key='info_score_k', size=(8, 1), background_color = bc),
@@ -1417,12 +1405,16 @@ class EasyChessGui():
             button, value = self.window.Read(timeout=50)
             
             # Menu->File->Exit
-            if button in (None, 'Exit'):
+            if button == 'Exit':
                 logging.info('Quit app from main loop, Exit is pressed.')
                 break
             
+            if button is None:
+                logging.info('Quit app from main loop, X is pressed.')
+                break
+            
             # Engine settings
-            if button in (None, 'select_engine_k'):
+            if button == 'select_engine_k':
                 try:
                     self.engine_file = value['_enginefn_']
                     engine_id_name = self.get_engine_id_name()
@@ -1434,27 +1426,27 @@ class EasyChessGui():
                              title=BOX_TITLE)
                 continue
             
-            if button in (None, 'Set Depth'):
+            if button == 'Set Depth':
                 self.set_depth_limit()
                 continue
             
-            if button in (None, 'Set Movetime'):
+            if button == 'Set Movetime':
                 self.set_time_limit()
                 continue
             
-            if button in (None, 'Set Threads'):
+            if button == 'Set Threads':
                 self.set_threads()
                 continue
             
-            if button in (None, 'Set Hash'):
+            if button == 'Set Hash':
                 self.set_hash()
                 continue
             
-            if button in (None, 'Get Settings'):
+            if button == 'Get Settings':
                 self.get_engine_settings(engine_id_name)
                 continue
                 
-            if button in (None, 'Flip'):
+            if button == 'Flip':
                 # Clear Text and Multiline elements
                 self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
                 self.clear_elements()
@@ -1475,11 +1467,11 @@ class EasyChessGui():
                 continue
             
             # Menu->Help->Help
-            if button in (None, 'About'):
+            if button == 'About':
                 sg.Popup(HELP_MSG, title=BOX_TITLE)
                 continue
             
-            if button in (None, 'Play'):
+            if button == 'Play':
                 window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
                     self.white_layout_play if self.is_user_white else self.black_layout_play,
                     default_button_element_size=(12, 1),
@@ -1495,7 +1487,8 @@ class EasyChessGui():
                     button, value = self.window.Read(timeout=100)
                     
                     self.window.FindElement('_gamestatus_').Update('Mode: Play')
-                    self.window.FindElement('_movelist_').Update('')
+                    self.window.FindElement('_movelist_').Update(disabled=False)
+                    self.window.FindElement('_movelist_').Update('', disabled=True)
                     
                     start_new_game = self.play_game(engine_id_name, board)
                     self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
