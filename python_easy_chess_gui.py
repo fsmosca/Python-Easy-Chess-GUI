@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.42'
+APP_VERSION = 'v0.43'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -120,14 +120,15 @@ HELP_MSG = """
 You should be in Play mode.
 1. Mode->Play
 2. Make move on the board
-If you are already in Play mode, Game->New Game
+3. Game->New if you want a new game
 
 // To play as black
 You should be in Neutral mode
 1. Board->Flip
 2. Mode->Play
 3. Engine->Go
-If you are already in Play mode, Mode->Neutral
+If you are already in Play mode, go back to Neutral mode
+via Mode->Neutral  then flip the board via Board->Flip
 
 // To flip board
 You should be in Neutral mode
@@ -142,7 +143,7 @@ You should be in Play mode
 1. Copy exe file in the engines directory
 
 // To show engine search info
-1. Engine->Hide/Unhide...
+1. Engine->Hide/Unhide Search Info
 """
 
 
@@ -769,7 +770,7 @@ class EasyChessGui():
                         is_exit_app = True
                         break
                     
-                    if button in (None, 'New Game'):
+                    if button in (None, 'New::new_game_k'):
                         is_new_game = True
                         break
                     
@@ -875,12 +876,12 @@ class EasyChessGui():
                         self.set_hash()
                         break
                     
-                    if button in (None, 'New Game'):
+                    if button in (None, 'New::new_game_k'):
                         is_new_game = True
                         self.clear_elements()
                         break
                     
-                    if button in (None, 'Save Game'):
+                    if button in (None, 'Save::save_game_k'):
                         logging.info('Saving game manually')
                         with open(self.pecg_game_fn, mode = 'a+') as f:
                             f.write('{}\n\n'.format(self.game))                        
@@ -1288,7 +1289,7 @@ class EasyChessGui():
         """
 
         # (1) Main menu, mode: Neutral
-        menu_def = [['&File', ['!Save Game', 'E&xit']],
+        menu_def = [['&File', ['E&xit']],
                     ['&Mode', ['!Neutral', 'Play', '!Analysis']],
                     ['&Board', ['Flip']],
                     ['&Engine', ['Set Threads', 'Set Hash', 'Set Depth',
@@ -1298,9 +1299,9 @@ class EasyChessGui():
         
         # (2) Play menu, mode: Play
         menu_def_play = [
-                ['&File', ['Save Game', 'E&xit']],
+                ['&File', ['E&xit']],
                 ['&Mode', ['Neutral', '!Play', '!Analysis']],
-                ['&Game', ['&New Game',]],
+                ['&Game', ['&New::new_game_k','Save::save_game_k']],
                 ['FEN', ['Paste']],
                 ['&Engine', ['Go', 'Set Threads', 'Set Hash', 'Set Depth',
                              'Set Movetime', 'Get Settings', 'Hide/Unhide Search Info']],
