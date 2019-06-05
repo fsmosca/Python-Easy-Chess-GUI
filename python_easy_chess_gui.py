@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.43'
+APP_VERSION = 'v0.44'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -754,6 +754,7 @@ class EasyChessGui():
         self.window.FindElement('_enginefn_').Update(values=self.engine_list)
         
         is_hide_engine_analysis = True
+        is_user_resign = False
         
         # Game loop
         while not board.is_game_over(claim_draw=True):
@@ -765,10 +766,6 @@ class EasyChessGui():
                 self.window.FindElement('_gamestatus_').Update('Mode: Play, press Engine->Go')
                 while True:
                     button, value = self.window.Read(timeout=100)
-                    
-                    if button in (None, 'Exit'):
-                        is_exit_app = True
-                        break
                     
                     if button in (None, 'New::new_game_k'):
                         is_new_game = True
@@ -839,6 +836,16 @@ class EasyChessGui():
                         is_engine_ready = True
                         break
                     
+                    if button is None:
+                        logging.info('Quit app X is pressed.')
+                        is_exit_app = True
+                        break
+                    
+                    if button in (None, 'Exit'):
+                        logging.info('Quit app Exit is pressed.')
+                        is_exit_app = True
+                        break
+                    
                 if is_exit_app or is_exit_game or is_new_game:
                     break
     
@@ -851,12 +858,18 @@ class EasyChessGui():
                     if not is_human_stm:
                         break
                     
-                    if button in (None, 'Hide/Unhide Search Info'):
+                    if button == 'Hide/Unhide Search Info':
                         # Toggle Hide/Unhide
                         is_hide_engine_analysis = False if is_hide_engine_analysis else True
+                        continue
+                        
+                    if button is None:
+                        logging.info('Quit app X is pressed.')
+                        is_exit_app = True
+                        break
                     
                     if button in (None, 'Exit'):
-                        logging.info('Exit app')
+                        logging.info('Quit app Exit is pressed.')
                         is_exit_app = True
                         break
                     
@@ -885,7 +898,12 @@ class EasyChessGui():
                         logging.info('Saving game manually')
                         with open(self.pecg_game_fn, mode = 'a+') as f:
                             f.write('{}\n\n'.format(self.game))                        
-                        break                    
+                        break
+                    
+                    if button in (None, 'Resign::resign_game_k'):
+                        logging.info('User resigns')
+                        is_user_resign = True
+                        break
 
                     if button in (None, 'Neutral'):
                         is_exit_game = True
@@ -1057,7 +1075,7 @@ class EasyChessGui():
                                 button_square.Update(button_color=('white', color))
                                 continue
                     
-                if is_new_game or is_exit_game or is_exit_app:
+                if is_new_game or is_exit_game or is_exit_app or is_user_resign:
                     break
 
             # Else if side to move is not human
@@ -1158,22 +1176,21 @@ class EasyChessGui():
 
         # Auto-save game
         logging.info('Saving game automatically')
-        self.game.headers['Result'] = board.result(claim_draw = True)
+        if is_user_resign:
+            self.game.headers['Result'] = '0-1' if self.is_user_white else '1-0'
+            self.game.headers['Termination'] = '{} resigns'.format(
+                    'white' if self.is_user_white else 'black')
+        else:            
+            self.game.headers['Result'] = board.result(claim_draw = True)
         self.save_game()
 
         if is_exit_app:
+            self.window.Close()
             sys.exit(0)
-
-        if is_exit_game:
-            return False
-
-        if not is_new_game:
-            result = board.result(claim_draw=True)
-            sg.Popup('Game over!\n\nResult is {}\nThank you for playing'.format(result), title=BOX_TITLE)
-
+            
         self.clear_elements()
 
-        return is_new_game
+        return False if is_exit_game else is_new_game
 
     def save_game(self):
         """ Save game in append mode """
@@ -1301,7 +1318,7 @@ class EasyChessGui():
         menu_def_play = [
                 ['&File', ['E&xit']],
                 ['&Mode', ['Neutral', '!Play', '!Analysis']],
-                ['&Game', ['&New::new_game_k','Save::save_game_k']],
+                ['&Game', ['&New::new_game_k','Save::save_game_k', 'Resign::resign_game_k']],
                 ['FEN', ['Paste']],
                 ['&Engine', ['Go', 'Set Threads', 'Set Hash', 'Set Depth',
                              'Set Movetime', 'Get Settings', 'Hide/Unhide Search Info']],
@@ -1401,6 +1418,7 @@ class EasyChessGui():
             
             # Menu->File->Exit
             if button in (None, 'Exit'):
+                logging.info('Quit app from main loop, Exit is pressed.')
                 break
             
             # Engine settings
