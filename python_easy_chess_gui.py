@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.46'
+APP_VERSION = 'v0.47'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -1192,9 +1192,12 @@ class EasyChessGui():
             self.game.headers['Result'] = '0-1' if self.is_user_white else '1-0'
             self.game.headers['Termination'] = '{} resigns'.format(
                     'white' if self.is_user_white else 'black')
-        else:            
+        else:           
             self.game.headers['Result'] = board.result(claim_draw = True)
         self.save_game()
+        
+        if board.is_game_over(claim_draw=True):
+            sg.Popup('Game is over.', title=BOX_TITLE)
 
         if is_exit_app:
             self.window.Close()
