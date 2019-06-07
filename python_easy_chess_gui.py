@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.47'
+APP_VERSION = 'v0.48'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -183,6 +183,30 @@ INIT_PGN_TAG = {
 }
 
 
+# (1) Main menu, mode: Neutral
+menu_def = [
+        ['&File', ['E&xit']],
+        ['&Mode', ['!Neutral', 'Play', '!Analysis']],
+        ['&Board', ['Flip']],
+        ['&Engine', ['Set Threads', 'Set Hash', 'Set Depth',
+                     'Set Movetime', 'Get Settings']],
+        ['&Help', ['About']],
+]
+
+# (2) Play menu, mode: Play
+menu_def_play = [
+        ['&File', ['E&xit']],
+        ['&Mode', ['Neutral', '!Play', '!Analysis']],
+        ['&Game', ['&New::new_game_k','Save::save_game_k',
+                   'Resign::resign_game_k']],
+        ['FEN', ['Paste']],
+        ['&Engine', ['Go', 'Set Threads', 'Set Hash', 'Set Depth',
+                     'Set Movetime', 'Get Settings',
+                     'Hide/Unhide Search Info']],
+        ['&Help', ['About']],
+]
+
+
 def get_time_mm_ss_ms(time_ms):
     """ Returns time in min:sec:millisec given time in millisec """
     s, ms = divmod(int(time_ms), 1000)
@@ -309,14 +333,13 @@ class EasyChessGui():
         self.engine_file = None
         self.white_layout = None
         self.black_layout = None
-        self.white_layout_play = None
-        self.black_layout_play = None
         self.window = None        
         self.pecg_game_fn = 'pecg_game.pgn'
         self.init_game()        
         self.fen = None
         self.psg_board = None
         self.engine_list = self.get_engines()
+        self.menu_elem = None
         
     def update_text_box(self, msg, is_hide):
         """ Update text elements """
@@ -1318,30 +1341,7 @@ class EasyChessGui():
     def build_main_layout(self):
         """
         Build the main part of GUI, board is oriented with white at the bottom.
-        """
-
-        # (1) Main menu, mode: Neutral
-        menu_def = [['&File', ['E&xit']],
-                    ['&Mode', ['!Neutral', 'Play', '!Analysis']],
-                    ['&Board', ['Flip']],
-                    ['&Engine', ['Set Threads', 'Set Hash', 'Set Depth',
-                                 'Set Movetime', 'Get Settings']],
-                    ['&Help', ['About']],
-        ]
-        
-        # (2) Play menu, mode: Play
-        menu_def_play = [
-                ['&File', ['E&xit']],
-                ['&Mode', ['Neutral', '!Play', '!Analysis']],
-                ['&Game', ['&New::new_game_k','Save::save_game_k',
-                           'Resign::resign_game_k']],
-                ['FEN', ['Paste']],
-                ['&Engine', ['Go', 'Set Threads', 'Set Hash', 'Set Depth',
-                             'Set Movetime', 'Get Settings',
-                             'Hide/Unhide Search Info']],
-                ['&Help', ['About']],
-        ]
-        
+        """        
         sg.ChangeLookAndFeel('Reddit')
         self.psg_board = copy.deepcopy(initial_board)
         
@@ -1376,27 +1376,17 @@ class EasyChessGui():
     
         white_board_tab = [[sg.Column(white_board_layout)]]
         black_board_tab = [[sg.Column(black_board_layout)]]
+        
+        self.menu_elem = sg.Menu(menu_def, tearoff=False)
     
         # White board layout, mode: Neutral
-        white_layout = [[sg.Menu(menu_def, tearoff=False)],
+        white_layout = [[self.menu_elem],
                   [sg.TabGroup([[sg.Tab('Board', white_board_tab)]], title_color='red'),
                    sg.Column(board_controls)],
                   ]
                   
         # Black board layout, mode: Neutral
-        black_layout = [[sg.Menu(menu_def, tearoff=False)],
-                  [sg.TabGroup([[sg.Tab('Board', black_board_tab)]], title_color='red'),
-                   sg.Column(board_controls)],
-                  ]
-                  
-        # White board layout, mode: Play
-        white_layout_play = [[sg.Menu(menu_def_play, tearoff=False)],
-                  [sg.TabGroup([[sg.Tab('Board', white_board_tab)]], title_color='red'),
-                   sg.Column(board_controls)],
-                  ]
-                  
-        # Black board layout, mode: Play
-        black_layout_play = [[sg.Menu(menu_def_play, tearoff=False)],
+        black_layout = [[self.menu_elem],
                   [sg.TabGroup([[sg.Tab('Board', black_board_tab)]], title_color='red'),
                    sg.Column(board_controls)],
                   ]
@@ -1409,9 +1399,6 @@ class EasyChessGui():
         
         self.white_layout = white_layout
         self.black_layout = black_layout
-        
-        self.white_layout_play = white_layout_play
-        self.black_layout_play = black_layout_play
     
     def main_loop(self):
         """ 
@@ -1503,16 +1490,10 @@ class EasyChessGui():
                 continue
             
             if button == 'Play':
-                window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
-                    self.white_layout_play if self.is_user_white else self.black_layout_play,
-                    default_button_element_size=(12, 1),
-                    auto_size_buttons=False,
-                    icon='')
-                
-                self.window.Close()
+                # Change menu from Neutral to Play
+                self.menu_elem.Update(menu_def_play)
                 self.psg_board = copy.deepcopy(initial_board)
                 board = chess.Board()
-                self.window = window1
                 
                 while True:
                     button, value = self.window.Read(timeout=100)
@@ -1532,19 +1513,12 @@ class EasyChessGui():
                     
                     if not start_new_game:
                         break
-                    
-                window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
-                    self.white_layout if self.is_user_white else self.black_layout,
-                    default_button_element_size=(12, 1),
-                    auto_size_buttons=False,
-                    icon='')
                 
-                # Restore main layout
-                self.window.Close()
+                # Restore Neutral menu
+                self.menu_elem.Update(menu_def)
                 self.psg_board = copy.deepcopy(initial_board)
                 board = chess.Board()
                 self.set_new_game()
-                self.window = window1
                 continue
             
         self.window.Close()
