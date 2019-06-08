@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.48'
+APP_VERSION = 'v0.49'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -139,11 +139,11 @@ You should be in Play mode
 1. Mode->Play
 2. FEN->Paste
 
-// To use other uci engine
-1. Copy exe file in the engines directory
+// To use other uci engine                        // To resign a game
+1. Copy exe file in the engines directory   1. Game->Resign
 
-// To show engine search info
-1. Engine->Hide/Unhide Search Info
+// To show engine search info                   // To adjudicate a game
+1. Engine->Hide/Unhide Search Info         1. Game->User Wins or Game->User draws
 """
 
 
@@ -198,7 +198,9 @@ menu_def_play = [
         ['&File', ['E&xit']],
         ['&Mode', ['Neutral', '!Play', '!Analysis']],
         ['&Game', ['&New::new_game_k','Save::save_game_k',
-                   'Resign::resign_game_k']],
+                   'Resign::resign_game_k',
+                   'User Wins::user_wins_k',
+                   'User Draws::user_draws_k']],
         ['FEN', ['Paste']],
         ['&Engine', ['Go', 'Set Threads', 'Set Hash', 'Set Depth',
                      'Set Movetime', 'Get Settings',
@@ -788,7 +790,9 @@ class EasyChessGui():
         self.window.FindElement('_enginefn_').Update(values=self.engine_list)
         
         is_hide_engine_analysis = True
-        is_user_resign = False
+        is_user_resigns = False
+        is_user_wins = False
+        is_user_draws = False
         
         # Game loop
         while not board.is_game_over(claim_draw=True):
@@ -941,7 +945,25 @@ class EasyChessGui():
                     
                     if button == 'Resign::resign_game_k':
                         logging.info('User resigns')
-                        is_user_resign = True
+                        
+                        # Verify resign
+                        reply = sg.Popup('Do you really want to resign?',
+                                         button_type=sg.POPUP_BUTTONS_YES_NO,
+                                         title=BOX_TITLE)
+                        if reply == 'Yes':
+                            is_user_resigns = True
+                            break
+                        else:
+                            continue
+                    
+                    if button == 'User Wins::user_wins_k':
+                        logging.info('User wins by adjudication')
+                        is_user_wins = True
+                        break
+                    
+                    if button == 'User Draws::user_draws_k':
+                        logging.info('User draws by adjudication')
+                        is_user_draws = True
                         break
 
                     if button == 'Neutral':
@@ -1114,7 +1136,8 @@ class EasyChessGui():
                                 button_square.Update(button_color=('white', color))
                                 continue
                     
-                if is_new_game or is_exit_game or is_exit_app or is_user_resign:
+                if is_new_game or is_exit_game or is_exit_app or \
+                    is_user_resigns or is_user_wins or is_user_draws:
                     break
 
             # Else if side to move is not human
@@ -1211,11 +1234,17 @@ class EasyChessGui():
 
         # Auto-save game
         logging.info('Saving game automatically')
-        if is_user_resign:
+        if is_user_resigns:
             self.game.headers['Result'] = '0-1' if self.is_user_white else '1-0'
             self.game.headers['Termination'] = '{} resigns'.format(
                     'white' if self.is_user_white else 'black')
-        else:           
+        elif is_user_wins:
+            self.game.headers['Result'] = '1-0' if self.is_user_white else '0-1'
+            self.game.headers['Termination'] = 'Adjudication'
+        elif is_user_draws:
+            self.game.headers['Result'] = '1/2-1/2'
+            self.game.headers['Termination'] = 'Adjudication'
+        else:
             self.game.headers['Result'] = board.result(claim_draw = True)
         self.save_game()
         
