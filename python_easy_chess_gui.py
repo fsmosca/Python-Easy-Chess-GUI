@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.51'
+APP_VERSION = 'v0.52'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -183,8 +183,8 @@ INIT_PGN_TAG = {
 }
 
 
-# (1) Main menu, mode: Neutral
-menu_def = [
+# (1) Mode: Neutral
+menu_def_neutral = [
         ['&File', ['E&xit']],
         ['&Mode', ['!Neutral', 'Play', '!Analysis']],
         ['&Board', ['Flip']],
@@ -193,7 +193,7 @@ menu_def = [
         ['&Help', ['About']],
 ]
 
-# (2) Play menu, mode: Play
+# (2) Mode: Play, info: hide
 menu_def_play = [
         ['&File', ['E&xit']],
         ['&Mode', ['Neutral', '!Play', '!Analysis']],
@@ -204,7 +204,7 @@ menu_def_play = [
         ['FEN', ['Paste']],
         ['&Engine', ['Go', 'Set Threads', 'Set Hash', 'Set Depth',
                      'Set Movetime', 'Get Settings',
-                     'Hide/Unhide Search Info']],
+                     'Unhide Search Info']],
         ['&Help', ['About']],
 ]
 
@@ -342,6 +342,30 @@ class EasyChessGui():
         self.psg_board = None
         self.engine_list = self.get_engines()
         self.menu_elem = None
+
+    def update_play_menu(self, menu, hide):
+        """ Change menu entry, Hide/Unhide Search Info """
+        new_menu = []
+        new_entry = 'Unhide Search Info' if hide else 'Hide Search Info'
+        hide = not hide
+
+        # Modify menu and save it to new menu
+        for e in menu:
+            # Find the engine menu and modify its sub-menu
+            if e[0] == '&Engine':
+                sub_menu = e[1]
+
+                # Update the last entry of sub_menu, since the entry that we
+                # are going to update is found last in the engine sub-menu.
+                sub_menu[len(sub_menu)-1] = new_entry
+
+                # Rebuild the engine menu
+                new_menu.append([e[0], sub_menu])
+            else:
+                # Just append the other menu that is not affected
+                new_menu.append(e)
+
+        return new_menu, hide
         
     def update_engine_selection(self, engine_filename):
         """ """
@@ -797,7 +821,7 @@ class EasyChessGui():
         move_cnt = 0        
         self.window.FindElement('_enginefn_').Update(values=self.engine_list)
         
-        is_hide_engine_analysis = True
+        is_hide_esi = True  # esi = engine search info
         is_user_resigns = False
         is_user_wins = False
         is_user_draws = False
@@ -897,10 +921,11 @@ class EasyChessGui():
                     if not is_human_stm:
                         break
                     
-                    if button == 'Hide/Unhide Search Info':
-                        # Toggle Hide/Unhide
-                        is_hide_engine_analysis = False \
-                            if is_hide_engine_analysis else True
+                    # Toggle hide/unhide search info
+                    if button == 'Hide Search Info' or button == 'Unhide Search Info':
+                        new_menu, is_hide_esi = self.update_play_menu(
+                                menu_def_play, is_hide_esi)
+                        self.menu_elem.Update(new_menu)
                         continue
                         
                     if button is None:
@@ -1141,14 +1166,16 @@ class EasyChessGui():
                 while True:
                     button, value = self.window.Read(timeout=10)
                     
-                    if button == 'Hide/Unhide Search Info':
-                        is_hide_engine_analysis = False \
-                            if is_hide_engine_analysis else True
-                    
                     # Exit app while engine is thinking                    
                     if button == 'Exit':
                         logging.info('Exit app while engine is searching')
                         sys.exit(0)
+                    
+                    if button == 'Hide Search Info' or button == 'Unhide Search Info':
+                        new_menu, is_hide_esi = self.update_play_menu(
+                                menu_def_play, is_hide_esi)
+                        self.menu_elem.Update(new_menu)
+                        continue
                         
                     # Get the engine search info and display it in GUI text boxes                    
                     try:
@@ -1157,7 +1184,7 @@ class EasyChessGui():
                         continue
 
                     msg_str = str(msg)
-                    best_move = self.update_text_box(msg, is_hide_engine_analysis)
+                    best_move = self.update_text_box(msg, is_hide_esi)
                     if 'bestmove' in msg_str:
                         break
                     
@@ -1391,7 +1418,7 @@ class EasyChessGui():
         white_board_tab = [[sg.Column(white_board_layout)]]
         black_board_tab = [[sg.Column(black_board_layout)]]
         
-        self.menu_elem = sg.Menu(menu_def, tearoff=False)
+        self.menu_elem = sg.Menu(menu_def_neutral, tearoff=False)
     
         # White board layout, mode: Neutral
         white_layout = [[self.menu_elem],
@@ -1518,7 +1545,7 @@ class EasyChessGui():
                         break
                 
                 # Restore Neutral menu
-                self.menu_elem.Update(menu_def)
+                self.menu_elem.Update(menu_def_neutral)
                 self.psg_board = copy.deepcopy(initial_board)
                 board = chess.Board()
                 self.set_new_game()
