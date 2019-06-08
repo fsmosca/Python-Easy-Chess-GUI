@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.50'
+APP_VERSION = 'v0.51'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -342,6 +342,14 @@ class EasyChessGui():
         self.psg_board = None
         self.engine_list = self.get_engines()
         self.menu_elem = None
+        
+    def update_engine_selection(self, engine_filename):
+        """ """
+        self.engine_file = engine_filename
+        engine_id_name = self.get_engine_id_name()
+        self.update_labels_and_game_tags(human='Human',
+                                         engine_id=engine_id_name)
+        self.update_engine_list()
         
     def update_text_box(self, msg, is_hide):
         """ Update text elements """
@@ -815,11 +823,7 @@ class EasyChessGui():
                         break
                     
                     if button == '_enginefn_':
-                        self.engine_file = value['_enginefn_']
-                        engine_id_name = self.get_engine_id_name()
-                        self.update_labels_and_game_tags(human='Human',
-                                                         engine_id=engine_id_name)
-                        self.update_engine_list()
+                        self.update_engine_selection(value['_enginefn_'])
                     
                     if button == 'Set Depth':
                         self.set_depth_limit()
@@ -965,11 +969,7 @@ class EasyChessGui():
                         break
                     
                     if button == '_enginefn_':
-                        self.engine_file = value['_enginefn_']
-                        engine_id_name = self.get_engine_id_name()
-                        self.update_labels_and_game_tags(human='Human',
-                                                         engine_id=engine_id_name)
-                        self.update_engine_list()
+                        self.update_engine_selection(value['_enginefn_'])
                     
                     if button == 'About':
                         sg.Popup(HELP_MSG, title=BOX_TITLE)
@@ -1376,16 +1376,16 @@ class EasyChessGui():
                      key='_enginefn_', enable_events=True)],
         
             [sg.Text('MOVE LIST', font=('Consolas', 10))],            
-            [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 12),
+            [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(41, 12),
                     font=('Consolas', 10), key='_movelist_', disabled=True)],
 
             [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10), size=(28, 1))],
             [sg.Text('', key='info_score_k', size=(8, 1), background_color = bc),
-             sg.Text('', key='info_pv_k', size=(27, 1), background_color = bc)],
+             sg.Text('', key='info_pv_k', size=(28, 1), background_color = bc)],
              
             [sg.Text('', key='info_depth_k', size=(8, 1), background_color = bc),
              sg.Text('', key='info_time_k', size=(12, 1), background_color = bc),
-             sg.Text('', key='info_nps_k', size=(13, 1), background_color = bc)],           
+             sg.Text('', key='info_nps_k', size=(14, 1), background_color = bc)],           
         ]
     
         white_board_tab = [[sg.Column(white_board_layout)]]
@@ -1444,11 +1444,7 @@ class EasyChessGui():
                 break
             
             if button == '_enginefn_':
-                self.engine_file = value['_enginefn_']
-                engine_id_name = self.get_engine_id_name()
-                self.update_labels_and_game_tags(human='Human',
-                                                 engine_id=engine_id_name)
-                self.update_engine_list()
+                self.update_engine_selection(value['_enginefn_'])
             
             if button == 'Set Depth':
                 self.set_depth_limit()
