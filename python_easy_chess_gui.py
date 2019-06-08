@@ -51,7 +51,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.49'
+APP_VERSION = 'v0.50'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -814,19 +814,12 @@ class EasyChessGui():
                         is_exit_game = True
                         break
                     
-                    if button == 'select_engine_k':
-                        try:
-                            self.engine_file = value['_enginefn_']
-                            engine_id_name = self.get_engine_id_name()
-                            self.update_labels_and_game_tags(human='Human',
-                                                    engine_id=engine_id_name)
-                            self.update_engine_list()
-                        except:
-                            logging.warning('Select the engine and press Select')
-                            sg.Popup(
-                            'Select the engine from DropDown and press Select button',
-                            title=BOX_TITLE)
-                        continue
+                    if button == '_enginefn_':
+                        self.engine_file = value['_enginefn_']
+                        engine_id_name = self.get_engine_id_name()
+                        self.update_labels_and_game_tags(human='Human',
+                                                         engine_id=engine_id_name)
+                        self.update_engine_list()
                     
                     if button == 'Set Depth':
                         self.set_depth_limit()
@@ -971,19 +964,12 @@ class EasyChessGui():
                         self.clear_elements()
                         break
                     
-                    if button == 'select_engine_k':
-                        try:
-                            self.engine_file = value['_enginefn_']
-                            engine_id_name = self.get_engine_id_name()
-                            self.update_labels_and_game_tags(human='Human',
-                                                    engine_id=engine_id_name)
-                            self.update_engine_list()
-                        except:
-                            logging.warning('Select the engine and press Select')
-                            sg.Popup(
-                            'Select the engine from DropDown and press Select button',
-                            title=BOX_TITLE)
-                        break
+                    if button == '_enginefn_':
+                        self.engine_file = value['_enginefn_']
+                        engine_id_name = self.get_engine_id_name()
+                        self.update_labels_and_game_tags(human='Human',
+                                                         engine_id=engine_id_name)
+                        self.update_engine_list()
                     
                     if button == 'About':
                         sg.Popup(HELP_MSG, title=BOX_TITLE)
@@ -1386,9 +1372,8 @@ class EasyChessGui():
                     font=('Consolas', 10), key='_Black_', size=(35, 1), relief='sunken')],
         
             [sg.Text('Engine', size=(6, 1), font=('Consolas', 10)),
-             sg.Drop(self.engine_list, size=(22, 1), font=('Consolas', 10), 
-                     key='_enginefn_'),
-             sg.OK('Select', size=(6,1), key='select_engine_k')],
+             sg.Drop(self.engine_list, size=(32, 1), font=('Consolas', 10), 
+                     key='_enginefn_', enable_events=True)],
         
             [sg.Text('MOVE LIST', font=('Consolas', 10))],            
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(40, 12),
@@ -1458,19 +1443,12 @@ class EasyChessGui():
                 logging.info('Quit app from main loop, X is pressed.')
                 break
             
-            # Engine settings
-            if button == 'select_engine_k':
-                try:
-                    self.engine_file = value['_enginefn_']
-                    engine_id_name = self.get_engine_id_name()
-                    self.update_labels_and_game_tags(human='Human',
-                                                     engine_id=engine_id_name)
-                    self.update_engine_list()
-                except:
-                    logging.warning('Select the engine and press Select')
-                    sg.Popup('Select the engine from DropDown and press Select button',
-                             title=BOX_TITLE)
-                continue
+            if button == '_enginefn_':
+                self.engine_file = value['_enginefn_']
+                engine_id_name = self.get_engine_id_name()
+                self.update_labels_and_game_tags(human='Human',
+                                                 engine_id=engine_id_name)
+                self.update_engine_list()
             
             if button == 'Set Depth':
                 self.set_depth_limit()
