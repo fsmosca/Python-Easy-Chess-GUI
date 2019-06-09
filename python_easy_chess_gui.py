@@ -52,7 +52,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.54'
+APP_VERSION = 'v0.55'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -117,40 +117,47 @@ LIGHT_SQ_MOVE_COLOR = '#E8E18E'
 
 
 HELP_MSG = """
-// To play a game
+(1) To play a game
 You should be in Play mode.
 1. Mode->Play
 2. Make move on the board
 3. Game->New if you want a new game
 
-// To play as black
+(2) To play as black
 You should be in Neutral mode
 1. Board->Flip
 2. Mode->Play
 3. Engine->Go
-If you are already in Play mode, go back to Neutral mode
-via Mode->Neutral  then flip the board via Board->Flip
+If you are already in Play mode, go back to 
+Neutral mode via Mode->Neutral then flip the
+board via Board->Flip
 
-// To flip board
+(3) To resign a game
+1. Game->Resign
+
+(4) To adjudicate a game
+1. Game->User Wins or Game->User draws
+
+(5)To flip board
 You should be in Neutral mode
 1. Board->Flip
   
-// To paste FEN
+(6) To paste FEN
 You should be in Play mode
 1. Mode->Play
 2. FEN->Paste
 
-// To use other uci engine                        // To resign a game
-1. Copy exe file in the engines directory   1. Game->Resign
+(7) To use other uci engine                        
+1. Copy exe file in the engines directory   
 
-// To show engine search info                   // To adjudicate a game
-1. Engine->Unhide Search Info                1. Game->User Wins or Game->User draws
+(8) To show engine search info                   
+1. Engine->Unhide Search Info                
 
-// To change engine
+(9) To change engine
 1. You should be in Neutral mode
 2. Engine->Set Engine
-If you are already in Play mode, change
-to Neutral mode via Mode->Neutral
+If you are already in Play mode, change to
+Neutral mode via Mode->Neutral
 """
 
 
@@ -833,7 +840,7 @@ class EasyChessGui():
                         self.get_engine_settings(engine_id_name)
                         
                     if button == 'About':
-                        sg.Popup(HELP_MSG, title=BOX_TITLE)
+                        sg.PopupScrolled(HELP_MSG, title=BOX_TITLE)
                         
                     if button == 'Paste':
                         try:
@@ -843,7 +850,7 @@ class EasyChessGui():
                         except:
                             logging.info('Error in parsing FEN from clipboard.')
                             continue
-                            
+
                         self.fen_to_psg_board()
                         
                         # If user is black and side to move based from pasted FEN is black
@@ -956,7 +963,7 @@ class EasyChessGui():
                         break
                     
                     if button == 'About':
-                        sg.Popup(HELP_MSG, title=BOX_TITLE)
+                        sg.PopupScrolled(HELP_MSG, title=BOX_TITLE)
                         break
                     
                     if button == 'Go':
@@ -1535,7 +1542,7 @@ class EasyChessGui():
             
             # Menu->Help->Help
             if button == 'About':
-                sg.Popup(HELP_MSG, title=BOX_TITLE)
+                sg.PopupScrolled(HELP_MSG, title=BOX_TITLE)
                 continue
             
             if button == 'Play':
