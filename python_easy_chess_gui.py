@@ -38,6 +38,7 @@ import threading
 import queue
 import copy
 import time
+import random
 from datetime import datetime
 import pyperclip
 import chess
@@ -51,7 +52,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.52'
+APP_VERSION = 'v0.53'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -143,7 +144,13 @@ You should be in Play mode
 1. Copy exe file in the engines directory   1. Game->Resign
 
 // To show engine search info                   // To adjudicate a game
-1. Engine->Hide/Unhide Search Info         1. Game->User Wins or Game->User draws
+1. Engine->Unhide Search Info                1. Game->User Wins or Game->User draws
+
+// To change engine
+1. You should be in Neutral mode
+2. Engine->Set Engine
+If you are already in Play mode, change
+to Neutral mode via Mode->Neutral
 """
 
 
@@ -188,7 +195,7 @@ menu_def_neutral = [
         ['&File', ['E&xit']],
         ['&Mode', ['!Neutral', 'Play', '!Analysis']],
         ['&Board', ['Flip']],
-        ['&Engine', ['Set Threads', 'Set Hash', 'Set Depth',
+        ['&Engine', ['Set Engine', 'Set Depth',
                      'Set Movetime', 'Get Settings']],
         ['&Help', ['About']],
 ]
@@ -202,7 +209,7 @@ menu_def_play = [
                    'User Wins::user_wins_k',
                    'User Draws::user_draws_k']],
         ['FEN', ['Paste']],
-        ['&Engine', ['Go', 'Set Threads', 'Set Hash', 'Set Depth',
+        ['&Engine', ['Go', 'Set Depth',
                      'Set Movetime', 'Get Settings',
                      'Unhide Search Info']],
         ['&Help', ['About']],
@@ -346,13 +353,13 @@ class EasyChessGui():
     def update_play_menu(self, menu, hide):
         """ Change menu entry, Hide/Unhide Search Info """
         new_menu = []
-        new_entry = 'Unhide Search Info' if hide else 'Hide Search Info'
+        new_entry = 'Hide Search Info' if hide else 'Unhide Search Info'
         hide = not hide
 
         # Modify menu and save it to new menu
         for e in menu:
             # Find the engine menu and modify its sub-menu
-            if e[0] == '&Engine':
+            if e[0] == 'Engine':
                 sub_menu = e[1]
 
                 # Update the last entry of sub_menu, since the entry that we
@@ -763,36 +770,6 @@ class EasyChessGui():
             user_movetime = self.max_time
 
         self.max_time = min(MAX_TIME, max(MIN_TIME, user_movetime))
-        
-    def set_threads(self):
-        """ Update engine threads """
-        old_value = self.threads
-
-        user_input = sg.PopupGetText(
-            'Current threads is {}\n\nInput threads [{} to {}]'.format(
-            self.threads, MIN_THREADS, MAX_THREADS), title=BOX_TITLE)
-
-        try:
-            user_input = int(user_input)
-        except:
-            user_input = old_value
-
-        self.threads = min(MAX_THREADS, max(MIN_THREADS, user_input))
-
-    def set_hash(self):
-        """ Update engine hash size in mb """
-        old_value = self.hash
-        
-        user_input = sg.PopupGetText(
-            'Current hash is {} mb\n\nInput hash size in mb [{} to {}]'.format(
-            self.hash, MIN_HASH, MAX_HASH), title=BOX_TITLE)
-        
-        try:
-            user_input = int(user_input)
-        except:
-            user_input = old_value
-
-        self.hash = min(MAX_HASH, max(MIN_HASH, user_input))
 
     def get_engine_settings(self, engine_id_name):
         """ Display engine settings """
@@ -819,7 +796,7 @@ class EasyChessGui():
         
         # For saving game
         move_cnt = 0        
-        self.window.FindElement('_enginefn_').Update(values=self.engine_list)
+#        self.window.FindElement('_enginefn_').Update(values=self.engine_list)
         
         is_hide_esi = True  # esi = engine search info
         is_user_resigns = False
@@ -846,20 +823,14 @@ class EasyChessGui():
                         is_exit_game = True
                         break
                     
-                    if button == '_enginefn_':
-                        self.update_engine_selection(value['_enginefn_'])
+#                    if button == '_enginefn_':
+#                        self.update_engine_selection(value['_enginefn_'])
                     
                     if button == 'Set Depth':
                         self.set_depth_limit()
                     
                     if button == 'Set Movetime':
                         self.set_time_limit()
-                    
-                    if button == 'Set Threads':
-                        self.set_threads()
-                    
-                    if button == 'Set Hash':
-                        self.set_hash()
                     
                     if button == 'Get Settings':
                         self.get_engine_settings(engine_id_name)
@@ -946,14 +917,6 @@ class EasyChessGui():
                         self.set_time_limit()
                         break
                     
-                    if button == 'Set Threads':
-                        self.set_threads()
-                        break
-                    
-                    if button == 'Set Hash':
-                        self.set_hash()
-                        break
-                    
                     if button == 'New::new_game_k':
                         is_new_game = True
                         self.clear_elements()
@@ -993,8 +956,8 @@ class EasyChessGui():
                         self.clear_elements()
                         break
                     
-                    if button == '_enginefn_':
-                        self.update_engine_selection(value['_enginefn_'])
+#                    if button == '_enginefn_':
+#                        self.update_engine_selection(value['_enginefn_'])
                     
                     if button == 'About':
                         sg.Popup(HELP_MSG, title=BOX_TITLE)
@@ -1398,9 +1361,9 @@ class EasyChessGui():
             [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.Text('Computer',
                     font=('Consolas', 10), key='_Black_', size=(35, 1), relief='sunken')],
         
-            [sg.Text('Engine', size=(6, 1), font=('Consolas', 10)),
-             sg.Drop(self.engine_list, size=(32, 1), font=('Consolas', 10), 
-                     key='_enginefn_', enable_events=True)],
+#            [sg.Text('Engine', size=(6, 1), font=('Consolas', 10)),
+#             sg.Drop(self.engine_list, size=(32, 1), font=('Consolas', 10), 
+#                     key='_enginefn_', enable_events=True)],
         
             [sg.Text('MOVE LIST', font=('Consolas', 10))],            
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(41, 12),
@@ -1469,24 +1432,89 @@ class EasyChessGui():
             if button is None:
                 logging.info('Quit app from main loop, X is pressed.')
                 break
-            
-            if button == '_enginefn_':
-                self.update_engine_selection(value['_enginefn_'])
+
+            if button == 'Set Engine':
+                # Hide the main window and build a new window for setting engine options.
+                # Unhide the main window after engine setting is completed.
+                
+                # Backup current engine info, in case user cancels the engine selection,
+                # we can just restore to current values.
+                current_engine_list = self.engine_list
+                current_engine_file = self.engine_file
+                
+                logging.info('Backup current engine list and file.')
+                logging.info('Current engine list: {}'.format(current_engine_list))
+                logging.info('Current engine file: {}'.format(current_engine_file))
+                
+                # Vary Combo box or sg.Drop key, to avoid duplicate key error.
+                # Tkinter does not like PySimpleGUI v3.37 so far.
+                # ecbk = engine_combo_box_key
+                ecbk = str(random.randint(0,1000000))
+
+                layout = [
+                        [sg.T('Engine file', size=(12,1)),
+                         sg.Drop(self.engine_list, size=(32, 1), key=ecbk,
+                                 enable_events=True)],
+                        [sg.T('Engine name', size=(12,1)), sg.T(
+                                self.get_engine_id_name(), key='engine_name_k')],
+                        [sg.T('Threads', size=(12, 1)), 
+                         sg.Spin([t for t in range(1, 9)], initial_value=self.threads,
+                                  size=(8, 1), key='threads_k')],
+                        [sg.T('Hash', size=(12, 1)),
+                         sg.Spin([t for t in range(4, 256, 4)], initial_value=self.hash,
+                                  size=(8, 1), key='hash_k')],
+                        [sg.OK(), sg.Cancel()]
+                ]
+                        
+                # Hide the main window temporarily and build a new one.
+                self.window.Hide()
+                w = sg.Window('Engine Settings', layout)
+                
+                while True:
+                    e, v = w.Read(timeout=10)
+                    
+                    if e is None or e == 'Cancel':
+                        # Restore current engine list and file
+                        logging.info('User cancels engine selection. ' +
+                                     'We restore the current engine data.')
+                        self.engine_list = current_engine_list
+                        self.engine_file = current_engine_file
+                        logging.info('Current engine data were restored.')
+                        logging.info('current engine list: {}'.format(self.engine_list))
+                        logging.info('current engine file: {}'.format(self.engine_file))
+                        break
+                    
+                    # If user changes the engine file via the combo or drop box
+                    if e == ecbk:
+                        self.engine_file = v[ecbk]
+                        engine_id_name = self.get_engine_id_name()
+                        w.FindElement('engine_name_k').Update(engine_id_name)
+                        self.update_engine_list()
+                        continue
+                    
+                    if e == 'OK':
+                        hash_value = int(v['hash_k'])
+                        self.hash = min(MAX_HASH, max(MIN_HASH, hash_value))
+                        
+                        threads_value = int(v['threads_k'])
+                        self.threads = min(MAX_THREADS, max(MIN_THREADS, threads_value))
+                        break
+                        
+                # Close the new window and restore/unhide the main window
+                w.Close()
+                self.window.UnHide()
+                
+                # Update the player box in main window
+                self.update_labels_and_game_tags(human='Human',
+                                        engine_id=self.get_engine_id_name())
+                continue
             
             if button == 'Set Depth':
-                self.set_depth_limit()
+                self.set_depth_limit()                
                 continue
             
             if button == 'Set Movetime':
                 self.set_time_limit()
-                continue
-            
-            if button == 'Set Threads':
-                self.set_threads()
-                continue
-            
-            if button == 'Set Hash':
-                self.set_hash()
                 continue
             
             if button == 'Get Settings':
@@ -1534,7 +1562,7 @@ class EasyChessGui():
                     
                     start_new_game = self.play_game(engine_id_name, board)
                     self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
-                    self.window.FindElement('_enginefn_').Update(values=self.engine_list)
+#                    self.window.FindElement('_enginefn_').Update(values=self.engine_list)
                     
                     self.psg_board = copy.deepcopy(initial_board)
                     self.redraw_board()
