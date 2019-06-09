@@ -52,7 +52,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.53'
+APP_VERSION = 'v0.54'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -548,6 +548,7 @@ class EasyChessGui():
             old_r = r
 
         self.psg_board = psgboard
+        self.redraw_board()
         
     def change_square_color(self, row, col):
         """ 
@@ -795,10 +796,9 @@ class EasyChessGui():
         is_engine_ready = True if is_human_stm else False
         
         # For saving game
-        move_cnt = 0        
-#        self.window.FindElement('_enginefn_').Update(values=self.engine_list)
+        move_cnt = 0
         
-        is_hide_esi = True  # esi = engine search info
+        is_hide_engine_search_info = True
         is_user_resigns = False
         is_user_wins = False
         is_user_draws = False
@@ -823,9 +823,6 @@ class EasyChessGui():
                         is_exit_game = True
                         break
                     
-#                    if button == '_enginefn_':
-#                        self.update_engine_selection(value['_enginefn_'])
-                    
                     if button == 'Set Depth':
                         self.set_depth_limit()
                     
@@ -848,7 +845,6 @@ class EasyChessGui():
                             continue
                             
                         self.fen_to_psg_board()
-                        self.redraw_board()
                         
                         # If user is black and side to move based from pasted FEN is black
                         if not self.is_user_white and not board.turn:
@@ -860,7 +856,10 @@ class EasyChessGui():
                             is_human_stm = False
                             self.window.FindElement('_gamestatus_').Update(
                                     'Mode: Play, press Engine->Go')
-
+                            
+                        # When computer is to move in the first move, don't
+                        # allow the engine to search immediately, wait for the
+                        # user to press Engine->Go menu.
                         is_engine_ready = True if is_human_stm else False
                         
                         self.game.headers['FEN'] = self.fen
@@ -894,8 +893,8 @@ class EasyChessGui():
                     
                     # Toggle hide/unhide search info
                     if button == 'Hide Search Info' or button == 'Unhide Search Info':
-                        new_menu, is_hide_esi = self.update_play_menu(
-                                menu_def_play, is_hide_esi)
+                        new_menu, is_hide_engine_search_info = self.update_play_menu(
+                                menu_def_play, is_hide_engine_search_info)
                         self.menu_elem.Update(new_menu)
                         continue
                         
@@ -956,9 +955,6 @@ class EasyChessGui():
                         self.clear_elements()
                         break
                     
-#                    if button == '_enginefn_':
-#                        self.update_engine_selection(value['_enginefn_'])
-                    
                     if button == 'About':
                         sg.Popup(HELP_MSG, title=BOX_TITLE)
                         break
@@ -995,7 +991,6 @@ class EasyChessGui():
                             continue
                             
                         self.fen_to_psg_board()
-                        self.redraw_board()
                         
                         is_human_stm = True if board.turn else False
                         is_engine_ready = True if is_human_stm else False
@@ -1135,8 +1130,8 @@ class EasyChessGui():
                         sys.exit(0)
                     
                     if button == 'Hide Search Info' or button == 'Unhide Search Info':
-                        new_menu, is_hide_esi = self.update_play_menu(
-                                menu_def_play, is_hide_esi)
+                        new_menu, is_hide_engine_search_info = self.update_play_menu(
+                                menu_def_play, is_hide_engine_search_info)
                         self.menu_elem.Update(new_menu)
                         continue
                         
@@ -1147,7 +1142,7 @@ class EasyChessGui():
                         continue
 
                     msg_str = str(msg)
-                    best_move = self.update_text_box(msg, is_hide_esi)
+                    best_move = self.update_text_box(msg, is_hide_engine_search_info)
                     if 'bestmove' in msg_str:
                         break
                     
@@ -1361,10 +1356,6 @@ class EasyChessGui():
             [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.Text('Computer',
                     font=('Consolas', 10), key='_Black_', size=(35, 1), relief='sunken')],
         
-#            [sg.Text('Engine', size=(6, 1), font=('Consolas', 10)),
-#             sg.Drop(self.engine_list, size=(32, 1), font=('Consolas', 10), 
-#                     key='_enginefn_', enable_events=True)],
-        
             [sg.Text('MOVE LIST', font=('Consolas', 10))],            
             [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(41, 12),
                     font=('Consolas', 10), key='_movelist_', disabled=True)],
@@ -1562,7 +1553,6 @@ class EasyChessGui():
                     
                     start_new_game = self.play_game(engine_id_name, board)
                     self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
-#                    self.window.FindElement('_enginefn_').Update(values=self.engine_list)
                     
                     self.psg_board = copy.deepcopy(initial_board)
                     self.redraw_board()
