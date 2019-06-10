@@ -52,7 +52,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.55'
+APP_VERSION = 'v0.56'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -236,11 +236,12 @@ class RunEngine(threading.Thread):
     move_delay_sec = 3.0
     
     def __init__(self, eng_queue, engine_path, max_depth=128, max_time=2.0,
-                 threads=1, memory_mb=16):
+                 threads=1, memory_mb=16, own_book=False):
         threading.Thread.__init__(self)
         self.engine_path = engine_path
         self.threads = threads
         self.hash = memory_mb
+        self.own_book = own_book
         self.bm = None
         self.pv = None
         self.score = None
@@ -252,6 +253,7 @@ class RunEngine(threading.Thread):
         self.eng_queue = eng_queue
         self.engine = None
         self.board = None
+        self.analysis = not self.own_book
         
     def get_board(self, board):
         """ Get board from user """
@@ -274,52 +276,63 @@ class RunEngine(threading.Thread):
             self.engine.configure({'Hash': self.hash})
         except:
             logging.info('{} does not support Hash option.'.format(self.engine_path))
-        
-        # Use wall clock time to determine max time
-        start_thinking_time = time.time()
-        is_time_check = False
-        
-        with self.engine.analysis(self.board, chess.engine.Limit(
-                time=self.max_time, depth=self.max_depth)) as analysis:
-            for info in analysis:
-                try:
-                    if 'depth' in info:
-                        self.depth = int(info['depth'])
-                        self.eng_queue.put('{} depth'.format(self.depth))
+            
+        try:
+            self.engine.configure({'OwnBook': self.own_book})
+        except:
+            logging.info('{} does not support OwnBook option.'.format(self.engine_path))
+            
+        if self.analysis:        
+            # Use wall clock time to determine max time
+            start_thinking_time = time.time()
+            is_time_check = False
+            
+            with self.engine.analysis(self.board, chess.engine.Limit(
+                    time=self.max_time, depth=self.max_depth)) as analysis:
+                for info in analysis:
+                    try:
+                        if 'depth' in info:
+                            self.depth = int(info['depth'])
+                            self.eng_queue.put('{} depth'.format(self.depth))
+                            
+                        if 'score' in info:
+                            self.score = int(info['score'].relative.score(mate_score=32000))/100
+                            self.eng_queue.put('{:+0.2f} score'.format(self.score))
+                            
                         
-                    if 'score' in info:
-                        self.score = int(info['score'].relative.score(mate_score=32000))/100
-                        self.eng_queue.put('{:+0.2f} score'.format(self.score))
-                        
-                    
-                    self.time = info['time'] if 'time' in info else \
-                            time.time() - start_thinking_time
-                    self.eng_queue.put('{} time'.format(self.time))                      
-
-                    if 'pv' in info and not ('upperbound' in info or 'lowerbound' in info):
-                        self.pv = info['pv'][0:self.pv_length]
-                        self.pv = self.board.variation_san(self.pv)
-                        self.eng_queue.put('{} pv'.format(self.pv))
-                        self.bm = info['pv'][0]
-                        
-                    if 'nps' in info:
-                        self.nps = info['nps']
-                        self.eng_queue.put('{} nps'.format(self.nps))
-                        
-                    # If we use "go infinite" we stop the search by time and depth
-                    if not is_time_check and \
-                        time.time() - start_thinking_time >= self.max_time:
-                        logging.info('Max time limit is reached.')
-                        is_time_check = True
-                        break
-                        
-                    if 'depth' in info:
-                        if int(info['depth']) >= self.max_depth:
-                            logging.info('Max depth limit is reached.')
+                        self.time = info['time'] if 'time' in info else \
+                                time.time() - start_thinking_time
+                        self.eng_queue.put('{} time'.format(self.time))                      
+    
+                        if 'pv' in info and not ('upperbound' in info or 'lowerbound' in info):
+                            self.pv = info['pv'][0:self.pv_length]
+                            self.pv = self.board.variation_san(self.pv)
+                            self.eng_queue.put('{} pv'.format(self.pv))
+                            self.bm = info['pv'][0]
+                            
+                        if 'nps' in info:
+                            self.nps = info['nps']
+                            self.eng_queue.put('{} nps'.format(self.nps))
+                            
+                        # If we use "go infinite" we stop the search by time and depth
+                        if not is_time_check and \
+                            time.time() - start_thinking_time >= self.max_time:
+                            logging.info('Max time limit is reached.')
+                            is_time_check = True
                             break
-                except:
-                    raise
-                
+                            
+                        if 'depth' in info:
+                            if int(info['depth']) >= self.max_depth:
+                                logging.info('Max depth limit is reached.')
+                                break
+                    except:
+                        logging.info('Error in parsing engine search info')
+        else:
+            start_thinking_time = time.time()
+            result = self.engine.play(self.board, chess.engine.Limit(time=self.max_time,
+                                                           depth=self.max_depth))
+            self.bm = result.move
+            
         # Apply engine move delay
         while True:
             if time.time() - start_thinking_time >= self.move_delay_sec:
@@ -345,6 +358,7 @@ class EasyChessGui():
         self.max_time = max_time_sec
         self.threads = threads
         self.hash = memory_mb
+        self.own_book = False
         self.engine_path_and_name = None
         self.engine_file = None
         self.white_layout = None
@@ -926,6 +940,12 @@ class EasyChessGui():
                     if button == 'New::new_game_k':
                         is_new_game = True
                         self.clear_elements()
+                        
+                        # Restore to hide by default
+                        if not is_hide_engine_search_info:
+                            new_menu, is_hide_engine_search_info = self.update_play_menu(
+                                    menu_def_play, is_hide_engine_search_info)
+                            self.menu_elem.Update(new_menu)
                         break
                     
                     if button == 'Save::save_game_k':
@@ -1121,7 +1141,7 @@ class EasyChessGui():
                 is_promote = False
                 search = RunEngine(self.queue, self.engine_path_and_name,
                                    self.max_depth, self.max_time, self.threads,
-                                   self.hash)
+                                   self.hash, self.own_book)
                 search.get_board(board)
                 search.daemon = True
                 search.start()
@@ -1263,7 +1283,8 @@ class EasyChessGui():
         engine_path = './Engines/'
         files = os.listdir(engine_path)
         for file in files:
-            if not file.endswith('.gz') and not file.endswith('.dll'):
+            if not file.endswith('.gz') and not file.endswith('.dll') \
+                    and not file.endswith('.bin'):
                 engine_list.append(file)
 
         return engine_list
