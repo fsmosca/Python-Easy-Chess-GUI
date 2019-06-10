@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.59'
+APP_VERSION = 'v0.60'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -118,13 +118,13 @@ LIGHT_SQ_MOVE_COLOR = '#E8E18E'
 
 
 HELP_MSG = """
-(1) To play a game
+(A) To play a game
 You should be in Play mode.
 1. Mode->Play
 2. Make move on the board
 3. Game->New if you want a new game
 
-(2) To play as black
+(B) To play as black
 You should be in Neutral mode
 1. Board->Flip
 2. Mode->Play
@@ -133,32 +133,36 @@ If you are already in Play mode, go back to
 Neutral mode via Mode->Neutral then flip the
 board via Board->Flip
 
-(3) To resign a game
+(C) To resign a game
 1. Game->Resign
 
-(4) To adjudicate a game
+(D) To adjudicate a game
 1. Game->User Wins or Game->User draws
 
-(5)To flip board
+(E) To flip board
 You should be in Neutral mode
 1. Board->Flip
   
-(6) To paste FEN
+(F) To paste FEN
 You should be in Play mode
 1. Mode->Play
 2. FEN->Paste
 
-(7) To use other uci engine                        
+(G) To use other uci engine                        
 1. Copy exe file in the engines directory   
 
-(8) To show engine search info                   
+(H) To show engine search info                   
 1. Engine->Unhide Search Info                
 
-(9) To change engine
+(I) To change engine
 1. You should be in Neutral mode
 2. Engine->Set Engine
 If you are already in Play mode, change to
 Neutral mode via Mode->Neutral
+
+(J) To use book
+You should be in Neutral mode
+1. Book->Set Book
 """
 
 
@@ -204,8 +208,8 @@ menu_def_neutral = [
         ['&Mode', ['!Neutral', 'Play', '!Analysis']],
         ['&Board', ['Flip']],
         ['&Engine', ['Set Engine', 'Set Depth',
-                     'Set Movetime', 'Get Settings']],
-        ['Book', ['Set::book_set_k', 'Info::book_info_k']],
+                     'Set Movetime', 'Get Settings::engine_info_k']],
+        ['Book', ['Set Book::book_set_k', 'Get Settings::book_info_k']],
         ['&Help', ['About']],
 ]
 
@@ -219,7 +223,7 @@ menu_def_play = [
                    'User Draws::user_draws_k']],
         ['FEN', ['Paste']],
         ['&Engine', ['Go', 'Set Depth',
-                     'Set Movetime', 'Get Settings',
+                     'Set Movetime', 'Get Settings::engine_info_k',
                      'Unhide Search Info']],
         ['&Help', ['About']],
 ]
@@ -836,9 +840,9 @@ class EasyChessGui():
     def get_engine_settings(self, engine_id_name):
         """ Display engine settings """
         sg.PopupOK(
-            'Threads = {}\nHash = {} mb\nDepth = {}\nMovetime = {} sec\n\nEngine = {}\n'.format(
-            self.threads, self.hash, self.max_depth, self.max_time,
-            engine_id_name), title=BOX_TITLE, keep_on_top=True)
+            'Engine = {}\nThreads = {}\nHash = {} mb\nDepth = {}\nMovetime = {} sec'.format(
+                    engine_id_name, self.threads, self.hash, self.max_depth,
+                    self.max_time), title=BOX_TITLE, keep_on_top=True)
         
     def get_book_settings(self):
         """ Display GUI book settings """
@@ -881,7 +885,7 @@ class EasyChessGui():
             # and exit this loop when user presses the Engine->Go button
             if not is_engine_ready:
                 self.window.FindElement('_gamestatus_').Update(
-                        'Mode: Play, press Engine->Go')
+                        'Mode    Play, press Engine->Go')
                 while True:
                     button, value = self.window.Read(timeout=100)
                     
@@ -899,7 +903,7 @@ class EasyChessGui():
                     if button == 'Set Movetime':
                         self.set_time_limit()
                     
-                    if button == 'Get Settings':
+                    if button == 'Get Settings::engine_info_k':
                         self.get_engine_settings(engine_id_name)
                         
                     if button == 'About':
@@ -919,13 +923,13 @@ class EasyChessGui():
                         # If user is black and side to move based from pasted FEN is black
                         if not self.is_user_white and not board.turn:
                             is_human_stm = True
-                            self.window.FindElement('_gamestatus_').Update('Mode: Play')
+                            self.window.FindElement('_gamestatus_').Update('Mode    Play')
 
                         # Elif user is black and side to move based from pasted FEN is white
                         elif not self.is_user_white and board.turn:
                             is_human_stm = False
                             self.window.FindElement('_gamestatus_').Update(
-                                    'Mode: Play, press Engine->Go')
+                                    'Mode    Play, press Engine->Go')
                             
                         # When computer is to move in the first move, don't
                         # allow the engine to search immediately, wait for the
@@ -1048,10 +1052,10 @@ class EasyChessGui():
                             is_human_stm = True
                         is_engine_ready = True
                         self.window.FindElement('_gamestatus_').Update(
-                                'Mode: Play, Engine is thinking ...')
+                                'Mode    Play, Engine is thinking ...')
                         break
                     
-                    if button == 'Get Settings':
+                    if button == 'Get Settings::engine_info_k':
                         self.get_engine_settings(engine_id_name)
                         break
                     
@@ -1078,7 +1082,7 @@ class EasyChessGui():
                         is_engine_ready = True if is_human_stm else False
                         
                         self.window.FindElement('_gamestatus_').Update(
-                                'Mode: Play, side: {}'.format(
+                                'Mode    Play, side: {}'.format(
                                         'white' if board.turn else 'black'))
                         
                         self.game.headers['FEN'] = self.fen
@@ -1221,7 +1225,7 @@ class EasyChessGui():
                     search.daemon = True
                     search.start()
                     self.window.FindElement('_gamestatus_').Update(
-                            'Mode: Play, Engine is thinking ...')
+                            'Mode    Play, Engine is thinking ...')
     
                     while True:
                         button, value = self.window.Read(timeout=10)
@@ -1307,7 +1311,7 @@ class EasyChessGui():
                 
                 is_human_stm ^= 1
                 
-                self.window.FindElement('_gamestatus_').Update('Mode: Play')                
+                self.window.FindElement('_gamestatus_').Update('Mode    Play')                
                 # Engine has done its move
 
         # Auto-save game
@@ -1458,7 +1462,7 @@ class EasyChessGui():
         bc = '#d3dae4'
     
         board_controls = [
-            [sg.Text('Mode: Neutral', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
+            [sg.Text('Mode    Neutral', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
             [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.Text('Human',
                     font=('Consolas', 10), key='_White_', size=(35, 1), relief='sunken')],
             [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.Text('Computer',
@@ -1616,15 +1620,15 @@ class EasyChessGui():
                 self.set_time_limit()
                 continue
             
-            if button == 'Get Settings':
+            if button == 'Get Settings::engine_info_k':
                 self.get_engine_settings(engine_id_name)
                 continue
             
-            if button == 'Info::book_info_k':
+            if button == 'Get Settings::book_info_k':
                 self.get_book_settings()
                 continue
             
-            if button == 'Set::book_set_k':
+            if button == 'Set Book::book_set_k':
                 # Backup current values, we will restore these value in case
                 # the user presses cancel or X button
                 current_is_use_gui_book = self.is_use_gui_book
@@ -1672,7 +1676,7 @@ class EasyChessGui():
 
             if button == 'Flip':
                 # Clear Text and Multiline elements
-                self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
+                self.window.FindElement('_gamestatus_').Update('Mode    Neutral')
                 self.clear_elements()
                 
                 window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
@@ -1705,12 +1709,12 @@ class EasyChessGui():
                 while True:
                     button, value = self.window.Read(timeout=100)
                     
-                    self.window.FindElement('_gamestatus_').Update('Mode: Play')
+                    self.window.FindElement('_gamestatus_').Update('Mode    Play')
                     self.window.FindElement('_movelist_').Update(disabled=False)
                     self.window.FindElement('_movelist_').Update('', disabled=True)
                     
                     start_new_game = self.play_game(engine_id_name, board)
-                    self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
+                    self.window.FindElement('_gamestatus_').Update('Mode    Neutral')
                     
                     self.psg_board = copy.deepcopy(initial_board)
                     self.redraw_board()
