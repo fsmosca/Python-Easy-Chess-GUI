@@ -44,6 +44,7 @@ import pyperclip
 import chess
 import chess.pgn
 import chess.engine
+import chess.polyglot
 import logging
 
 
@@ -52,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.56'
+APP_VERSION = 'v0.57'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -204,6 +205,7 @@ menu_def_neutral = [
         ['&Board', ['Flip']],
         ['&Engine', ['Set Engine', 'Set Depth',
                      'Set Movetime', 'Get Settings']],
+        ['Book', ['Set::book_set_k', 'Info::book_info_k']],
         ['&Help', ['About']],
 ]
 
@@ -223,25 +225,53 @@ menu_def_play = [
 ]
 
 
-def get_time_mm_ss_ms(time_ms):
-    """ Returns time in min:sec:millisec given time in millisec """
-    s, ms = divmod(int(time_ms), 1000)
-    m, s = divmod(s, 60)
+class GuiBook():
+    def __init__(self, book_file, board):
+        self.book_file = book_file  # Can have path
+        self.board = board
+        self.__book_move = None
+        
+    def get_random_move(self):
+        """ Returns book move randomly based on weight """
+        reader = chess.polyglot.open_reader(self.book_file)
+        try:
+            entry = reader.weighted_choice(self.board)
+            self.__book_move = entry.move
+        except IndexError:
+            logging.warning('No more random book move found.')
+        except:
+            logging.warning('Unexpected error in finding random polyglot book move.')
+        finally:
+            reader.close()
+            
+        return self.__book_move
     
-    return '{:02d}:{:02d}:{:03d}'.format(m, s, ms)
-
+    def get_best_move(self):
+        """ Returns the move with best weight """
+        reader = chess.polyglot.open_reader(self.book_file)
+        try:
+            entry = reader.find(self.board)
+            self.__book_move = entry.move
+        except IndexError:
+            logging.warning('No more best book move found.')
+        except:
+            logging.warning('Unexpected error in finding best polyglot book move.')
+        finally:
+            reader.close()
+            
+        return self.__book_move
 
 class RunEngine(threading.Thread):
     pv_length = 5
     move_delay_sec = 3.0
     
     def __init__(self, eng_queue, engine_path, max_depth=128, max_time=2.0,
-                 threads=1, memory_mb=16, own_book=False):
+                 threads=1, memory_mb=16):
         threading.Thread.__init__(self)
         self.engine_path = engine_path
         self.threads = threads
         self.hash = memory_mb
-        self.own_book = own_book
+        self.own_book = False
         self.bm = None
         self.pv = None
         self.score = None
@@ -253,7 +283,7 @@ class RunEngine(threading.Thread):
         self.eng_queue = eng_queue
         self.engine = None
         self.board = None
-        self.analysis = not self.own_book
+        self.analysis = True
         
     def get_board(self, board):
         """ Get board from user """
@@ -353,13 +383,16 @@ class EasyChessGui():
     queue = queue.Queue()
     is_user_white = True  # White is at the bottom in board layout
 
-    def __init__(self, max_depth, max_time_sec, threads=1, memory_mb=16):
+    def __init__(self, gui_book_file, is_use_gui_book, is_random_book,
+                 max_depth, max_time_sec, threads=1, memory_mb=16):
         self.max_depth = max_depth
+        self.is_use_gui_book = is_use_gui_book
+        self.is_random_book = is_random_book
         self.max_time = max_time_sec
         self.threads = threads
         self.hash = memory_mb
-        self.own_book = False
         self.engine_path_and_name = None
+        self.gui_book_file = gui_book_file
         self.engine_file = None
         self.white_layout = None
         self.black_layout = None
@@ -403,6 +436,13 @@ class EasyChessGui():
                                          engine_id=engine_id_name)
         self.update_engine_list()
         
+    def get_time_mm_ss_ms(self, time_ms):
+        """ Returns time in min:sec:millisec given time in millisec """
+        s, ms = divmod(int(time_ms), 1000)
+        m, s = divmod(s, 60)
+        
+        return '{:02d}:{:02d}:{:03d}'.format(m, s, ms)
+        
     def update_text_box(self, msg, is_hide):
         """ Update text elements """
         best_move = None
@@ -429,7 +469,7 @@ class EasyChessGui():
 
             if 'time' in msg_str:
                 tsec = float(' '.join(msg_str.split()[0:-1]).strip())
-                msg_line = 'Time {}\n'.format(get_time_mm_ss_ms(tsec*1000))
+                msg_line = 'Time {}\n'.format(self.get_time_mm_ss_ms(tsec*1000))
                 self.window.FindElement('info_time_k').Update(
                         '' if is_hide else msg_line)
                 
@@ -799,6 +839,15 @@ class EasyChessGui():
             'Threads = {}\nHash = {} mb\nDepth = {}\nMovetime = {} sec\n\nEngine = {}\n'.format(
             self.threads, self.hash, self.max_depth, self.max_time,
             engine_id_name), title=BOX_TITLE, keep_on_top=True)
+        
+    def get_book_settings(self):
+        """ Display GUI book settings """
+        sg.PopupOK('Book = {}\nUse Book = {}\nBest move = {}\nRandom move = {}'. \
+            format(self.gui_book_file,
+                   'Yes' if self.is_use_gui_book else 'No',
+                   'No' if self.is_random_book else 'Yes',
+                   'Yes' if self.is_random_book else 'No'),
+                   title=BOX_TITLE, keep_on_top=True)
 
     def play_game(self, engine_id_name, board):
         """ 
@@ -1139,42 +1188,61 @@ class EasyChessGui():
             # Else if side to move is not human
             elif not is_human_stm and is_engine_ready:             
                 is_promote = False
-                search = RunEngine(self.queue, self.engine_path_and_name,
-                                   self.max_depth, self.max_time, self.threads,
-                                   self.hash, self.own_book)
-                search.get_board(board)
-                search.daemon = True
-                search.start()
-                self.window.FindElement('_gamestatus_').Update(
-                        'Mode: Play, Engine is thinking ...')
-
-                while True:
-                    button, value = self.window.Read(timeout=10)
-                    
-                    # Exit app while engine is thinking                    
-                    if button == 'Exit':
-                        logging.info('Exit app while engine is searching')
-                        sys.exit(0)
-                    
-                    if button == 'Hide Search Info' or button == 'Unhide Search Info':
-                        new_menu, is_hide_engine_search_info = self.update_play_menu(
-                                menu_def_play, is_hide_engine_search_info)
-                        self.menu_elem.Update(new_menu)
-                        continue
+                best_move = None
+                
+                # If using gui book
+                if self.is_use_gui_book:
+                    # Verify presence of a book file
+                    if os.path.isfile(self.gui_book_file):
+                        gui_book = GuiBook(self.gui_book_file, board)
+                        if self.is_random_book:
+                            best_move = gui_book.get_random_move()
+                            logging.info('Random book move')
+                        else:
+                            best_move = gui_book.get_best_move()
+                            logging.info('Best book move')
+                        logging.info('Book move is {}.'.format(best_move))
+                    else:
+                        logging.warning('GUI book is missing.')
+                
+                # If there is no book move, let the engine search the best move
+                if best_move is None:
+                    search = RunEngine(self.queue, self.engine_path_and_name,
+                                       self.max_depth, self.max_time,
+                                       self.threads, self.hash)
+                    search.get_board(board)
+                    search.daemon = True
+                    search.start()
+                    self.window.FindElement('_gamestatus_').Update(
+                            'Mode: Play, Engine is thinking ...')
+    
+                    while True:
+                        button, value = self.window.Read(timeout=10)
                         
-                    # Get the engine search info and display it in GUI text boxes                    
-                    try:
-                        msg = self.queue.get_nowait()
-                    except:
-                        continue
-
-                    msg_str = str(msg)
-                    best_move = self.update_text_box(msg, is_hide_engine_search_info)
-                    if 'bestmove' in msg_str:
-                        break
-                    
-                search.join()
-                search.quit_engine()
+                        # Exit app while engine is thinking                    
+                        if button == 'Exit':
+                            logging.info('Exit app while engine is searching')
+                            sys.exit(0)
+                        
+                        if button == 'Hide Search Info' or button == 'Unhide Search Info':
+                            new_menu, is_hide_engine_search_info = self.update_play_menu(
+                                    menu_def_play, is_hide_engine_search_info)
+                            self.menu_elem.Update(new_menu)
+                            continue
+                            
+                        # Get the engine search info and display it in GUI text boxes                    
+                        try:
+                            msg = self.queue.get_nowait()
+                        except:
+                            continue
+    
+                        msg_str = str(msg)
+                        best_move = self.update_text_box(msg, is_hide_engine_search_info)
+                        if 'bestmove' in msg_str:
+                            break
+                        
+                    search.join()
+                    search.quit_engine()
 
                 move_str = str(best_move)
                 fr_col = ord(move_str[0]) - ord('a')
@@ -1539,7 +1607,57 @@ class EasyChessGui():
             if button == 'Get Settings':
                 self.get_engine_settings(engine_id_name)
                 continue
+            
+            if button == 'Info::book_info_k':
+                self.get_book_settings()
+                continue
+            
+            if button == 'Set::book_set_k':
+                # Backup current values, we will restore these value in case
+                # the user presses cancel or X button
+                current_is_use_gui_book = self.is_use_gui_book
+                current_is_random_book = self.is_random_book
                 
+                layout = [
+                        [sg.T('GUI book'), sg.T(self.gui_book_file,
+                                           size = (24, 1), relief='sunken')],
+                        [sg.CBox('GUI book', key = 'use_gui_book_k',
+                                 default=self.is_use_gui_book)],
+                        [sg.Radio('Best move', 'Book Radio',), 
+                         sg.Radio('Random move', 'Book Radio',
+                                  key='random_move_k', default=True)],
+                        [sg.OK(), sg.Cancel()],
+                ]
+
+                self.window.Hide()
+                w = sg.Window(BOX_TITLE, layout)
+                
+                while True:
+                    e, v = w.Read(timeout=10)
+                    
+                    # If user presses X button
+                    if e is None:
+                        self.is_use_gui_book = current_is_use_gui_book
+                        self.is_random_book = current_is_random_book
+                        logging.info('Book setting is exited.')
+                        break
+                    
+                    if e == 'Cancel':
+                        self.is_use_gui_book = current_is_use_gui_book
+                        self.is_random_book = current_is_random_book
+                        logging.info('Book setting is cancelled.')
+                        break
+
+                    if e == 'OK':
+                        self.is_use_gui_book = v['use_gui_book_k']
+                        self.is_random_book = v['random_move_k']
+                        logging.info('Book setting is OK')
+                        break
+
+                w.Close()
+                self.window.UnHide()
+                continue
+
             if button == 'Flip':
                 # Clear Text and Multiline elements
                 self.window.FindElement('_gamestatus_').Update('Mode: Neutral')
@@ -1603,7 +1721,13 @@ class EasyChessGui():
 def main():
     max_depth = 128
     max_time_sec = 2.0
-    pecg = EasyChessGui(max_depth, max_time_sec)
+    
+    pecg_book = 'book/pecg_book.bin'
+    is_use_gui_book = True
+    is_random_book = True  # If false then use best book move
+    
+    pecg = EasyChessGui(pecg_book, is_use_gui_book, is_random_book,
+                        max_depth, max_time_sec)
     pecg.main_loop()
 
 
