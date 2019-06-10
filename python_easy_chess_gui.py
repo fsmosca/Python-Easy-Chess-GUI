@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.61'
+APP_VERSION = 'v0.62'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -1320,8 +1320,14 @@ class EasyChessGui():
         if is_exit_app:
             self.window.Close()
             sys.exit(0)
-            
+
         self.clear_elements()
+
+        # Restore to hide by default
+        if not is_hide_engine_search_info:
+            new_menu, is_hide_engine_search_info = self.update_play_menu(
+                    menu_def_play, is_hide_engine_search_info)
+            self.menu_elem.Update(new_menu)
 
         return False if is_exit_game else is_new_game
 
