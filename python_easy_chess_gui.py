@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.58'
+APP_VERSION = 'v0.59'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -406,7 +406,7 @@ class EasyChessGui():
 
     def update_play_menu(self, menu, hide):
         """ Change menu entry, Hide/Unhide Search Info """
-        new_menu = []
+        new_menu = []        
         new_entry = 'Hide Search Info' if hide else 'Unhide Search Info'
         hide = not hide
 
@@ -1029,6 +1029,12 @@ class EasyChessGui():
                     if button == 'Neutral':
                         is_exit_game = True
                         self.clear_elements()
+                        
+                        # Restore to hide by default
+                        if not is_hide_engine_search_info:
+                            new_menu, is_hide_engine_search_info = self.update_play_menu(
+                                    menu_def_play, is_hide_engine_search_info)
+                            self.menu_elem.Update(new_menu)
                         break
                     
                     if button == 'About':
