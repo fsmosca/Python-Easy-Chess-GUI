@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.57'
+APP_VERSION = 'v0.58'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -1189,6 +1189,7 @@ class EasyChessGui():
             elif not is_human_stm and is_engine_ready:             
                 is_promote = False
                 best_move = None
+                is_book_from_gui = True
                 
                 # If using gui book
                 if self.is_use_gui_book:
@@ -1243,6 +1244,7 @@ class EasyChessGui():
                         
                     search.join()
                     search.quit_engine()
+                    is_book_from_gui = False
 
                 move_str = str(best_move)
                 fr_col = ord(move_str[0]) - ord('a')
@@ -1281,9 +1283,13 @@ class EasyChessGui():
                                 
                 if move_cnt == 1:
                     node = self.game.add_variation(best_move)
+                    if is_book_from_gui:
+                        node.comment = 'book'
                 else:
                     node = node.add_variation(best_move)
-                    
+                    if is_book_from_gui:
+                        node.comment = 'book'                    
+
                 self.window.FindElement('_movelist_').Update(disabled=False)
                 self.window.FindElement('_movelist_').Update('')
                 self.window.FindElement('_movelist_').Update(
