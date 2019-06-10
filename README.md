@@ -12,7 +12,7 @@ Windows exe file will be available upon release. In the meantime to get it runni
 
 ### Installation
 * Python Easy Chess GUI<br>
-Download the files including the Images and Engines dir. You can use your favorite uci chess engine like stockfish by copying it into the engines dir.
+Download the files including the Images, Engines and Book directories. You can use your favorite uci chess engine like stockfish by copying it into the engines dir.
 * Python 3<br>
 https://www.python.org/downloads/
 * Python-Chess<br>
