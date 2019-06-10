@@ -1,7 +1,7 @@
 # Python Easy Chess GUI
 A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users can also load a chess engine and play with it. This program is based on a [demo chess against ai](https://github.com/PySimpleGUI/PySimpleGUI/tree/master/Chess) from PySimpleGUI.<br>
 
-![](https://i.imgur.com/ONXEMZ1.png)
+![](https://i.imgur.com/wDlT5BN.png)
 
 ### Requirements
 Windows exe file will be available upon release. In the meantime to get it running the following are required.
@@ -48,8 +48,19 @@ Typical command line:<br>
 * If you play as black, Engine->Go
 
 #### To flip board
-* If current mode is Nuetral, Board->Flip
+* If current mode is Neutral, Board->Flip
 * If current mode is Play, Mode->Neutral, then Board->Flip
+
+#### To set book options
+* If current mode is Neutral, Book->Set Book
+* If current mode is Play, Mode->Neutral, then Book->Set Book
+
+#### To select engine
+* If current mode is Neutral, Engine->Set Engine
+* If current mode is Play, Mode->Neutral, then Engine->Set Engine
+
+#### To hide engine search info
+* If current mode is Play, Engine->Hide Search Info
 
 ### Credits
 * PySimpleGUI<br>
