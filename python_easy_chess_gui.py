@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.60'
+APP_VERSION = 'v0.61'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -230,39 +230,28 @@ menu_def_play = [
 
 
 class GuiBook():
-    def __init__(self, book_file, board):
+    def __init__(self, book_file, board, is_random = True):
         self.book_file = book_file  # Can have path
         self.board = board
+        self.is_random = is_random
         self.__book_move = None
         
-    def get_random_move(self):
-        """ Returns book move randomly based on weight """
+    def get_book_move(self):
+        """ Returns book move either random or best move """
         reader = chess.polyglot.open_reader(self.book_file)
         try:
-            entry = reader.weighted_choice(self.board)
+            if self.is_random:
+                entry = reader.weighted_choice(self.board)
+            else:
+                entry = reader.find(self.board)
             self.__book_move = entry.move
         except IndexError:
-            logging.warning('No more random book move found.')
+            logging.warning('No more book move.')
         except:
-            logging.warning('Unexpected error in finding random polyglot book move.')
+            logging.warning('Unexpected error in probing polyglot book move.')
         finally:
             reader.close()
-            
-        return self.__book_move
-    
-    def get_best_move(self):
-        """ Returns the move with best weight """
-        reader = chess.polyglot.open_reader(self.book_file)
-        try:
-            entry = reader.find(self.board)
-            self.__book_move = entry.move
-        except IndexError:
-            logging.warning('No more best book move found.')
-        except:
-            logging.warning('Unexpected error in finding best polyglot book move.')
-        finally:
-            reader.close()
-            
+
         return self.__book_move
 
 class RunEngine(threading.Thread):
@@ -1178,7 +1167,7 @@ class EasyChessGui():
                                 self.change_square_color(fr_row, fr_col)
                                 self.change_square_color(to_row, to_col)
     
-                                is_human_stm ^= 1                                
+                                is_human_stm = not is_human_stm
                                 # Human has done its move
                          
                             # Else if move is illegal
@@ -1205,13 +1194,8 @@ class EasyChessGui():
                 if self.is_use_gui_book:
                     # Verify presence of a book file
                     if os.path.isfile(self.gui_book_file):
-                        gui_book = GuiBook(self.gui_book_file, board)
-                        if self.is_random_book:
-                            best_move = gui_book.get_random_move()
-                            logging.info('Random book move')
-                        else:
-                            best_move = gui_book.get_best_move()
-                            logging.info('Best book move')
+                        gui_book = GuiBook(self.gui_book_file, board, self.is_random_book)
+                        best_move = gui_book.get_book_move()
                         logging.info('Book move is {}.'.format(best_move))
                     else:
                         logging.warning('GUI book is missing.')
@@ -1308,8 +1292,8 @@ class EasyChessGui():
                 # Change the color of the "fr" and "to" board squares
                 self.change_square_color(fr_row, fr_col)
                 self.change_square_color(to_row, to_col)
-                
-                is_human_stm ^= 1
+
+                is_human_stm = not is_human_stm
                 
                 self.window.FindElement('_gamestatus_').Update('Mode    Play')                
                 # Engine has done its move
@@ -1639,9 +1623,11 @@ class EasyChessGui():
                                            size = (24, 1), relief='sunken')],
                         [sg.CBox('GUI book', key = 'use_gui_book_k',
                                  default=self.is_use_gui_book)],
-                        [sg.Radio('Best move', 'Book Radio',), 
+                        [sg.Radio('Best move', 'Book Radio', 
+                                  default = False if self.is_random_book else True), 
                          sg.Radio('Random move', 'Book Radio',
-                                  key='random_move_k', default=True)],
+                                  key='random_move_k',
+                                  default = True if self.is_random_book else False)],
                         [sg.OK(), sg.Cancel()],
                 ]
 
