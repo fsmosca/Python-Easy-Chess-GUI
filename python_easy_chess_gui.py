@@ -52,7 +52,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.68'
+APP_VERSION = 'v0.69'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -208,7 +208,7 @@ menu_def_neutral = [
         ['Boar&d', ['Flip']],
         ['&Engine', ['Set Engine', 'Set Depth',
                      'Set Movetime', 'Get Settings::engine_info_k']],
-        ['&Book', ['Set Book::book_set_k', 'Get Settings::book_info_k']],
+        ['&Book', ['Set Book::book_set_k']],
         ['&Help', ['About']],
 ]
 
@@ -224,7 +224,7 @@ menu_def_play = [
         ['&Engine', ['Go', 'Set Engine', 'Set Depth',
                      'Set Movetime', 'Get Settings::engine_info_k',
                      'Unhide Search Info']],
-        ['&Book', ['Set Book::book_set_k', 'Get Settings::book_info_k']],
+        ['&Book', ['Set Book::book_set_k']],
         ['&Help', ['About']],
 ]
 
@@ -834,16 +834,6 @@ class EasyChessGui():
             'Engine = {}\nThreads = {}\nHash = {} mb\nDepth = {}\nMovetime = {} sec'.format(
                     engine_id_name, self.threads, self.hash, self.max_depth,
                     self.max_time), title=BOX_TITLE, keep_on_top=True)
-        
-    def get_book_settings(self):
-        """ Display GUI book settings """
-        sg.PopupOK('Book = {}\nUse Book = {}\nBest move = {}\nRandom move = {}\nMax Ply = {}'. \
-                   format(self.gui_book_file,
-                   'Yes' if self.is_use_gui_book else 'No',
-                   'No' if self.is_random_book else 'Yes',
-                   'Yes' if self.is_random_book else 'No',
-                   self.max_book_ply),
-                   title=BOX_TITLE, keep_on_top=True)
 
     def play_game(self, engine_id_name, board):
         """ 
@@ -887,12 +877,6 @@ class EasyChessGui():
                         new_menu, is_hide_engine_search_info = self.update_play_menu(
                                 menu_def_play, is_hide_engine_search_info)
                         self.menu_elem.Update(new_menu)
-                        continue
-                    
-                    # Allow user to view book settings when engine is to move
-                    # on its first move in Play mode
-                    if button == 'Get Settings::book_info_k':
-                        self.get_book_settings()
                         continue
                     
                     # Allow user to change book settings when engine is to move
@@ -1178,11 +1162,6 @@ class EasyChessGui():
                         self.window.UnHide()
                         self.update_labels_and_game_tags(human='Human',
                                                 engine_id=self.get_engine_id_name())
-                        continue
-                    
-                    # Allow user to view book settings when user is to move in Play mode
-                    if button == 'Get Settings::book_info_k':
-                        self.get_book_settings()
                         continue
                     
                     # Allow user to change book settings when user is to move in Play mode
@@ -1893,11 +1872,6 @@ class EasyChessGui():
             
             if button == 'Set Movetime':
                 self.set_time_limit()
-                continue
-            
-            # Allow user to view book settings in Neutral mode
-            if button == 'Get Settings::book_info_k':
-                self.get_book_settings()
                 continue
             
             # Allow user to change book settings in Neutral mode
