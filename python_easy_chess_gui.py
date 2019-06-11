@@ -38,7 +38,6 @@ import threading
 import queue
 import copy
 import time
-import random
 from datetime import datetime
 import pyperclip
 import chess
@@ -53,7 +52,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.67'
+APP_VERSION = 'v0.68'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -983,16 +982,11 @@ class EasyChessGui():
                         logging.info('Backup current engine list and file.')
                         logging.info('Current engine list: {}'.format(current_engine_list))
                         logging.info('Current engine file: {}'.format(current_engine_file))
-                        
-                        # Vary Combo box or sg.Drop key, to avoid duplicate key error.
-                        # Tkinter does not like PySimpleGUI v3.37 so far.
-                        # ecbk = engine_combo_box_key
-                        ecbk = str(random.randint(0,1000000))
         
                         layout = [
-                                [sg.T('Engine file', size=(12,1)),
-                                 sg.Drop(self.engine_list, size=(32, 1), key=ecbk,
-                                         enable_events=True)],
+                                [sg.T('Engine file', size=(12,1))],
+                                [sg.Listbox(values=self.engine_list, size=(48,6),
+                                            bind_return_key = True, key='engine_file_k')],
                                 [sg.T('Engine name', size=(12,1)), sg.T(
                                         self.get_engine_id_name(), key='engine_name_k')],
                                 [sg.T('Threads', size=(12, 1)), 
@@ -1011,6 +1005,7 @@ class EasyChessGui():
                             e, v = w.Read(timeout=10)
                             
                             if e is None or e == 'Cancel':
+                                # Restore current engine list and file
                                 logging.info('User cancels engine selection. ' +
                                              'We restore the current engine data.')
                                 self.engine_list = current_engine_list
@@ -1020,8 +1015,8 @@ class EasyChessGui():
                                 logging.info('current engine file: {}'.format(self.engine_file))
                                 break
 
-                            if e == ecbk:
-                                self.engine_file = v[ecbk]
+                            if e == 'engine_file_k':
+                                self.engine_file = v['engine_file_k'][0]
                                 engine_id_name = self.get_engine_id_name()
                                 w.FindElement('engine_name_k').Update(engine_id_name)
                                 self.update_engine_list()
@@ -1033,11 +1028,15 @@ class EasyChessGui():
                                 
                                 threads_value = int(v['threads_k'])
                                 self.threads = min(MAX_THREADS, max(MIN_THREADS, threads_value))
+
+                                self.engine_file = v['engine_file_k'][0]
+                                engine_id_name = self.get_engine_id_name()
+                                w.FindElement('engine_name_k').Update(engine_id_name)
+                                self.update_engine_list()
                                 break
 
                         w.Close()
                         self.window.UnHide()
-
                         self.update_labels_and_game_tags(human='Human',
                                                 engine_id=self.get_engine_id_name())
                         continue
@@ -1122,16 +1121,11 @@ class EasyChessGui():
                         logging.info('Backup current engine list and file.')
                         logging.info('Current engine list: {}'.format(current_engine_list))
                         logging.info('Current engine file: {}'.format(current_engine_file))
-                        
-                        # Vary Combo box or sg.Drop key, to avoid duplicate key error.
-                        # Tkinter does not like PySimpleGUI v3.37 so far.
-                        # ecbk = engine_combo_box_key
-                        ecbk = str(random.randint(0,1000000))
         
                         layout = [
-                                [sg.T('Engine file', size=(12,1)),
-                                 sg.Drop(self.engine_list, size=(32, 1), key=ecbk,
-                                         enable_events=True)],
+                                [sg.T('Engine file', size=(12,1))],
+                                [sg.Listbox(values=self.engine_list, size=(48,6),
+                                            bind_return_key = True, key='engine_file_k')],
                                 [sg.T('Engine name', size=(12,1)), sg.T(
                                         self.get_engine_id_name(), key='engine_name_k')],
                                 [sg.T('Threads', size=(12, 1)), 
@@ -1150,6 +1144,7 @@ class EasyChessGui():
                             e, v = w.Read(timeout=10)
                             
                             if e is None or e == 'Cancel':
+                                # Restore current engine list and file
                                 logging.info('User cancels engine selection. ' +
                                              'We restore the current engine data.')
                                 self.engine_list = current_engine_list
@@ -1159,8 +1154,8 @@ class EasyChessGui():
                                 logging.info('current engine file: {}'.format(self.engine_file))
                                 break
 
-                            if e == ecbk:
-                                self.engine_file = v[ecbk]
+                            if e == 'engine_file_k':
+                                self.engine_file = v['engine_file_k'][0]
                                 engine_id_name = self.get_engine_id_name()
                                 w.FindElement('engine_name_k').Update(engine_id_name)
                                 self.update_engine_list()
@@ -1172,11 +1167,15 @@ class EasyChessGui():
                                 
                                 threads_value = int(v['threads_k'])
                                 self.threads = min(MAX_THREADS, max(MIN_THREADS, threads_value))
+
+                                self.engine_file = v['engine_file_k'][0]
+                                engine_id_name = self.get_engine_id_name()
+                                w.FindElement('engine_name_k').Update(engine_id_name)
+                                self.update_engine_list()
                                 break
 
                         w.Close()
                         self.window.UnHide()
-
                         self.update_labels_and_game_tags(human='Human',
                                                 engine_id=self.get_engine_id_name())
                         continue
@@ -1823,16 +1822,11 @@ class EasyChessGui():
                 logging.info('Backup current engine list and file.')
                 logging.info('Current engine list: {}'.format(current_engine_list))
                 logging.info('Current engine file: {}'.format(current_engine_file))
-                
-                # Vary Combo box or sg.Drop key, to avoid duplicate key error.
-                # Tkinter does not like PySimpleGUI v3.37 so far.
-                # ecbk = engine_combo_box_key
-                ecbk = str(random.randint(0,1000000))
 
                 layout = [
-                        [sg.T('Engine file', size=(12,1)),
-                         sg.Drop(self.engine_list, size=(32, 1), key=ecbk,
-                                 enable_events=True)],
+                        [sg.T('Engine file', size=(12,1))],
+                        [sg.Listbox(values=self.engine_list, size=(48,6),
+                                    bind_return_key = True, key='engine_file_k')],
                         [sg.T('Engine name', size=(12,1)), sg.T(
                                 self.get_engine_id_name(), key='engine_name_k')],
                         [sg.T('Threads', size=(12, 1)), 
@@ -1862,9 +1856,9 @@ class EasyChessGui():
                         logging.info('current engine file: {}'.format(self.engine_file))
                         break
                     
-                    # If user changes the engine file via the combo or drop box
-                    if e == ecbk:
-                        self.engine_file = v[ecbk]
+                    # If user double-clicked the engine or select and press enter key
+                    if e == 'engine_file_k':
+                        self.engine_file = v['engine_file_k'][0]
                         engine_id_name = self.get_engine_id_name()
                         w.FindElement('engine_name_k').Update(engine_id_name)
                         self.update_engine_list()
@@ -1876,6 +1870,12 @@ class EasyChessGui():
                         
                         threads_value = int(v['threads_k'])
                         self.threads = min(MAX_THREADS, max(MIN_THREADS, threads_value))
+                        
+                        # In case the user did not double-click the engine selection
+                        self.engine_file = v['engine_file_k'][0]
+                        engine_id_name = self.get_engine_id_name()
+                        w.FindElement('engine_name_k').Update(engine_id_name)
+                        self.update_engine_list()
                         break
                         
                 # Close the new window and restore/unhide the main window
