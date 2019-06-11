@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.66'
+APP_VERSION = 'v0.67'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -1958,24 +1958,26 @@ class EasyChessGui():
                 continue
 
             if button == 'Flip':
-                # Clear Text and Multiline elements
                 self.window.FindElement('_gamestatus_').Update('Mode    Neutral')
                 self.clear_elements()
                 
-                window1 = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
+                # Get the current location of window before closing it.
+                # We will use this loc when we create a new window.
+                loc = self.window.CurrentLocation()
+                self.window.Close()
+                
+                self.window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
                     self.black_layout if self.is_user_white else self.white_layout,
                     default_button_element_size=(12, 1),
-                    auto_size_buttons=False,
-                    icon='')
+                    auto_size_buttons=False, location=(loc[0], loc[1]),
+                    keep_on_top = True, icon='')
                 self.is_user_white = not self.is_user_white
                 
                 self.update_labels_and_game_tags(human='Human',
                                                  engine_id=engine_id_name)
-                
-                self.window.Close()
                 self.psg_board = copy.deepcopy(initial_board)
                 board = chess.Board()
-                self.window = window1
+                self.window.Refresh()
                 continue
             
             # Menu->Help->Help
