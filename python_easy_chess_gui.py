@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.62'
+APP_VERSION = 'v0.63'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -313,6 +313,7 @@ class RunEngine(threading.Thread):
             with self.engine.analysis(self.board, chess.engine.Limit(
                     time=self.max_time, depth=self.max_depth)) as analysis:
                 for info in analysis:
+            
                     try:
                         if 'depth' in info:
                             self.depth = int(info['depth'])
@@ -377,10 +378,11 @@ class EasyChessGui():
     is_user_white = True  # White is at the bottom in board layout
 
     def __init__(self, gui_book_file, is_use_gui_book, is_random_book,
-                 max_depth, max_time_sec, threads=1, memory_mb=16):
+                 max_book_ply, max_depth, max_time_sec, threads=1, memory_mb=16):
         self.max_depth = max_depth
         self.is_use_gui_book = is_use_gui_book
         self.is_random_book = is_random_book
+        self.max_book_ply = max_book_ply
         self.max_time = max_time_sec
         self.threads = threads
         self.hash = memory_mb
@@ -1191,7 +1193,7 @@ class EasyChessGui():
                 is_book_from_gui = True
                 
                 # If using gui book
-                if self.is_use_gui_book:
+                if self.is_use_gui_book and move_cnt <= self.max_book_ply:
                     # Verify presence of a book file
                     if os.path.isfile(self.gui_book_file):
                         gui_book = GuiBook(self.gui_book_file, board, self.is_random_book)
@@ -1623,10 +1625,15 @@ class EasyChessGui():
                 # the user presses cancel or X button
                 current_is_use_gui_book = self.is_use_gui_book
                 current_is_random_book = self.is_random_book
+                current_max_book_ply = self.max_book_ply
                 
                 layout = [
-                        [sg.T('GUI book'), sg.T(self.gui_book_file,
+                        [sg.T('Book File', size=(8, 1)), sg.T(self.gui_book_file,
                                            size = (24, 1), relief='sunken')],
+                        [sg.T('Max Ply', size=(8, 1)),
+                         sg.Spin([t for t in range(1, 33, 1)],
+                                  initial_value=self.max_book_ply,
+                                  size=(6, 1), key='book_ply_k')],
                         [sg.CBox('GUI book', key = 'use_gui_book_k',
                                  default=self.is_use_gui_book)],
                         [sg.Radio('Best move', 'Book Radio', 
@@ -1647,16 +1654,19 @@ class EasyChessGui():
                     if e is None:
                         self.is_use_gui_book = current_is_use_gui_book
                         self.is_random_book = current_is_random_book
+                        self.max_book_ply = current_max_book_ply
                         logging.info('Book setting is exited.')
                         break
                     
                     if e == 'Cancel':
                         self.is_use_gui_book = current_is_use_gui_book
                         self.is_random_book = current_is_random_book
+                        self.max_book_ply = current_max_book_ply
                         logging.info('Book setting is cancelled.')
                         break
 
                     if e == 'OK':
+                        self.max_book_ply = int(v['book_ply_k'])
                         self.is_use_gui_book = v['use_gui_book_k']
                         self.is_random_book = v['random_move_k']
                         logging.info('Book setting is OK')
@@ -1733,9 +1743,10 @@ def main():
     pecg_book = 'book/pecg_book.bin'
     is_use_gui_book = True
     is_random_book = True  # If false then use best book move
+    max_book_ply = 8
     
     pecg = EasyChessGui(pecg_book, is_use_gui_book, is_random_book,
-                        max_depth, max_time_sec)
+                        max_book_ply, max_depth, max_time_sec)
     pecg.main_loop()
 
 
