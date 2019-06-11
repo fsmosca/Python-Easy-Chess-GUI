@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.65'
+APP_VERSION = 'v0.66'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -222,7 +222,7 @@ menu_def_play = [
                    'User Wins::user_wins_k',
                    'User Draws::user_draws_k']],
         ['FEN', ['Paste']],
-        ['&Engine', ['Go', 'Set Depth',
+        ['&Engine', ['Go', 'Set Engine', 'Set Depth',
                      'Set Movetime', 'Get Settings::engine_info_k',
                      'Unhide Search Info']],
         ['&Book', ['Set Book::book_set_k', 'Get Settings::book_info_k']],
@@ -964,15 +964,87 @@ class EasyChessGui():
                     
                     if button == 'Set Depth':
                         self.set_depth_limit()
+                        continue
                     
                     if button == 'Set Movetime':
                         self.set_time_limit()
+                        continue
                     
                     if button == 'Get Settings::engine_info_k':
                         self.get_engine_settings(engine_id_name)
+                        continue
+                        
+                    # Mode: Play, Side to move: Engine (first move, not thinking)
+                    # Allow user to change engine settings
+                    if button == 'Set Engine':
+                        current_engine_list = self.engine_list
+                        current_engine_file = self.engine_file
+                        
+                        logging.info('Backup current engine list and file.')
+                        logging.info('Current engine list: {}'.format(current_engine_list))
+                        logging.info('Current engine file: {}'.format(current_engine_file))
+                        
+                        # Vary Combo box or sg.Drop key, to avoid duplicate key error.
+                        # Tkinter does not like PySimpleGUI v3.37 so far.
+                        # ecbk = engine_combo_box_key
+                        ecbk = str(random.randint(0,1000000))
+        
+                        layout = [
+                                [sg.T('Engine file', size=(12,1)),
+                                 sg.Drop(self.engine_list, size=(32, 1), key=ecbk,
+                                         enable_events=True)],
+                                [sg.T('Engine name', size=(12,1)), sg.T(
+                                        self.get_engine_id_name(), key='engine_name_k')],
+                                [sg.T('Threads', size=(12, 1)), 
+                                 sg.Spin([t for t in range(1, 9)], initial_value=self.threads,
+                                          size=(8, 1), key='threads_k')],
+                                [sg.T('Hash', size=(12, 1)),
+                                 sg.Spin([t for t in range(4, 256, 4)], initial_value=self.hash,
+                                          size=(8, 1), key='hash_k')],
+                                [sg.OK(), sg.Cancel()]
+                        ]
+
+                        self.window.Hide()
+                        w = sg.Window('Engine Settings', layout)
+                        
+                        while True:
+                            e, v = w.Read(timeout=10)
+                            
+                            if e is None or e == 'Cancel':
+                                logging.info('User cancels engine selection. ' +
+                                             'We restore the current engine data.')
+                                self.engine_list = current_engine_list
+                                self.engine_file = current_engine_file
+                                logging.info('Current engine data were restored.')
+                                logging.info('current engine list: {}'.format(self.engine_list))
+                                logging.info('current engine file: {}'.format(self.engine_file))
+                                break
+
+                            if e == ecbk:
+                                self.engine_file = v[ecbk]
+                                engine_id_name = self.get_engine_id_name()
+                                w.FindElement('engine_name_k').Update(engine_id_name)
+                                self.update_engine_list()
+                                continue
+                            
+                            if e == 'OK':
+                                hash_value = int(v['hash_k'])
+                                self.hash = min(MAX_HASH, max(MIN_HASH, hash_value))
+                                
+                                threads_value = int(v['threads_k'])
+                                self.threads = min(MAX_THREADS, max(MIN_THREADS, threads_value))
+                                break
+
+                        w.Close()
+                        self.window.UnHide()
+
+                        self.update_labels_and_game_tags(human='Human',
+                                                engine_id=self.get_engine_id_name())
+                        continue
                         
                     if button == 'About':
                         sg.PopupScrolled(HELP_MSG, title=BOX_TITLE)
+                        continue
                         
                     if button == 'Paste':
                         try:
@@ -1035,6 +1107,78 @@ class EasyChessGui():
                         new_menu, is_hide_engine_search_info = self.update_play_menu(
                                 menu_def_play, is_hide_engine_search_info)
                         self.menu_elem.Update(new_menu)
+                        continue
+                    
+                    if button == 'Get Settings::engine_info_k':
+                        self.get_engine_settings(engine_id_name)
+                        break
+                    
+                    # Mode: Play, Side to move: User
+                    # Allow user to change engine settings
+                    if button == 'Set Engine':
+                        current_engine_list = self.engine_list
+                        current_engine_file = self.engine_file
+                        
+                        logging.info('Backup current engine list and file.')
+                        logging.info('Current engine list: {}'.format(current_engine_list))
+                        logging.info('Current engine file: {}'.format(current_engine_file))
+                        
+                        # Vary Combo box or sg.Drop key, to avoid duplicate key error.
+                        # Tkinter does not like PySimpleGUI v3.37 so far.
+                        # ecbk = engine_combo_box_key
+                        ecbk = str(random.randint(0,1000000))
+        
+                        layout = [
+                                [sg.T('Engine file', size=(12,1)),
+                                 sg.Drop(self.engine_list, size=(32, 1), key=ecbk,
+                                         enable_events=True)],
+                                [sg.T('Engine name', size=(12,1)), sg.T(
+                                        self.get_engine_id_name(), key='engine_name_k')],
+                                [sg.T('Threads', size=(12, 1)), 
+                                 sg.Spin([t for t in range(1, 9)], initial_value=self.threads,
+                                          size=(8, 1), key='threads_k')],
+                                [sg.T('Hash', size=(12, 1)),
+                                 sg.Spin([t for t in range(4, 256, 4)], initial_value=self.hash,
+                                          size=(8, 1), key='hash_k')],
+                                [sg.OK(), sg.Cancel()]
+                        ]
+
+                        self.window.Hide()
+                        w = sg.Window('Engine Settings', layout)
+                        
+                        while True:
+                            e, v = w.Read(timeout=10)
+                            
+                            if e is None or e == 'Cancel':
+                                logging.info('User cancels engine selection. ' +
+                                             'We restore the current engine data.')
+                                self.engine_list = current_engine_list
+                                self.engine_file = current_engine_file
+                                logging.info('Current engine data were restored.')
+                                logging.info('current engine list: {}'.format(self.engine_list))
+                                logging.info('current engine file: {}'.format(self.engine_file))
+                                break
+
+                            if e == ecbk:
+                                self.engine_file = v[ecbk]
+                                engine_id_name = self.get_engine_id_name()
+                                w.FindElement('engine_name_k').Update(engine_id_name)
+                                self.update_engine_list()
+                                continue
+                            
+                            if e == 'OK':
+                                hash_value = int(v['hash_k'])
+                                self.hash = min(MAX_HASH, max(MIN_HASH, hash_value))
+                                
+                                threads_value = int(v['threads_k'])
+                                self.threads = min(MAX_THREADS, max(MIN_THREADS, threads_value))
+                                break
+
+                        w.Close()
+                        self.window.UnHide()
+
+                        self.update_labels_and_game_tags(human='Human',
+                                                engine_id=self.get_engine_id_name())
                         continue
                     
                     # Allow user to view book settings when user is to move in Play mode
@@ -1180,10 +1324,6 @@ class EasyChessGui():
                         is_engine_ready = True
                         self.window.FindElement('_gamestatus_').Update(
                                 'Mode    Play, Engine is thinking ...')
-                        break
-                    
-                    if button == 'Get Settings::engine_info_k':
-                        self.get_engine_settings(engine_id_name)
                         break
                     
                     if button == 'Set Depth':
@@ -1664,7 +1804,13 @@ class EasyChessGui():
             if button is None:
                 logging.info('Quit app from main loop, X is pressed.')
                 break
+            
+            if button == 'Get Settings::engine_info_k':
+                self.get_engine_settings(engine_id_name)
+                continue
 
+            # Mode: Neutral
+            # Allow user to change engine settings
             if button == 'Set Engine':
                 # Hide the main window and build a new window for setting engine options.
                 # Unhide the main window after engine setting is completed.
@@ -1747,10 +1893,6 @@ class EasyChessGui():
             
             if button == 'Set Movetime':
                 self.set_time_limit()
-                continue
-            
-            if button == 'Get Settings::engine_info_k':
-                self.get_engine_settings(engine_id_name)
                 continue
             
             # Allow user to view book settings in Neutral mode
