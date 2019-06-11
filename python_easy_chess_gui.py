@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.63'
+APP_VERSION = 'v0.64'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -880,6 +880,13 @@ class EasyChessGui():
                 while True:
                     button, value = self.window.Read(timeout=100)
                     
+                    # User can hide/unhide search info when engine is to move on its first move
+                    if button == 'Hide Search Info' or button == 'Unhide Search Info':
+                        new_menu, is_hide_engine_search_info = self.update_play_menu(
+                                menu_def_play, is_hide_engine_search_info)
+                        self.menu_elem.Update(new_menu)
+                        continue
+                    
                     if button == 'New::new_game_k':
                         is_new_game = True
                         break
@@ -956,7 +963,7 @@ class EasyChessGui():
                     if not is_human_stm:
                         break
                     
-                    # Toggle hide/unhide search info
+                    # User can hide/unhide search info when user is to move
                     if button == 'Hide Search Info' or button == 'Unhide Search Info':
                         new_menu, is_hide_engine_search_info = self.update_play_menu(
                                 menu_def_play, is_hide_engine_search_info)
@@ -1220,7 +1227,8 @@ class EasyChessGui():
                         if button == 'Exit':
                             logging.info('Exit app while engine is searching')
                             sys.exit(0)
-                        
+                            
+                        # User can hide/unhide search info while engine is thinking
                         if button == 'Hide Search Info' or button == 'Unhide Search Info':
                             new_menu, is_hide_engine_search_info = self.update_play_menu(
                                     menu_def_play, is_hide_engine_search_info)
