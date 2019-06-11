@@ -52,7 +52,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.69'
+APP_VERSION = 'v0.70'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -1943,8 +1943,7 @@ class EasyChessGui():
                 self.window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
                     self.black_layout if self.is_user_white else self.white_layout,
                     default_button_element_size=(12, 1),
-                    auto_size_buttons=False, location=(loc[0], loc[1]),
-                    keep_on_top = True, icon='')
+                    auto_size_buttons=False, location=(loc[0], loc[1]), icon='')
                 self.is_user_white = not self.is_user_white
                 
                 self.update_labels_and_game_tags(human='Human',
