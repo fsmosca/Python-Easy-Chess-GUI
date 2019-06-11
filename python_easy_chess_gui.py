@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.64'
+APP_VERSION = 'v0.65'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -206,10 +206,10 @@ INIT_PGN_TAG = {
 menu_def_neutral = [
         ['&File', ['E&xit']],
         ['&Mode', ['!Neutral', 'Play', '!Analysis']],
-        ['&Board', ['Flip']],
+        ['Boar&d', ['Flip']],
         ['&Engine', ['Set Engine', 'Set Depth',
                      'Set Movetime', 'Get Settings::engine_info_k']],
-        ['Book', ['Set Book::book_set_k', 'Get Settings::book_info_k']],
+        ['&Book', ['Set Book::book_set_k', 'Get Settings::book_info_k']],
         ['&Help', ['About']],
 ]
 
@@ -225,6 +225,7 @@ menu_def_play = [
         ['&Engine', ['Go', 'Set Depth',
                      'Set Movetime', 'Get Settings::engine_info_k',
                      'Unhide Search Info']],
+        ['&Book', ['Set Book::book_set_k', 'Get Settings::book_info_k']],
         ['&Help', ['About']],
 ]
 
@@ -837,11 +838,12 @@ class EasyChessGui():
         
     def get_book_settings(self):
         """ Display GUI book settings """
-        sg.PopupOK('Book = {}\nUse Book = {}\nBest move = {}\nRandom move = {}'. \
-            format(self.gui_book_file,
+        sg.PopupOK('Book = {}\nUse Book = {}\nBest move = {}\nRandom move = {}\nMax Ply = {}'. \
+                   format(self.gui_book_file,
                    'Yes' if self.is_use_gui_book else 'No',
                    'No' if self.is_random_book else 'Yes',
-                   'Yes' if self.is_random_book else 'No'),
+                   'Yes' if self.is_random_book else 'No',
+                   self.max_book_ply),
                    title=BOX_TITLE, keep_on_top=True)
 
     def play_game(self, engine_id_name, board):
@@ -880,11 +882,76 @@ class EasyChessGui():
                 while True:
                     button, value = self.window.Read(timeout=100)
                     
-                    # User can hide/unhide search info when engine is to move on its first move
+                    # User can hide/unhide search info when engine is to move
+                    # on its first move in Play mode
                     if button == 'Hide Search Info' or button == 'Unhide Search Info':
                         new_menu, is_hide_engine_search_info = self.update_play_menu(
                                 menu_def_play, is_hide_engine_search_info)
                         self.menu_elem.Update(new_menu)
+                        continue
+                    
+                    # Allow user to view book settings when engine is to move
+                    # on its first move in Play mode
+                    if button == 'Get Settings::book_info_k':
+                        self.get_book_settings()
+                        continue
+                    
+                    # Allow user to change book settings when engine is to move
+                    # on its first move in Play mode
+                    if button == 'Set Book::book_set_k':
+                        # Backup current values, we will restore these value in case
+                        # the user presses cancel or X button
+                        current_is_use_gui_book = self.is_use_gui_book
+                        current_is_random_book = self.is_random_book
+                        current_max_book_ply = self.max_book_ply
+                        
+                        layout = [
+                                [sg.T('Book File', size=(8, 1)), sg.T(self.gui_book_file,
+                                                   size = (24, 1), relief='sunken')],
+                                [sg.T('Max Ply', size=(8, 1)),
+                                 sg.Spin([t for t in range(1, 33, 1)],
+                                          initial_value=self.max_book_ply,
+                                          size=(6, 1), key='book_ply_k')],
+                                [sg.CBox('GUI book', key = 'use_gui_book_k',
+                                         default=self.is_use_gui_book)],
+                                [sg.Radio('Best move', 'Book Radio', 
+                                          default = False if self.is_random_book else True), 
+                                 sg.Radio('Random move', 'Book Radio',
+                                          key='random_move_k',
+                                          default = True if self.is_random_book else False)],
+                                [sg.OK(), sg.Cancel()],
+                        ]
+        
+                        self.window.Hide()
+                        w = sg.Window(BOX_TITLE, layout)
+                        
+                        while True:
+                            e, v = w.Read(timeout=10)
+                            
+                            # If user presses X button
+                            if e is None:
+                                self.is_use_gui_book = current_is_use_gui_book
+                                self.is_random_book = current_is_random_book
+                                self.max_book_ply = current_max_book_ply
+                                logging.info('Book setting is exited.')
+                                break
+                            
+                            if e == 'Cancel':
+                                self.is_use_gui_book = current_is_use_gui_book
+                                self.is_random_book = current_is_random_book
+                                self.max_book_ply = current_max_book_ply
+                                logging.info('Book setting is cancelled.')
+                                break
+        
+                            if e == 'OK':
+                                self.max_book_ply = int(v['book_ply_k'])
+                                self.is_use_gui_book = v['use_gui_book_k']
+                                self.is_random_book = v['random_move_k']
+                                logging.info('Book setting is OK')
+                                break
+        
+                        w.Close()
+                        self.window.UnHide()
                         continue
                     
                     if button == 'New::new_game_k':
@@ -963,11 +1030,73 @@ class EasyChessGui():
                     if not is_human_stm:
                         break
                     
-                    # User can hide/unhide search info when user is to move
+                    # User can hide/unhide search info when user is to move on Play mode
                     if button == 'Hide Search Info' or button == 'Unhide Search Info':
                         new_menu, is_hide_engine_search_info = self.update_play_menu(
                                 menu_def_play, is_hide_engine_search_info)
                         self.menu_elem.Update(new_menu)
+                        continue
+                    
+                    # Allow user to view book settings when user is to move in Play mode
+                    if button == 'Get Settings::book_info_k':
+                        self.get_book_settings()
+                        continue
+                    
+                    # Allow user to change book settings when user is to move in Play mode
+                    if button == 'Set Book::book_set_k':
+                        # Backup current values, we will restore these value in case
+                        # the user presses cancel or X button
+                        current_is_use_gui_book = self.is_use_gui_book
+                        current_is_random_book = self.is_random_book
+                        current_max_book_ply = self.max_book_ply
+                        
+                        layout = [
+                                [sg.T('Book File', size=(8, 1)), sg.T(self.gui_book_file,
+                                                   size = (24, 1), relief='sunken')],
+                                [sg.T('Max Ply', size=(8, 1)),
+                                 sg.Spin([t for t in range(1, 33, 1)],
+                                          initial_value=self.max_book_ply,
+                                          size=(6, 1), key='book_ply_k')],
+                                [sg.CBox('GUI book', key = 'use_gui_book_k',
+                                         default=self.is_use_gui_book)],
+                                [sg.Radio('Best move', 'Book Radio', 
+                                          default = False if self.is_random_book else True), 
+                                 sg.Radio('Random move', 'Book Radio',
+                                          key='random_move_k',
+                                          default = True if self.is_random_book else False)],
+                                [sg.OK(), sg.Cancel()],
+                        ]
+        
+                        self.window.Hide()
+                        w = sg.Window(BOX_TITLE, layout)
+                        
+                        while True:
+                            e, v = w.Read(timeout=10)
+                            
+                            # If user presses X button
+                            if e is None:
+                                self.is_use_gui_book = current_is_use_gui_book
+                                self.is_random_book = current_is_random_book
+                                self.max_book_ply = current_max_book_ply
+                                logging.info('Book setting is exited.')
+                                break
+                            
+                            if e == 'Cancel':
+                                self.is_use_gui_book = current_is_use_gui_book
+                                self.is_random_book = current_is_random_book
+                                self.max_book_ply = current_max_book_ply
+                                logging.info('Book setting is cancelled.')
+                                break
+        
+                            if e == 'OK':
+                                self.max_book_ply = int(v['book_ply_k'])
+                                self.is_use_gui_book = v['use_gui_book_k']
+                                self.is_random_book = v['random_move_k']
+                                logging.info('Book setting is OK')
+                                break
+        
+                        w.Close()
+                        self.window.UnHide()
                         continue
                         
                     if button is None:
@@ -1228,7 +1357,7 @@ class EasyChessGui():
                             logging.info('Exit app while engine is searching')
                             sys.exit(0)
                             
-                        # User can hide/unhide search info while engine is thinking
+                        # User can hide/unhide search info while engine is thinking on Play mode
                         if button == 'Hide Search Info' or button == 'Unhide Search Info':
                             new_menu, is_hide_engine_search_info = self.update_play_menu(
                                     menu_def_play, is_hide_engine_search_info)
@@ -1624,10 +1753,12 @@ class EasyChessGui():
                 self.get_engine_settings(engine_id_name)
                 continue
             
+            # Allow user to view book settings in Neutral mode
             if button == 'Get Settings::book_info_k':
                 self.get_book_settings()
                 continue
             
+            # Allow user to change book settings in Neutral mode
             if button == 'Set Book::book_set_k':
                 # Backup current values, we will restore these value in case
                 # the user presses cancel or X button
