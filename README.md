@@ -6,7 +6,7 @@ A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users 
 ### Requirements
 Windows exe file will be available upon release. In the meantime to get it running the following are required.
 * Python 3.7 and up
-* Python-chess v0.27.3 and up
+* Python-chess v0.28.0 and up
 * PySimpleGUI
 * Pyperclip
 
