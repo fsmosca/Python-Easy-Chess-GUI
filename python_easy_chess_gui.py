@@ -34,6 +34,7 @@ col is the same as in PySimpleGUI
 import PySimpleGUI as sg
 import os
 import sys
+import subprocess
 import threading
 import queue
 import copy
@@ -52,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.70'
+APP_VERSION = 'v0.71'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -121,7 +122,6 @@ HELP_MSG = """
 You should be in Play mode.
 1. Mode->Play
 2. Make move on the board
-3. Game->New if you want a new game
 
 (B) To play as black
 You should be in Neutral mode
@@ -129,8 +129,7 @@ You should be in Neutral mode
 2. Mode->Play
 3. Engine->Go
 If you are already in Play mode, go back to 
-Neutral mode via Mode->Neutral then flip the
-board via Board->Flip
+Neutral mode via Mode->Neutral
 
 (C) To resign a game
 1. Game->Resign
@@ -151,17 +150,10 @@ You should be in Play mode
 1. Copy exe file in the engines directory   
 
 (H) To show engine search info                   
-1. Engine->Unhide Search Info                
+1. Engine->Unhide Search Info
 
-(I) To change engine
-1. You should be in Neutral mode
-2. Engine->Set Engine
-If you are already in Play mode, change to
-Neutral mode via Mode->Neutral
-
-(J) To use book
-You should be in Neutral mode
-1. Book->Set Book
+(I) To hide Book 1 and Book 2
+1. Press the Book 1 or Book 2 text
 """
 
 
@@ -203,8 +195,7 @@ INIT_PGN_TAG = {
 
 # (1) Mode: Neutral
 menu_def_neutral = [
-        ['&File', ['E&xit']],
-        ['&Mode', ['!Neutral', 'Play', '!Analysis']],
+        ['&Mode', ['!Neutral', 'Play', '!Analysis', 'Exit']],
         ['Boar&d', ['Flip']],
         ['&Engine', ['Set Engine', 'Set Depth',
                      'Set Movetime', 'Get Settings::engine_info_k']],
@@ -214,14 +205,13 @@ menu_def_neutral = [
 
 # (2) Mode: Play, info: hide
 menu_def_play = [
-        ['&File', ['E&xit']],
-        ['&Mode', ['Neutral', '!Play', '!Analysis']],
+        ['&Mode', ['Neutral', '!Play', '!Analysis', 'Exit']],
         ['&Game', ['&New::new_game_k','Save::save_game_k',
                    'Resign::resign_game_k',
                    'User Wins::user_wins_k',
                    'User Draws::user_draws_k']],
         ['FEN', ['Paste']],
-        ['&Engine', ['Go', 'Set Engine', 'Set Depth',
+        ['&Engine', ['Go', 'Move Now', 'Set Engine', 'Set Depth',
                      'Set Movetime', 'Get Settings::engine_info_k',
                      'Unhide Search Info']],
         ['&Book', ['Set Book::book_set_k']],
@@ -253,6 +243,20 @@ class GuiBook():
             reader.close()
 
         return self.__book_move
+    
+    def get_all_moves(self):
+        is_found = False
+        if os.path.isfile(self.book_file):
+            moves = '{:5s}  {:<}\n'.format('move', 'weight')
+            with chess.polyglot.open_reader(self.book_file) as reader:
+                for entry in reader.find_all(self.board):
+                    is_found = True
+                    san_move = self.board.san(entry.move)
+                    moves += '{:5s}  {:<}\n'.format(san_move, entry.weight)
+        else:
+            moves = '{:5s}  {:<}\n'.format('move', 'weight')
+
+        return moves, is_found
 
 class RunEngine(threading.Thread):
     pv_length = 5
@@ -261,6 +265,7 @@ class RunEngine(threading.Thread):
     def __init__(self, eng_queue, engine_path, max_depth=128, max_time=2.0,
                  threads=1, memory_mb=16):
         threading.Thread.__init__(self)
+        self._kill = threading.Event()
         self.engine_path = engine_path
         self.threads = threads
         self.hash = memory_mb
@@ -278,17 +283,22 @@ class RunEngine(threading.Thread):
         self.board = None
         self.analysis = True
         
+    def stop(self):
+        self._kill.set()
+        
     def get_board(self, board):
         """ Get board from user """
         self.board = board
 
     def run(self):
-        # When converting .py to exe using pyinstaller use the following
-        # self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path,
-        #         creationflags=subprocess.CREATE_NO_WINDOW) 
-        # This is only applicable for Python version >= 3.7
-        
-        self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
+        # Use Python 3.7 to compile to exe
+        is_compile_to_exe = False
+        if is_compile_to_exe:
+            self.engine = chess.engine.SimpleEngine.popen_uci(
+                    self.engine_path,
+                    creationflags=subprocess.CREATE_NO_WINDOW) 
+        else:
+            self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
         
         try:
             self.engine.configure({'Threads': self.threads})
@@ -313,6 +323,9 @@ class RunEngine(threading.Thread):
             with self.engine.analysis(self.board, chess.engine.Limit(
                     time=self.max_time, depth=self.max_depth)) as analysis:
                 for info in analysis:
+                    
+                    if self._kill.wait(0.1):
+                        break
             
                     try:
                         if 'depth' in info:
@@ -377,9 +390,13 @@ class EasyChessGui():
     queue = queue.Queue()
     is_user_white = True  # White is at the bottom in board layout
 
-    def __init__(self, gui_book_file, is_use_gui_book, is_random_book,
-                 max_book_ply, max_depth, max_time_sec, threads=1, memory_mb=16):
-        self.max_depth = max_depth
+    def __init__(self, gui_book_file, computer_book_file, human_book_file,
+                 is_use_gui_book, is_random_book, max_book_ply, max_depth,
+                 max_time_sec, threads=1, memory_mb=16):
+        self.gui_book_file = gui_book_file
+        self.computer_book_file = computer_book_file
+        self.human_book_file = human_book_file
+        self.max_depth = max_depth        
         self.is_use_gui_book = is_use_gui_book
         self.is_random_book = is_random_book
         self.max_book_ply = max_book_ply
@@ -387,7 +404,6 @@ class EasyChessGui():
         self.threads = threads
         self.hash = memory_mb
         self.engine_path_and_name = None
-        self.gui_book_file = gui_book_file
         self.engine_file = None
         self.white_layout = None
         self.black_layout = None
@@ -518,7 +534,9 @@ class EasyChessGui():
         self.window.FindElement('info_time_k').Update('')
         self.window.FindElement('info_nps_k').Update('')
         self.window.FindElement('_movelist_').Update(disabled=False)
-        self.window.FindElement('_movelist_').Update('', disabled=True)        
+        self.window.FindElement('_movelist_').Update('', disabled=True)
+        self.window.FindElement('polyglot_book1_k').Update('')
+        self.window.FindElement('polyglot_book2_k').Update('')
         
     def update_labels_and_game_tags(self, human='Human', engine_id='engine id name'):
         """ Update player names """
@@ -858,10 +876,39 @@ class EasyChessGui():
         is_user_resigns = False
         is_user_wins = False
         is_user_draws = False
+        is_search_stop_for_exit = False
+        is_search_stop_for_new_game = False
+        is_search_stop_for_neutral = False
+        is_search_stop_for_resign = False
+        is_search_stop_for_user_wins = False
+        is_search_stop_for_user_draws = False
+        is_hide_book1 = False
+        is_hide_book2 = False
         
         # Game loop
         while not board.is_game_over(claim_draw=True):
             moved_piece = None
+            
+            if is_hide_book1:
+                self.window.Element('polyglot_book1_k').Update('')
+            else:         
+                # Load 2 polyglot book files        
+                ref_book1 = GuiBook(self.computer_book_file, board, self.is_random_book)
+                all_moves, is_found = ref_book1.get_all_moves()
+                if is_found:
+                    self.window.Element('polyglot_book1_k').Update(all_moves)
+                else:
+                    self.window.Element('polyglot_book1_k').Update('no book moves')
+                    
+            if is_hide_book2:
+                self.window.Element('polyglot_book2_k').Update('')
+            else:
+                ref_book2 = GuiBook(self.human_book_file, board, self.is_random_book)
+                all_moves, is_found = ref_book2.get_all_moves()
+                if is_found:
+                    self.window.Element('polyglot_book2_k').Update(all_moves)
+                else:
+                    self.window.Element('polyglot_book2_k').Update('no book moves')
             
             # If engine is to play first, allow the user to configure the engine
             # and exit this loop when user presses the Engine->Go button
@@ -1012,11 +1059,14 @@ class EasyChessGui():
                                 
                                 threads_value = int(v['threads_k'])
                                 self.threads = min(MAX_THREADS, max(MIN_THREADS, threads_value))
-
-                                self.engine_file = v['engine_file_k'][0]
-                                engine_id_name = self.get_engine_id_name()
-                                w.FindElement('engine_name_k').Update(engine_id_name)
-                                self.update_engine_list()
+                                
+                                try:
+                                    self.engine_file = v['engine_file_k'][0]
+                                    engine_id_name = self.get_engine_id_name()
+                                    w.FindElement('engine_name_k').Update(engine_id_name)
+                                    self.update_engine_list()
+                                except:
+                                    pass
                                 break
 
                         w.Close()
@@ -1079,10 +1129,19 @@ class EasyChessGui():
             # If side to move is human
             if is_human_stm:
                 move_state = 0
+                        
                 while True:
                     button, value = self.window.Read(timeout=100)
                     
                     if not is_human_stm:
+                        break
+                    
+                    if button == 'book1_k':
+                        is_hide_book1 = not is_hide_book1
+                        break
+                    
+                    if button == 'book2_k':
+                        is_hide_book2 = not is_hide_book2
                         break
                     
                     # User can hide/unhide search info when user is to move on Play mode
@@ -1151,11 +1210,14 @@ class EasyChessGui():
                                 
                                 threads_value = int(v['threads_k'])
                                 self.threads = min(MAX_THREADS, max(MIN_THREADS, threads_value))
-
-                                self.engine_file = v['engine_file_k'][0]
-                                engine_id_name = self.get_engine_id_name()
-                                w.FindElement('engine_name_k').Update(engine_id_name)
-                                self.update_engine_list()
+                                
+                                try:
+                                    self.engine_file = v['engine_file_k'][0]
+                                    engine_id_name = self.get_engine_id_name()
+                                    w.FindElement('engine_name_k').Update(engine_id_name)
+                                    self.update_engine_list()
+                                except:
+                                    pass
                                 break
 
                         w.Close()
@@ -1226,7 +1288,7 @@ class EasyChessGui():
                         is_exit_app = True
                         break
                     
-                    if button == 'Exit':
+                    if button == 'Exit' or is_search_stop_for_exit:
                         logging.info('Quit app Exit is pressed.')
                         is_exit_app = True
                         break
@@ -1239,7 +1301,7 @@ class EasyChessGui():
                         self.set_time_limit()
                         break
                     
-                    if button == 'New::new_game_k':
+                    if button == 'New::new_game_k' or is_search_stop_for_new_game:
                         is_new_game = True
                         self.clear_elements()
                         
@@ -1256,7 +1318,8 @@ class EasyChessGui():
                             f.write('{}\n\n'.format(self.game))                        
                         break
                     
-                    if button == 'Resign::resign_game_k':
+                    # mode: Play, stm: User
+                    if button == 'Resign::resign_game_k' or is_search_stop_for_resign:
                         logging.info('User resigns')
                         
                         # Verify resign
@@ -1267,19 +1330,21 @@ class EasyChessGui():
                             is_user_resigns = True
                             break
                         else:
+                            if is_search_stop_for_resign:
+                                is_search_stop_for_resign = False
                             continue
                     
-                    if button == 'User Wins::user_wins_k':
+                    if button == 'User Wins::user_wins_k' or is_search_stop_for_user_wins:
                         logging.info('User wins by adjudication')
                         is_user_wins = True
                         break
                     
-                    if button == 'User Draws::user_draws_k':
+                    if button == 'User Draws::user_draws_k' or is_search_stop_for_user_draws:
                         logging.info('User draws by adjudication')
                         is_user_draws = True
                         break
 
-                    if button == 'Neutral':
+                    if button == 'Neutral' or is_search_stop_for_neutral:
                         is_exit_game = True
                         self.clear_elements()
                         
@@ -1472,15 +1537,9 @@ class EasyChessGui():
                         
                         # Exit app while engine is thinking                    
                         if button == 'Exit':
+                            search.stop()
                             logging.info('Exit app while engine is searching')
-                            sys.exit(0)
-                            
-                        # User can hide/unhide search info while engine is thinking on Play mode
-                        if button == 'Hide Search Info' or button == 'Unhide Search Info':
-                            new_menu, is_hide_engine_search_info = self.update_play_menu(
-                                    menu_def_play, is_hide_engine_search_info)
-                            self.menu_elem.Update(new_menu)
-                            continue
+                            is_search_stop_for_exit = True
                             
                         # Get the engine search info and display it in GUI text boxes                    
                         try:
@@ -1491,12 +1550,46 @@ class EasyChessGui():
                         msg_str = str(msg)
                         best_move = self.update_text_box(msg, is_hide_engine_search_info)
                         if 'bestmove' in msg_str:
+                            logging.info('engine msg: {}'.format(msg_str))
                             break
+                            
+                        # User can hide/unhide search info while engine is thinking on Play mode
+                        if button == 'Hide Search Info' or button == 'Unhide Search Info':
+                            new_menu, is_hide_engine_search_info = self.update_play_menu(
+                                    menu_def_play, is_hide_engine_search_info)
+                            self.menu_elem.Update(new_menu)
+                            continue
                         
+                        # Forced engine to move now and create a new game
+                        if button == 'New::new_game_k':
+                            search.stop()
+                            is_search_stop_for_new_game = True
+
+                        # Forced engine to move now
+                        if button == 'Move Now':
+                            search.stop()
+
+                        # Forced engine to move now and goto neutral mode
+                        if button == 'Neutral':
+                            search.stop()
+                            is_search_stop_for_neutral = True
+
+                        if button == 'Resign::resign_game_k':
+                            search.stop()
+                            is_search_stop_for_resign = True
+
+                        if button == 'User Wins::user_wins_k':
+                            search.stop()
+                            is_search_stop_for_user_wins = True
+
+                        if button == 'User Draws::user_draws_k':
+                            is_search_stop_for_user_draws = True
+
                     search.join()
                     search.quit_engine()
                     is_book_from_gui = False
-
+                    
+                # Update board with computer move
                 move_str = str(best_move)
                 fr_col = ord(move_str[0]) - ord('a')
                 fr_row = 8 - int(move_str[1])
@@ -1715,9 +1808,18 @@ class EasyChessGui():
             [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.Text('Computer',
                     font=('Consolas', 10), key='_Black_', size=(35, 1), relief='sunken')],
         
-            [sg.Text('MOVE LIST', font=('Consolas', 10))],            
-            [sg.Multiline([], do_not_clear=True, autoscroll=True, size=(41, 12),
+            [sg.Text('MOVE LIST', font=('Consolas', 10))], 
+            [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(0, 1),
                     font=('Consolas', 10), key='_movelist_', disabled=True)],
+                                    
+            [sg.Text('BOOK 1\nsrc: Computer games', size=(20, 2),
+                     font=('Consolas', 10), click_submits=True, key='book1_k'), 
+             sg.Text('BOOK 2\nsrc: Human games', 
+                     font=('Consolas', 10), click_submits=True, key='book2_k')], 
+            [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(0, 12),
+                    font=('Consolas', 10), key='polyglot_book1_k', disabled=True),
+             sg.Multiline('', do_not_clear=True, autoscroll=False, size=(2, 12),
+                    font=('Consolas', 10), key='polyglot_book2_k', disabled=True)],
 
             [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10), size=(28, 1))],
             [sg.Text('', key='info_score_k', size=(8, 1), background_color = bc),
@@ -1850,11 +1952,14 @@ class EasyChessGui():
                         threads_value = int(v['threads_k'])
                         self.threads = min(MAX_THREADS, max(MIN_THREADS, threads_value))
                         
-                        # In case the user did not double-click the engine selection
-                        self.engine_file = v['engine_file_k'][0]
-                        engine_id_name = self.get_engine_id_name()
-                        w.FindElement('engine_name_k').Update(engine_id_name)
-                        self.update_engine_list()
+                        # In case the user did not select an engine and presses OK
+                        try:
+                            self.engine_file = v['engine_file_k'][0]
+                            engine_id_name = self.get_engine_id_name()
+                            w.FindElement('engine_name_k').Update(engine_id_name)
+                            self.update_engine_list()
+                        except:
+                            pass
                         break
                         
                 # Close the new window and restore/unhide the main window
@@ -1997,11 +2102,15 @@ def main():
     max_time_sec = 2.0
     
     pecg_book = 'book/pecg_book.bin'
+    book_from_computer_games = 'book/computer.bin'
+    book_from_human_games = 'book/human.bin'
+    
     is_use_gui_book = True
     is_random_book = True  # If false then use best book move
     max_book_ply = 8
     
-    pecg = EasyChessGui(pecg_book, is_use_gui_book, is_random_book,
+    pecg = EasyChessGui(pecg_book, book_from_computer_games,
+                        book_from_human_games, is_use_gui_book, is_random_book,
                         max_book_ply, max_depth, max_time_sec)
     pecg.main_loop()
 
