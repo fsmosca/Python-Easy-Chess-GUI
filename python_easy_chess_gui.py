@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.71'
+APP_VERSION = 'v0.72'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -1583,6 +1583,7 @@ class EasyChessGui():
                             is_search_stop_for_user_wins = True
 
                         if button == 'User Draws::user_draws_k':
+                            search.stop()
                             is_search_stop_for_user_draws = True
 
                     search.join()
