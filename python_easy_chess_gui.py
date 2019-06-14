@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.72'
+APP_VERSION = 'v0.73'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -247,14 +247,14 @@ class GuiBook():
     def get_all_moves(self):
         is_found = False
         if os.path.isfile(self.book_file):
-            moves = '{:5s}  {:<}\n'.format('move', 'weight')
+            moves = '{:5s}  {:<}\n'.format('move', 'score')
             with chess.polyglot.open_reader(self.book_file) as reader:
                 for entry in reader.find_all(self.board):
                     is_found = True
                     san_move = self.board.san(entry.move)
                     moves += '{:5s}  {:<}\n'.format(san_move, entry.weight)
         else:
-            moves = '{:5s}  {:<}\n'.format('move', 'weight')
+            moves = '{:5s}  {:<}\n'.format('move', 'score')
 
         return moves, is_found
 
@@ -951,8 +951,7 @@ class EasyChessGui():
                                           default = True if self.is_random_book else False)],
                                 [sg.OK(), sg.Cancel()],
                         ]
-        
-                        self.window.Hide()
+
                         w = sg.Window(BOX_TITLE, layout)
                         
                         while True:
@@ -981,7 +980,9 @@ class EasyChessGui():
                                 break
         
                         w.Close()
-                        self.window.UnHide()
+                        while True:
+                            button, value = self.window.Read(timeout=50)
+                            break
                         continue
                     
                     if button == 'New::new_game_k':
@@ -1029,7 +1030,6 @@ class EasyChessGui():
                                 [sg.OK(), sg.Cancel()]
                         ]
 
-                        self.window.Hide()
                         w = sg.Window('Engine Settings', layout)
                         
                         while True:
@@ -1070,7 +1070,9 @@ class EasyChessGui():
                                 break
 
                         w.Close()
-                        self.window.UnHide()
+                        while True:
+                            button, value = self.window.Read(timeout=50)
+                            break
                         self.update_labels_and_game_tags(human='Human',
                                                 engine_id=self.get_engine_id_name())
                         continue
@@ -1180,7 +1182,6 @@ class EasyChessGui():
                                 [sg.OK(), sg.Cancel()]
                         ]
 
-                        self.window.Hide()
                         w = sg.Window('Engine Settings', layout)
                         
                         while True:
@@ -1221,7 +1222,9 @@ class EasyChessGui():
                                 break
 
                         w.Close()
-                        self.window.UnHide()
+                        while True:
+                            button, value = self.window.Read(timeout=50)
+                            break
                         self.update_labels_and_game_tags(human='Human',
                                                 engine_id=self.get_engine_id_name())
                         continue
@@ -1250,8 +1253,7 @@ class EasyChessGui():
                                           default = True if self.is_random_book else False)],
                                 [sg.OK(), sg.Cancel()],
                         ]
-        
-                        self.window.Hide()
+
                         w = sg.Window(BOX_TITLE, layout)
                         
                         while True:
@@ -1280,7 +1282,9 @@ class EasyChessGui():
                                 break
         
                         w.Close()
-                        self.window.UnHide()
+                        while True:
+                            button, value = self.window.Read(timeout=50)
+                            break
                         continue
                         
                     if button is None:
@@ -1919,9 +1923,7 @@ class EasyChessGui():
                                   size=(8, 1), key='hash_k')],
                         [sg.OK(), sg.Cancel()]
                 ]
-                        
-                # Hide the main window temporarily and build a new one.
-                self.window.Hide()
+
                 w = sg.Window('Engine Settings', layout)
                 
                 while True:
@@ -1965,7 +1967,9 @@ class EasyChessGui():
                         
                 # Close the new window and restore/unhide the main window
                 w.Close()
-                self.window.UnHide()
+                while True:
+                    button, value = self.window.Read(timeout=50)
+                    break
                 
                 # Update the player box in main window
                 self.update_labels_and_game_tags(human='Human',
@@ -2005,7 +2009,6 @@ class EasyChessGui():
                         [sg.OK(), sg.Cancel()],
                 ]
 
-                self.window.Hide()
                 w = sg.Window(BOX_TITLE, layout)
                 
                 while True:
@@ -2034,7 +2037,12 @@ class EasyChessGui():
                         break
 
                 w.Close()
-                self.window.UnHide()
+                
+                # Disable any button presses by the user in the main window
+                # while the book setting window is active.
+                while True:
+                    button, value = self.window.Read(timeout=50)
+                    break
                 continue
 
             if button == 'Flip':
