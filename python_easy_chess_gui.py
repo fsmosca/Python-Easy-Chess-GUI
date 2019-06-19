@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.75'
+APP_VERSION = 'v0.76'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -245,15 +245,31 @@ class GuiBook():
     
     def get_all_moves(self):
         is_found = False
+        total_score = 0
+        book_data = {}
+        cnt = 0
+        
         if os.path.isfile(self.book_file):
-            moves = '{:5s}  {:<}\n'.format('move', 'score')
+            moves = '{:4s} {:<5s} {}\n'.format('move', 'score', 'weight')
             with chess.polyglot.open_reader(self.book_file) as reader:
                 for entry in reader.find_all(self.board):
                     is_found = True
                     san_move = self.board.san(entry.move)
-                    moves += '{:5s}  {:<}\n'.format(san_move, entry.weight)
+                    score = entry.weight
+                    total_score += score
+                    bd = {cnt: {'move': san_move, 'score': score}}
+                    book_data.update(bd)
+                    cnt += 1
         else:
-            moves = '{:5s}  {:<}\n'.format('move', 'score')
+            moves = '{:4s}  {:<}\n'.format('move', 'score')
+            
+        # Get weight for each move
+        if is_found:
+            for _, v in book_data.items():
+                move = v['move']
+                score = v['score']
+                weight = score/total_score
+                moves += '{:4s} {:<5d} {:<2.1f}%\n'.format(move, score, 100*weight)
 
         return moves, is_found
 
