@@ -53,7 +53,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.74'
+APP_VERSION = 'v0.75'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -150,7 +150,7 @@ You should be in Play mode
 1. Copy exe file in the engines directory   
 
 (H) To show engine search info                   
-1. Engine->Unhide Search Info
+1. Press the ENGINE SEARCH INFO text
 
 (I) To hide Book 1 and Book 2
 1. Press the Book 1 or Book 2 text
@@ -212,8 +212,7 @@ menu_def_play = [
                    'User Draws::user_draws_k']],
         ['FEN', ['Paste']],
         ['&Engine', ['Go', 'Move Now', 'Set Engine', 'Set Depth',
-                     'Set Movetime', 'Get Settings::engine_info_k',
-                     'Unhide Search Info']],
+                     'Set Movetime', 'Get Settings::engine_info_k']],
         ['&Book', ['Set Book::book_set_k']],
         ['&Help', ['About']],
 ]
@@ -414,30 +413,6 @@ class EasyChessGui():
         self.psg_board = None
         self.engine_list = self.get_engines()
         self.menu_elem = None
-
-    def update_play_menu(self, menu, hide):
-        """ Change menu entry, Hide/Unhide Search Info """
-        new_menu = []        
-        new_entry = 'Hide Search Info' if hide else 'Unhide Search Info'
-        hide = not hide
-
-        # Modify menu and save it to new menu
-        for e in menu:
-            # Find the engine menu and modify its sub-menu
-            if e[0] == 'Engine':
-                sub_menu = e[1]
-
-                # Update the last entry of sub_menu, since the entry that we
-                # are going to update is found last in the engine sub-menu.
-                sub_menu[len(sub_menu)-1] = new_entry
-
-                # Rebuild the engine menu
-                new_menu.append([e[0], sub_menu])
-            else:
-                # Just append the other menu that is not affected
-                new_menu.append(e)
-
-        return new_menu, hide
         
     def update_engine_selection(self, engine_filename):
         """ """
@@ -871,8 +846,7 @@ class EasyChessGui():
         
         # For saving game
         move_cnt = 0
-        
-        is_hide_engine_search_info = True
+
         is_user_resigns = False
         is_user_wins = False
         is_user_draws = False
@@ -882,8 +856,13 @@ class EasyChessGui():
         is_search_stop_for_resign = False
         is_search_stop_for_user_wins = False
         is_search_stop_for_user_draws = False
-        is_hide_book1 = False
-        is_hide_book2 = False
+        is_hide_book1 = True
+        is_hide_book2 = True
+        is_hide_search_info = True
+        
+        self.window.Element('book1_k').Update(text_color='green' if is_hide_book1 else 'red')
+        self.window.Element('book2_k').Update(text_color='green' if is_hide_book2 else 'red')
+        self.window.Element('search_info_k').Update(text_color='green' if is_hide_search_info else 'red')
         
         # Game loop
         while not board.is_game_over(claim_draw=True):
@@ -917,14 +896,6 @@ class EasyChessGui():
                         'Mode    Play, press Engine->Go')
                 while True:
                     button, value = self.window.Read(timeout=100)
-                    
-                    # User can hide/unhide search info when engine is to move
-                    # on its first move in Play mode
-                    if button == 'Hide Search Info' or button == 'Unhide Search Info':
-                        new_menu, is_hide_engine_search_info = self.update_play_menu(
-                                menu_def_play, is_hide_engine_search_info)
-                        self.menu_elem.Update(new_menu)
-                        continue
                     
                     # Allow user to change book settings when engine is to move
                     # on its first move in Play mode
@@ -1137,20 +1108,20 @@ class EasyChessGui():
                     if not is_human_stm:
                         break
                     
+                    if button == 'search_info_k':
+                        is_hide_search_info = not is_hide_search_info
+                        self.window.Element('search_info_k').Update(text_color='green' if is_hide_search_info else 'red')
+                        break
+                    
                     if button == 'book1_k':
                         is_hide_book1 = not is_hide_book1
+                        self.window.Element('book1_k').Update(text_color='green' if is_hide_book1 else 'red')
                         break
                     
                     if button == 'book2_k':
                         is_hide_book2 = not is_hide_book2
+                        self.window.Element('book2_k').Update(text_color='green' if is_hide_book2 else 'red')
                         break
-                    
-                    # User can hide/unhide search info when user is to move on Play mode
-                    if button == 'Hide Search Info' or button == 'Unhide Search Info':
-                        new_menu, is_hide_engine_search_info = self.update_play_menu(
-                                menu_def_play, is_hide_engine_search_info)
-                        self.menu_elem.Update(new_menu)
-                        continue
                     
                     if button == 'Get Settings::engine_info_k':
                         self.get_engine_settings(engine_id_name)
@@ -1306,12 +1277,6 @@ class EasyChessGui():
                     if button == 'New::new_game_k' or is_search_stop_for_new_game:
                         is_new_game = True
                         self.clear_elements()
-                        
-                        # Restore to hide by default
-                        if not is_hide_engine_search_info:
-                            new_menu, is_hide_engine_search_info = self.update_play_menu(
-                                    menu_def_play, is_hide_engine_search_info)
-                            self.menu_elem.Update(new_menu)
                         break
                     
                     if button == 'Save::save_game_k':
@@ -1349,12 +1314,6 @@ class EasyChessGui():
                     if button == 'Neutral' or is_search_stop_for_neutral:
                         is_exit_game = True
                         self.clear_elements()
-                        
-                        # Restore to hide by default
-                        if not is_hide_engine_search_info:
-                            new_menu, is_hide_engine_search_info = self.update_play_menu(
-                                    menu_def_play, is_hide_engine_search_info)
-                            self.menu_elem.Update(new_menu)
                         break
                     
                     if button == 'About':
@@ -1537,30 +1496,46 @@ class EasyChessGui():
                     while True:
                         button, value = self.window.Read(timeout=10)
                         
+                        # Hide/Unhide engine searching info while engine is thinking
+                        if button == 'search_info_k':
+                            is_hide_search_info = not is_hide_search_info
+                            self.window.Element('search_info_k').Update(text_color='green' if is_hide_search_info else 'red')
+                        
+                        # Hide/Unhide book 1 while engine is searching
+                        if button == 'book1_k':
+                            is_hide_book1 = not is_hide_book1
+                            self.window.Element('book1_k').Update(text_color='green' if is_hide_book1 else 'red')
+                            
+                            if is_hide_book1:
+                                self.window.Element('polyglot_book1_k').Update('')
+                            else:
+                                ref_book1 = GuiBook(self.computer_book_file, board, self.is_random_book)
+                                all_moves, is_found = ref_book1.get_all_moves()
+                                if is_found:
+                                    self.window.Element('polyglot_book1_k').Update(all_moves)
+                                else:
+                                    self.window.Element('polyglot_book1_k').Update('no book moves')
+                        
+                        # Hide/Unhide book 2 while engine is searching
+                        if button == 'book2_k':
+                            is_hide_book2 = not is_hide_book2
+                            self.window.Element('book2_k').Update(text_color='green' if is_hide_book2 else 'red')
+                            
+                            if is_hide_book2:
+                                self.window.Element('polyglot_book2_k').Update('')
+                            else:
+                                ref_book2 = GuiBook(self.human_book_file, board, self.is_random_book)
+                                all_moves, is_found = ref_book2.get_all_moves()
+                                if is_found:
+                                    self.window.Element('polyglot_book2_k').Update(all_moves)
+                                else:
+                                    self.window.Element('polyglot_book2_k').Update('no book moves')
+                        
                         # Exit app while engine is thinking                    
                         if button == 'Exit':
                             search.stop()
                             logging.info('Exit app while engine is searching')
                             is_search_stop_for_exit = True
-                            
-                        # Get the engine search info and display it in GUI text boxes                    
-                        try:
-                            msg = self.queue.get_nowait()
-                        except:
-                            continue
-    
-                        msg_str = str(msg)
-                        best_move = self.update_text_box(msg, is_hide_engine_search_info)
-                        if 'bestmove' in msg_str:
-                            logging.info('engine msg: {}'.format(msg_str))
-                            break
-                            
-                        # User can hide/unhide search info while engine is thinking on Play mode
-                        if button == 'Hide Search Info' or button == 'Unhide Search Info':
-                            new_menu, is_hide_engine_search_info = self.update_play_menu(
-                                    menu_def_play, is_hide_engine_search_info)
-                            self.menu_elem.Update(new_menu)
-                            continue
                         
                         # Forced engine to move now and create a new game
                         if button == 'New::new_game_k':
@@ -1587,6 +1562,18 @@ class EasyChessGui():
                         if button == 'User Draws::user_draws_k':
                             search.stop()
                             is_search_stop_for_user_draws = True
+                            
+                        # Get the engine search info and display it in GUI text boxes                    
+                        try:
+                            msg = self.queue.get_nowait()
+                        except:
+                            continue
+    
+                        msg_str = str(msg)
+                        best_move = self.update_text_box(msg, is_hide_search_info)
+                        if 'bestmove' in msg_str:
+                            logging.info('engine msg: {}'.format(msg_str))
+                            break
 
                     search.join()
                     search.quit_engine()
@@ -1675,12 +1662,6 @@ class EasyChessGui():
             sys.exit(0)
 
         self.clear_elements()
-
-        # Restore to hide by default
-        if not is_hide_engine_search_info:
-            new_menu, is_hide_engine_search_info = self.update_play_menu(
-                    menu_def_play, is_hide_engine_search_info)
-            self.menu_elem.Update(new_menu)
 
         return False if is_exit_game else is_new_game
 
@@ -1824,7 +1805,8 @@ class EasyChessGui():
              sg.Multiline('', do_not_clear=True, autoscroll=False, size=(2, 12),
                     font=('Consolas', 10), key='polyglot_book2_k', disabled=True)],
 
-            [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10), size=(28, 1))],
+            [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10), size=(28, 1),
+                     click_submits=True, key='search_info_k')],
             [sg.Text('', key='info_score_k', size=(8, 1), background_color = bc),
              sg.Text('', key='info_pv_k', size=(28, 1), background_color = bc)],
              
