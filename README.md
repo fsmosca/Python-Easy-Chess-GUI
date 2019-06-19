@@ -1,7 +1,7 @@
 # Python Easy Chess GUI
 A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users can also load a chess engine and play with it. This program is based on a [demo chess against ai](https://github.com/PySimpleGUI/PySimpleGUI/tree/master/Chess) from PySimpleGUI.<br>
 
-![](https://i.imgur.com/X2DoJRd.png)
+![](https://i.imgur.com/ij2aKAl.png)
 
 ### Requirements
 Windows exe file will be available upon release. In the meantime to get it running the following are required.
@@ -57,8 +57,11 @@ Typical command line:<br>
 #### To select engine
 * Engine->Set Engine
 
-#### To Unhide engine search info
-* You should be in Play mode, Engine->Unhide Search Info
+#### To Hide/Unhide engine search info
+* Press the ENGINE SEARCH INFO text
+
+#### To Hide/Unhide Book info
+* Press the Book 1 or Book 2 text
 
 ### Credits
 * PySimpleGUI<br>
