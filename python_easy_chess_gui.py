@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """ 
 python_easy_chess_gui.py
 
@@ -36,6 +37,7 @@ import os
 import sys
 import subprocess
 import threading
+from pathlib import Path  # Python 3.4 and up
 import queue
 import copy
 import time
@@ -53,7 +55,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.77'
+APP_VERSION = 'v0.78'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -310,10 +312,10 @@ class RunEngine(threading.Thread):
         is_compile_to_exe = False
         if is_compile_to_exe:
             self.engine = chess.engine.SimpleEngine.popen_uci(
-                    self.engine_path,
+                    str(self.engine_path),
                     creationflags=subprocess.CREATE_NO_WINDOW) 
         else:
-            self.engine = chess.engine.SimpleEngine.popen_uci(self.engine_path)
+            self.engine = chess.engine.SimpleEngine.popen_uci(str(self.engine_path))
         
         try:
             self.engine.configure({'Threads': self.threads})
@@ -420,6 +422,7 @@ class EasyChessGui():
         self.hash = memory_mb
         self.engine_path_and_name = None
         self.engine_file = None
+        self.opp_eng_id_name = None
         self.adviser_engine = None
         self.adviser_hash = 128
         self.adviser_threads = 1
@@ -434,14 +437,6 @@ class EasyChessGui():
         self.psg_board = None
         self.engine_list = self.get_engines()
         self.menu_elem = None
-        
-    def update_engine_selection(self, engine_filename):
-        """ """
-        self.engine_file = engine_filename
-        engine_id_name = self.get_engine_id_name()
-        self.update_labels_and_game_tags(human='Human',
-                                         engine_id=engine_id_name)
-        self.update_engine_list()
         
     def get_time_mm_ss_ms(self, time_ms):
         """ Returns time in min:sec:millisec given time in millisec """
@@ -542,8 +537,9 @@ class EasyChessGui():
         self.window.Element('book2_k').Update(text_color='black')
         self.window.Element('search_info_k').Update(text_color='black')
         
-    def update_labels_and_game_tags(self, human='Human', engine_id='engine id name'):
+    def update_labels_and_game_tags(self, human='Human'):
         """ Update player names """
+        engine_id = self.opp_eng_id_name
         if self.is_user_white:
             self.window.FindElement('_White_').Update(human)
             self.window.FindElement('_Black_').Update(engine_id)
@@ -1068,8 +1064,7 @@ class EasyChessGui():
                         self.window.Enable()
                         w.Close()
                         
-                        self.update_labels_and_game_tags(human='Human',
-                                                engine_id=self.get_engine_id_name())
+                        self.update_labels_and_game_tags(human='Human')
                         continue
                         
                     if button == 'About':
@@ -1238,8 +1233,7 @@ class EasyChessGui():
                         self.window.Enable()
                         w.Close()
                         
-                        self.update_labels_and_game_tags(human='Human',
-                                                engine_id=self.get_engine_id_name())
+                        self.update_labels_and_game_tags(human='Human')
                         continue
                     
                     # Allow user to change book settings when user is to move in Play mode
@@ -1731,18 +1725,22 @@ class EasyChessGui():
 
     def get_engine_id_name(self):
         """ Set the engine path and return id name """
-        engine_path_and_name = './Engines/' + self.engine_file
-        self.engine_path_and_name = engine_path_and_name
-        if engine_path_and_name is None:
-            logging.info('Failed to load engine')
+        cur_dir = Path.cwd()
+        eng_path = Path(cur_dir, 'Engines', self.engine_file)
+        self.engine_path_and_name = eng_path
+        logging.info('engine path: {}'.format(eng_path))   
+        
+        # Exit app if we fail to load the engine
+        if not eng_path.is_file():
+            logging.info('Quit app, failed to load engine.')
             sys.exit(0)
             
         # Start the engine and get its id name for update to GUI
-        engine = chess.engine.SimpleEngine.popen_uci(engine_path_and_name)
-        engine_id_name = engine.id['name']
+        engine = chess.engine.SimpleEngine.popen_uci(str(self.engine_path_and_name))
+        self.opp_eng_id_name = engine.id['name']
         engine.quit()
         
-        return engine_id_name
+        return self.opp_eng_id_name
     
     def get_engines(self):
         """ Returns a list of engines located in Engines dir """
@@ -1922,7 +1920,7 @@ class EasyChessGui():
         # Initialize White and black boxes
         while True:
             button, value = self.window.Read(timeout=50)
-            self.update_labels_and_game_tags(human='Human', engine_id=engine_id_name)
+            self.update_labels_and_game_tags(human='Human')
             break
         
         while True:
@@ -2008,8 +2006,7 @@ class EasyChessGui():
                 w.Close()                
                 
                 # Update the player box in main window
-                self.update_labels_and_game_tags(human='Human',
-                                        engine_id=self.get_engine_id_name())
+                self.update_labels_and_game_tags(human='Human')
                 continue
             
             # Mode: Neutral, Set Adviser engine
@@ -2152,8 +2149,7 @@ class EasyChessGui():
                     auto_size_buttons=False, location=(loc[0], loc[1]), icon='')
                 self.is_user_white = not self.is_user_white
                 
-                self.update_labels_and_game_tags(human='Human',
-                                                 engine_id=engine_id_name)
+                self.update_labels_and_game_tags(human='Human')
                 self.psg_board = copy.deepcopy(initial_board)
                 board = chess.Board()
                 self.window.Refresh()
