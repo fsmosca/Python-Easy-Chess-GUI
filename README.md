@@ -119,3 +119,7 @@ https://github.com/PySimpleGUI/PySimpleGUI
 https://github.com/niklasf/python-chess
 * Pyperclip<br>
 https://github.com/asweigart/pyperclip
+* The Week in Chess<br>
+https://theweekinchess.com/
+* PyInstaller<br>
+https://github.com/pyinstaller/pyinstaller
