@@ -3,14 +3,14 @@ A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users 
 
 ![](https://i.imgur.com/J09H5GX.png)
 
-### Requirements
+### A. Requirements
 Windows exe file will be available upon release. In the meantime to get it running the following are required.
 * Python 3.7 and up
 * Python-chess v0.28.0 and up
 * PySimpleGUI 4.0.0
 * Pyperclip
 
-### Installation
+### B. Installation
 * Python Easy Chess GUI<br>
 Download the files including the Images, Engines and Book directories. You can use your favorite uci chess engine like stockfish by copying it into the engines dir.
 * Python 3<br>
@@ -25,7 +25,7 @@ pip install pysimplegui
 https://github.com/asweigart/pyperclip<br>
 pip install pyperclip
 
-### How to play
+### C. How to play
 * Execute python_easy_chess_gui.py<br>
 Typical command line:<br>
 `python python_easy_chess_gui.py`
@@ -63,7 +63,7 @@ Typical command line:<br>
 #### To Hide/Unhide Book info
 * Press the Book 1 or Book 2 text
 
-### GUI/User process flow
+### D. GUI/User process flow
 1. This app has 2 modes Neutral and Play. After executing the app the user is brought to Neutral mode.
 
 2. In Neutral mode user can
@@ -112,7 +112,7 @@ Typical command line:<br>
         * Hide/unhide 2 user books
         * Change mode back to neutral
 
-### Credits
+### E. Credits
 * PySimpleGUI<br>
 https://github.com/PySimpleGUI/PySimpleGUI
 * Python-Chess<br>
