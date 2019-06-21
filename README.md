@@ -1,7 +1,7 @@
 # Python Easy Chess GUI
 A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users can also load a chess engine and play with it. This program is based on a [demo chess against ai](https://github.com/PySimpleGUI/PySimpleGUI/tree/master/Chess) from PySimpleGUI.<br>
 
-![](https://i.imgur.com/ij2aKAl.png)
+![](https://i.imgur.com/J09H5GX.png)
 
 ### Requirements
 Windows exe file will be available upon release. In the meantime to get it running the following are required.
@@ -62,6 +62,47 @@ Typical command line:<br>
 
 #### To Hide/Unhide Book info
 * Press the Book 1 or Book 2 text
+
+### GUI/User process flow
+1. This app has 2 modes Neutral and Play. After executing the app the user is brought to Neutral mode.
+
+2. In Neutral mode user can
+  * Flip the board <br>
+  _If user wants to play as black_
+  * Set engine opponent
+    * Select engine
+    * Set Threads
+    * Set Hash
+  * Set engine opponent opening book settings
+    * Enable/disable book
+    * Set best move / random book moves
+  * Set engine thinking time and maximum search depths
+  * Set engine adviser
+    * Select engine
+    * Set Threads
+    * Set Hash
+  + Change to Play mode <br>
+    Play mode has 2 main states
+    1. User to move
+      * User can make a move on the board by pressing the from square and the to square
+      * Paste a FEN
+      * Set engine opponent
+        * Select engine
+        * Set Threads
+        * Set Hash
+      * Set engine thinking time and maximum search depths
+      * Can ask opening book assistance
+      * Can ask adviser engine on its best move and/or principal variation
+      * Can Save game
+      * Can Set opponent engine opening book
+      * Change to Neutral mode
+    2. Engine opponent to move
+      * User can interrupt engine while thinking by
+        * Move now
+        * New Game
+        * Quit the app
+    
+
 
 ### Credits
 * PySimpleGUI<br>
