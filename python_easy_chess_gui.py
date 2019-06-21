@@ -2,6 +2,9 @@
 """ 
 python_easy_chess_gui.py
 
+Requirements:
+    Python 3.7.3 and up
+
 PySimpleGUI Square Mapping
 board = [
     56, 57, ... 63
@@ -55,7 +58,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.79'
+APP_VERSION = 'v0.80'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -308,14 +311,9 @@ class RunEngine(threading.Thread):
         self.board = board
 
     def run(self):
-        # Use Python 3.7 to compile to exe
-        is_compile_to_exe = False
-        if is_compile_to_exe:
-            self.engine = chess.engine.SimpleEngine.popen_uci(
+        self.engine = chess.engine.SimpleEngine.popen_uci(
                     str(self.engine_path),
-                    creationflags=subprocess.CREATE_NO_WINDOW) 
-        else:
-            self.engine = chess.engine.SimpleEngine.popen_uci(str(self.engine_path))
+                    creationflags=subprocess.CREATE_NO_WINDOW)
         
         try:
             self.engine.configure({'Threads': self.threads})
