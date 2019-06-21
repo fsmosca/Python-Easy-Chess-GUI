@@ -55,7 +55,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.78'
+APP_VERSION = 'v0.79'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -1745,7 +1745,7 @@ class EasyChessGui():
     def get_engines(self):
         """ Returns a list of engines located in Engines dir """
         engine_list = []
-        engine_path = './Engines/'
+        engine_path = Path('Engines')
         files = os.listdir(engine_path)
         for file in files:
             if not file.endswith('.gz') and not file.endswith('.dll') \
@@ -1913,7 +1913,7 @@ class EasyChessGui():
         engine_id_name = self.get_engine_id_name()
         
         self.adviser_engine = self.engine_list[0]
-        self.adviser_engine_path = './Engines/' + self.adviser_engine
+        self.adviser_engine_path = Path('Engines', self.adviser_engine)
         
         self.init_game()
 
@@ -2056,7 +2056,7 @@ class EasyChessGui():
                         # In case the user did not select an engine and presses OK
                         try:
                             self.adviser_engine = v['engine_file_k'][0]
-                            self.adviser_engine_path = './Engines/' + self.adviser_engine
+                            self.adviser_engine_path = Path('Engines', self.adviser_engine)
                         except:
                             logging.info('User did not select an engine and pressed OK')
                         
