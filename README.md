@@ -67,42 +67,50 @@ Typical command line:<br>
 1. This app has 2 modes Neutral and Play. After executing the app the user is brought to Neutral mode.
 
 2. In Neutral mode user can
-  * Flip the board <br>
-  _If user wants to play as black_
+  * Flip the board
+    * If user wants to play as black
+  * Quit the app
   * Set engine opponent
     * Select engine
     * Set Threads
     * Set Hash
-  * Set engine opponent opening book settings
+  * Set opponent engine opening book settings
     * Enable/disable book
     * Set best move / random book moves
-  * Set engine thinking time and maximum search depths
+  * Set opponent engine thinking time and maximum search depths
   * Set engine adviser
     * Select engine
     * Set Threads
     * Set Hash
+    * Set thinking time
   + Change to Play mode <br>
     Play mode has 2 main states
     1. User to move
       * User can make a move on the board by pressing the from square and the to square
+      * User can make the engine think and play a move by pressing Engine->Go
       * Paste a FEN
+        * Use wants to play from a different position than the usual startposition
       * Set engine opponent
         * Select engine
         * Set Threads
         * Set Hash
-      * Set engine thinking time and maximum search depths
+      * Set opponent engine opening book settings
+        * Enable/disable book
+        * Set best move / random book moves
+      * Set opponent engine thinking time and maximum search depths
       * Can ask opening book assistance
       * Can ask adviser engine on its best move and/or principal variation
+        * After pressing the text Advise button, the adviser will search for best move. Once the color of pv line becomes blue that means it is done thinking and the user can now make a move on the board.
       * Can Save game
-      * Can Set opponent engine opening book
       * Change to Neutral mode
     2. Engine opponent to move
       * User can interrupt engine while thinking by
         * Move now
         * New Game
         * Quit the app
-    
-
+        * Hide/unhide engine search info
+        * Hide/unhide 2 user books
+        * Change mode back to neutral
 
 ### Credits
 * PySimpleGUI<br>
