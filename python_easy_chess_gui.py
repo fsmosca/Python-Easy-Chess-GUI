@@ -58,7 +58,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.80'
+APP_VERSION = 'v0.81'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -345,16 +345,13 @@ class RunEngine(threading.Thread):
                     try:
                         if 'depth' in info:
                             self.depth = int(info['depth'])
-                            self.eng_queue.put('{} depth'.format(self.depth))
                             
                         if 'score' in info:
                             self.score = int(info['score'].relative.score(mate_score=32000))/100
-                            self.eng_queue.put('{:+0.2f} score'.format(self.score))
                             
                         
                         self.time = info['time'] if 'time' in info else \
-                                time.time() - start_thinking_time
-                        self.eng_queue.put('{} time'.format(self.time))                      
+                                time.time() - start_thinking_time                     
     
                         if 'pv' in info and not ('upperbound' in info or 'lowerbound' in info):
                             self.pv = info['pv'][0:self.pv_length]
@@ -362,9 +359,12 @@ class RunEngine(threading.Thread):
                             self.eng_queue.put('{} pv'.format(self.pv))
                             self.bm = info['pv'][0]
                             
-                        if 'nps' in info:
-                            self.nps = info['nps']
-                            self.eng_queue.put('{} nps'.format(self.nps))
+                        # score, depth, time, pv
+                        if self.score is not None and \
+                                self.pv is not None and self.depth is not None:
+                            info_to_send = '{:+5.2f} | {} | {:0.1f}s | {} info_all'.format(
+                                    self.score, self.depth, self.time, self.pv)
+                            self.eng_queue.put('{}'.format(info_to_send))
                             
                         # If we use "go infinite" we stop the search by time and depth
                         if not is_time_check and \
@@ -376,7 +376,7 @@ class RunEngine(threading.Thread):
                         if 'depth' in info:
                             if int(info['depth']) >= self.max_depth:
                                 logging.info('Max depth limit is reached.')
-                                break
+                                break                        
                     except:
                         logging.info('Error in parsing engine search info')
         else:
@@ -448,41 +448,11 @@ class EasyChessGui():
         best_move = None
         msg_str = str(msg)
 
-        if not 'bestmove ' in msg_str:
-            if 'score' in msg_str:
-                score = float(' '.join(msg_str.split()[0:-1]).strip())
-                msg_line = '{:+0.2f}\n'.format(score)
-                self.window.FindElement('info_score_k').Update(
-                        '' if is_hide else msg_line)
-
-            if 'pv' in msg_str:
-                pv = ' '.join(msg_str.split()[0:-1]).strip()
-                msg_line = '{}\n'.format(pv)
-                self.window.FindElement('info_pv_k').Update(
-                        '' if is_hide else msg_line)
-
-            if 'depth' in msg_str:
-                depth = int(' '.join(msg_str.split()[0:-1]).strip())
-                msg_line = 'Depth {}\n'.format(depth)
-                self.window.FindElement('info_depth_k').Update(
-                        '' if is_hide else msg_line)
-
-            if 'time' in msg_str:
-                tsec = float(' '.join(msg_str.split()[0:-1]).strip())
-                msg_line = 'Time {}\n'.format(self.get_time_mm_ss_ms(tsec*1000))
-                self.window.FindElement('info_time_k').Update(
-                        '' if is_hide else msg_line)
-                
-            if 'nps' in msg_str:
-                nps = int(' '.join(msg_str.split()[0:-1]).strip())
-                
-                # Add suffix K if nps is 1 Million or more
-                if nps >= 1000000:
-                    msg_line = 'Knps {:0.0f}\n'.format(nps/1000)
-                else:
-                    msg_line = 'Nps {}\n'.format(nps)
-                
-                self.window.FindElement('info_nps_k').Update(
+        if not 'bestmove ' in msg_str:                
+            if 'info_all' in msg_str:
+                info_all = ' '.join(msg_str.split()[0:-1]).strip()
+                msg_line = '{}\n'.format(info_all)
+                self.window.FindElement('search_info_all_k').Update(
                         '' if is_hide else msg_line)
         else:
             best_move = chess.Move.from_uci(msg.split()[1])
@@ -517,11 +487,7 @@ class EasyChessGui():
 
     def clear_elements(self):
         """ Clear movelist, score, pv, time, depth and nps boxes """
-        self.window.FindElement('info_score_k').Update('')
-        self.window.FindElement('info_pv_k').Update('')
-        self.window.FindElement('info_depth_k').Update('')
-        self.window.FindElement('info_time_k').Update('')
-        self.window.FindElement('info_nps_k').Update('')
+        self.window.FindElement('search_info_all_k').Update('')
         self.window.FindElement('_movelist_').Update(disabled=False)
         self.window.FindElement('_movelist_').Update('', disabled=True)
         self.window.FindElement('polyglot_book1_k').Update('')
@@ -844,11 +810,11 @@ class EasyChessGui():
 
         self.max_time = min(MAX_TIME, max(MIN_TIME, user_movetime))
 
-    def get_engine_settings(self, engine_id_name):
+    def get_engine_settings(self):
         """ Display engine settings """
         sg.PopupOK(
             'Engine = {}\nThreads = {}\nHash = {} mb\nDepth = {}\nMovetime = {} sec'.format(
-                    engine_id_name, self.threads, self.hash, self.max_depth,
+                    self.opp_eng_id_name, self.threads, self.hash, self.max_depth,
                     self.max_time), title=BOX_TITLE, keep_on_top=True)
 
     def play_game(self, engine_id_name, board):
@@ -1000,8 +966,9 @@ class EasyChessGui():
                         self.set_time_limit()
                         continue
                     
+                    # Mode: Play, Stm: Computer (first move)
                     if button == 'Get Settings::engine_info_k':
-                        self.get_engine_settings(engine_id_name)
+                        self.get_engine_settings()
                         continue
                         
                     # Mode: Play, Stm: Computer (first move, not thinking)
@@ -1015,7 +982,7 @@ class EasyChessGui():
                         logging.info('Current engine file: {}'.format(current_engine_file))
         
                         layout = [
-                                [sg.T('Engine file', size=(12,1))],
+                                [sg.T('Current Opponent: {}'.format(self.opp_eng_id_name), size=(40,1))],
                                 [sg.Listbox(values=self.engine_list, size=(48,6),
                                             key='engine_file_k')],
                                 [sg.T('Threads', size=(12, 1)), 
@@ -1170,8 +1137,9 @@ class EasyChessGui():
                         self.window.Element('book2_k').Update(text_color='green' if is_hide_book2 else 'red')
                         break
                     
+                    # Mode: Play, Stm: User
                     if button == 'Get Settings::engine_info_k':
-                        self.get_engine_settings(engine_id_name)
+                        self.get_engine_settings()
                         break
                     
                     # Mode: Play, Stm: User, Allow user to change engine settings
@@ -1184,7 +1152,7 @@ class EasyChessGui():
                         logging.info('Current engine file: {}'.format(current_engine_file))
         
                         layout = [
-                                [sg.T('Engine file', size=(12,1))],
+                                [sg.T('Current Opponent: {}'.format(self.opp_eng_id_name), size=(40,1))],
                                 [sg.Listbox(values=self.engine_list, size=(48,6),
                                             bind_return_key = True, key='engine_file_k')],
                                 [sg.T('Threads', size=(12, 1)), 
@@ -1838,22 +1806,20 @@ class EasyChessGui():
         
         # Define board
         white_board_layout, black_board_layout = self.create_board()
-        bc = '#d3dae4'
     
         board_controls = [
             [sg.Text('Mode    Neutral', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
             [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.Text('Human',
-                    font=('Consolas', 10), key='_White_', size=(35, 1), relief='sunken')],
+                    font=('Consolas', 10), key='_White_', size=(36, 1), relief='sunken')],
             [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.Text('Computer',
-                    font=('Consolas', 10), key='_Black_', size=(35, 1), relief='sunken')],
-        
-            [sg.Text('MOVE LIST', font=('Consolas', 10))],
-            [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(0, 1),
-                    font=('Consolas', 10), key='_movelist_', disabled=True)],
+                    font=('Consolas', 10), key='_Black_', size=(36, 1), relief='sunken')],
                                     
             [sg.Text('Advise', font=('Consolas', 10), click_submits=True, key='advise_k'),
              sg.Text('', font=('Consolas', 10), key='advise_info_k', relief='sunken',
                      size=(36,1))],
+
+            [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(0, 1),
+                    font=('Consolas', 10), key='_movelist_', disabled=True)],
                                     
             [sg.Text('BOOK 1\nsrc: Computer games', size=(20, 2),
                      font=('Consolas', 10), click_submits=True, key='book1_k'), 
@@ -1866,12 +1832,8 @@ class EasyChessGui():
 
             [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10), size=(28, 1),
                      click_submits=True, key='search_info_k')],
-            [sg.Text('', key='info_score_k', size=(8, 1), background_color = bc),
-             sg.Text('', key='info_pv_k', size=(28, 1), background_color = bc)],
-             
-            [sg.Text('', key='info_depth_k', size=(8, 1), background_color = bc),
-             sg.Text('', key='info_time_k', size=(12, 1), background_color = bc),
-             sg.Text('', key='info_nps_k', size=(14, 1), background_color = bc)],           
+            [sg.Text('', key='search_info_all_k', size=(44, 1), 
+                     font=('Consolas', 10), relief='sunken')],          
         ]
     
         white_board_tab = [[sg.Column(white_board_layout)]]
@@ -1936,16 +1898,11 @@ class EasyChessGui():
             
             # Mode: Neutral
             if button == 'Get Settings::engine_info_k':
-                self.get_engine_settings(engine_id_name)
+                self.get_engine_settings()
                 continue
 
             # Mode: Neutral, Allow user to change opponent engine settings
             if button == 'Set Engine Opponent':
-                # Disable the main window and build a new window for setting
-                # engine opponent. Enable the main window when done
-                
-                # Backup current engine info, in case user cancels the engine selection,
-                # we can just restore to current values.
                 current_engine_list = self.engine_list
                 current_engine_file = self.engine_file
                 
@@ -1954,7 +1911,7 @@ class EasyChessGui():
                 logging.info('Current engine file: {}'.format(current_engine_file))
 
                 layout = [
-                        [sg.T('Engine file', size=(12,1))],
+                        [sg.T('Current Opponent: {}'.format(self.opp_eng_id_name), size=(40,1))],
                         [sg.Listbox(values=self.engine_list, size=(48,6),
                                     bind_return_key = True, key='engine_file_k')],
                         [sg.T('Threads', size=(12, 1)), 
