@@ -58,7 +58,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.81'
+APP_VERSION = 'v0.82'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -1020,7 +1020,7 @@ class EasyChessGui():
                                 
                                 try:
                                     self.engine_file = v['engine_file_k'][0]
-                                    engine_id_name = self.get_engine_id_name()
+                                    self.get_engine_id_name()
                                     self.update_engine_list()
                                 except:
                                     pass
@@ -1154,7 +1154,7 @@ class EasyChessGui():
                         layout = [
                                 [sg.T('Current Opponent: {}'.format(self.opp_eng_id_name), size=(40,1))],
                                 [sg.Listbox(values=self.engine_list, size=(48,6),
-                                            bind_return_key = True, key='engine_file_k')],
+                                            key='engine_file_k')],
                                 [sg.T('Threads', size=(12, 1)), 
                                  sg.Spin([t for t in range(1, 9)], initial_value=self.threads,
                                           size=(8, 1), key='threads_k')],
@@ -1190,7 +1190,7 @@ class EasyChessGui():
                                 
                                 try:
                                     self.engine_file = v['engine_file_k'][0]
-                                    engine_id_name = self.get_engine_id_name()
+                                    self.get_engine_id_name()
                                     self.update_engine_list()
                                 except:
                                     pass
@@ -1690,24 +1690,33 @@ class EasyChessGui():
             f.write('{}\n\n'.format(self.game)) 
 
     def get_engine_id_name(self):
-        """ Set the engine path and return id name """
+        """ Set the engine path """        
         cur_dir = Path.cwd()
         eng_path = Path(cur_dir, 'Engines', self.engine_file)
-        self.engine_path_and_name = eng_path
-        logging.info('engine path: {}'.format(eng_path))   
+        self.engine_path_and_name = eng_path                        
         
-        # Exit app if we fail to load the engine
-        if not eng_path.is_file():
-            logging.info('Quit app, failed to load engine.')
-            sys.exit(0)
+        p = subprocess.Popen(str(eng_path), bufsize=1,
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, universal_newlines=True,
+                creationflags=subprocess.CREATE_NO_WINDOW)
+        
+        p.stdin.write('uci\n')
+        for eline in iter(p.stdout.readline, ''):
+            line = eline.strip()
+            if 'id name' in line:
+                engine_id_name = ' '.join(line.split()[2:]).strip()
+            if 'uciok' in line:
+                break
+
+        p.stdin.write('quit')
+        try:
+            p.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            p.communicate()
             
-        # Start the engine and get its id name for update to GUI
-        engine = chess.engine.SimpleEngine.popen_uci(str(self.engine_path_and_name))
-        self.opp_eng_id_name = engine.id['name']
-        engine.quit()
-        
-        return self.opp_eng_id_name
-    
+        self.opp_eng_id_name = engine_id_name
+
     def get_engines(self):
         """ Returns a list of engines located in Engines dir """
         engine_list = []
@@ -1870,7 +1879,8 @@ class EasyChessGui():
 
         # Define the opponent engine to use, this is the first engine in the list
         self.engine_file = self.engine_list[0]        
-        engine_id_name = self.get_engine_id_name()
+        self.get_engine_id_name()
+        engine_id_name = self.opp_eng_id_name
         
         self.adviser_engine = self.engine_list[0]
         self.adviser_engine_path = Path('Engines', self.adviser_engine)
@@ -1913,7 +1923,7 @@ class EasyChessGui():
                 layout = [
                         [sg.T('Current Opponent: {}'.format(self.opp_eng_id_name), size=(40,1))],
                         [sg.Listbox(values=self.engine_list, size=(48,6),
-                                    bind_return_key = True, key='engine_file_k')],
+                                    key='engine_file_k')],
                         [sg.T('Threads', size=(12, 1)), 
                          sg.Spin([t for t in range(1, 9)], initial_value=self.threads,
                                   size=(8, 1), key='threads_k')],
@@ -1949,12 +1959,10 @@ class EasyChessGui():
                         self.threads = min(MAX_THREADS, max(MIN_THREADS, threads_value))
                         
                         # In case the user did not select an engine and presses OK
-                        try:
-                            self.engine_file = v['engine_file_k'][0]
-                            engine_id_name = self.get_engine_id_name()
-                            self.update_engine_list()
-                        except:
-                            pass
+                        self.engine_file = v['engine_file_k'][0]
+                        self.get_engine_id_name()
+                        engine_id_name = self.opp_eng_id_name
+                        self.update_engine_list()
                         break
                 
                 self.window.Enable()
