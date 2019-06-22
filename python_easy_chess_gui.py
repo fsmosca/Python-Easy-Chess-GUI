@@ -58,7 +58,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v0.82'
+APP_VERSION = 'v0.83'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -155,7 +155,7 @@ You should be in Play mode
 1. Copy exe file in the engines directory   
 
 (H) To show engine search info                   
-1. Press the ENGINE SEARCH INFO text
+1. Press the Engine Search Info text
 
 (I) To hide Book 1 and Book 2
 1. Press the Book 1 or Book 2 text
@@ -421,7 +421,7 @@ class EasyChessGui():
         self.engine_path_and_name = None
         self.engine_file = None
         self.opp_eng_id_name = None
-        self.adviser_engine = None
+        self.adviser_file = None
         self.adviser_hash = 128
         self.adviser_threads = 1
         self.adviser_engine_path = None
@@ -1818,30 +1818,31 @@ class EasyChessGui():
     
         board_controls = [
             [sg.Text('Mode    Neutral', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
-            [sg.Text('White', size=(6, 1), font=('Consolas', 10)), sg.Text('Human',
+            [sg.Text('White', size=(7, 1), font=('Consolas', 10)), sg.Text('Human',
                     font=('Consolas', 10), key='_White_', size=(36, 1), relief='sunken')],
-            [sg.Text('Black', size=(6, 1), font=('Consolas', 10)), sg.Text('Computer',
+            [sg.Text('Black', size=(7, 1), font=('Consolas', 10)), sg.Text('Computer',
                     font=('Consolas', 10), key='_Black_', size=(36, 1), relief='sunken')],
                                     
-            [sg.Text('Advise', font=('Consolas', 10), click_submits=True, key='advise_k'),
+            [sg.Text('Adviser', size=(7, 1), font=('Consolas', 10),
+                     click_submits=True, key='advise_k'),
              sg.Text('', font=('Consolas', 10), key='advise_info_k', relief='sunken',
                      size=(36,1))],
 
             [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(0, 1),
                     font=('Consolas', 10), key='_movelist_', disabled=True)],
                                     
-            [sg.Text('BOOK 1\nsrc: Computer games', size=(20, 2),
+            [sg.Text('BOOK 1, Comp games', size=(21, 1),
                      font=('Consolas', 10), click_submits=True, key='book1_k'), 
-             sg.Text('BOOK 2\nsrc: Human games', 
+             sg.Text('BOOK 2, Human games', 
                      font=('Consolas', 10), click_submits=True, key='book2_k')], 
             [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(0, 8),
                     font=('Consolas', 10), key='polyglot_book1_k', disabled=True),
              sg.Multiline('', do_not_clear=True, autoscroll=False, size=(2, 8),
                     font=('Consolas', 10), key='polyglot_book2_k', disabled=True)],
 
-            [sg.Text('ENGINE SEARCH INFO', font=('Consolas', 10), size=(28, 1),
+            [sg.Text('Engine Search Info', font=('Consolas', 10), size=(30, 1),
                      click_submits=True, key='search_info_k')],
-            [sg.Text('', key='search_info_all_k', size=(44, 1), 
+            [sg.Text('', key='search_info_all_k', size=(45, 1), 
                      font=('Consolas', 10), relief='sunken')],          
         ]
     
@@ -1882,8 +1883,8 @@ class EasyChessGui():
         self.get_engine_id_name()
         engine_id_name = self.opp_eng_id_name
         
-        self.adviser_engine = self.engine_list[0]
-        self.adviser_engine_path = Path('Engines', self.adviser_engine)
+        self.adviser_file = self.engine_list[0]
+        self.adviser_engine_path = Path('Engines', self.adviser_file)
         
         self.init_game()
 
@@ -1974,7 +1975,7 @@ class EasyChessGui():
             
             # Mode: Neutral, Set Adviser engine
             if button == 'Set Engine Adviser':
-                current_adviser_engine_file = self.adviser_engine
+                current_adviser_engine_file = self.adviser_file
                 current_adviser_engine_path = self.adviser_engine_path
 
                 layout = [
@@ -2002,7 +2003,7 @@ class EasyChessGui():
                     e, v = w.Read(timeout=10)
                     
                     if e is None or e == 'Cancel':
-                        self.adviser_engine = current_adviser_engine_file
+                        self.adviser_file = current_adviser_engine_file
                         self.adviser_engine_path = current_adviser_engine_path
                         break
                     
@@ -2018,8 +2019,8 @@ class EasyChessGui():
                         
                         # In case the user did not select an engine and presses OK
                         try:
-                            self.adviser_engine = v['engine_file_k'][0]
-                            self.adviser_engine_path = Path('Engines', self.adviser_engine)
+                            self.adviser_file = v['engine_file_k'][0]
+                            self.adviser_engine_path = Path('Engines', self.adviser_file)
                         except:
                             logging.info('User did not select an engine and pressed OK')
                         
