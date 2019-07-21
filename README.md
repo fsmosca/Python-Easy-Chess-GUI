@@ -52,16 +52,16 @@ Typical command line:<br>
 * If current mode is Play, Mode->Neutral, then Board->Flip
 
 #### To set book options
-* Book->Set Book
+* Book->Set Book, only available in Neutral mode.
 
 #### To select engine
-* Engine->Set Engine
+* Engine->Set Engine Opponent, available only in Neutral mode.
 
 #### To Hide/Unhide engine search info
-* Press the ENGINE SEARCH INFO text
+* Right-click on Opponent Search Info label
 
 #### To Hide/Unhide Book info
-* Press the Book 1 or Book 2 text
+* Right-click on BOOK 1 or BOOK 2 labels
 
 ### D. GUI/User process flow
 1. This app has 2 modes Neutral and Play. After executing the app the user is brought to Neutral mode.
@@ -71,18 +71,16 @@ Typical command line:<br>
     * If user wants to play as black
   * Quit the app
   * Set engine opponent
-    * Select engine
-    * Set Threads
-    * Set Hash
   * Set opponent engine opening book settings
     * Enable/disable book
     * Set best move / random book moves
-  * Set opponent engine thinking time and maximum search depths
+  * Set opponent engine time control
+    * Fischer type
+    * Timepermove type
   * Set engine adviser
-    * Select engine
-    * Set Threads
-    * Set Hash
-    * Set thinking time
+  * Set time control of User
+    * Fischer type
+    * Delay type
   + Change to Play mode <br>
     Play mode has 2 main states
     1. User to move
@@ -90,14 +88,6 @@ Typical command line:<br>
       * User can make the engine think and play a move by pressing Engine->Go
       * Paste a FEN
         * Use wants to play from a different position than the usual startposition
-      * Set engine opponent
-        * Select engine
-        * Set Threads
-        * Set Hash
-      * Set opponent engine opening book settings
-        * Enable/disable book
-        * Set best move / random book moves
-      * Set opponent engine thinking time and maximum search depths
       * Can ask opening book assistance
       * Can ask adviser engine on its best move and/or principal variation
         * After pressing the text Advise button, the adviser will search for best move. Once the color of pv line becomes blue that means it is done thinking and the user can now make a move on the board.
@@ -123,3 +113,5 @@ https://github.com/asweigart/pyperclip
 https://theweekinchess.com/
 * PyInstaller<br>
 https://github.com/pyinstaller/pyinstaller
+* pgn-extract<br>
+https://www.cs.kent.ac.uk/people/staff/djb/pgn-extract/
