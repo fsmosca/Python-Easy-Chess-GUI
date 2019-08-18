@@ -59,9 +59,6 @@ Typical command line:<br>
 #### To set opponent engine book options
 * Book->Set Book, only available in Neutral mode. This book is used by your opponent engine. This book is named pecg_book.bin and is located in Book folder. You can build a polyglot book name it pecg_book.bin and replace the default.
 
-#### To select engine
-* Engine->Set Engine Opponent, available only in Neutral mode.
-
 #### To Hide/Unhide engine search info
 * Right-click on Opponent Search Info label an press Show. This would only work on Play mode.
 
@@ -72,15 +69,24 @@ Typical command line:<br>
 * Right-click on Adviser and press start. This would only work on Play mode.
 
 #### To select opponent engine
-* Engine->Set Engine Opponent
+* Engine->Set Engine Opponent, available only in Neutral mode.
 
 #### To set time control of engine
 * Time->Engine
 
+#### To set time control of user
+* Time->User
+
 #### To install engine
 * Engine->Manage->Install  
-After the uci engine is installed, you have to Edit it to modify its options, etc. Only uci engines are supported so far.
+This is only accessible in Neutral mode. After the uci engine is installed, you have to Edit it to modify its options, etc. Only uci engines are supported so far.
 * Engine->Manage->Edit
+
+#### To Edit engine
+* Engine->Manage->Edit
+
+#### To delete engine from config file
+* Engine->Manage->Delete
 
 ### E. Credits
 * PySimpleGUI<br>
