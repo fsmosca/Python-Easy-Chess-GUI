@@ -7,10 +7,11 @@ A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users 
 Windows exe file will be available upon release. In the meantime to get it running the following are required.
 * Python 3.7 and up
 * Python-chess v0.28.0 and up
-* PySimpleGUI 4.0.0
+* PySimpleGUI 4.0.0 and up
 * Pyperclip
 
 ### B. Installation
+1. If you want to run from the source code
 * Python Easy Chess GUI<br>
 Download the files including the Images, Engines and Book directories. You can use your favorite uci chess engine like stockfish by copying it into the engines dir.
 * Python 3<br>
@@ -24,11 +25,14 @@ pip install pysimplegui
 * Pyperclip<br>
 https://github.com/asweigart/pyperclip<br>
 pip install pyperclip
+2. If you want to run from the exe
+* Download the exe file from the release link
 
 ### C. How to play
 * Execute python_easy_chess_gui.py<br>
 Typical command line:<br>
 `python python_easy_chess_gui.py`
+* Execute the exe when using exe file
 
 #### To play as white
 * Mode->Play
@@ -62,45 +66,6 @@ Typical command line:<br>
 
 #### To Hide/Unhide Book info
 * Right-click on BOOK 1 or BOOK 2 labels
-
-### D. GUI/User process flow
-1. This app has 2 modes Neutral and Play. After executing the app the user is brought to Neutral mode.
-
-2. In Neutral mode user can
-  * Flip the board
-    * If user wants to play as black
-  * Quit the app
-  * Set engine opponent
-  * Set opponent engine opening book settings
-    * Enable/disable book
-    * Set best move / random book moves
-  * Set opponent engine time control
-    * Fischer type
-    * Timepermove type
-  * Set engine adviser
-  * Set time control of User
-    * Fischer type
-    * Delay type
-  + Change to Play mode <br>
-    Play mode has 2 main states
-    1. User to move
-      * User can make a move on the board by pressing the from square and the to square
-      * User can make the engine think and play a move by pressing Engine->Go
-      * Paste a FEN
-        * Use wants to play from a different position than the usual startposition
-      * Can ask opening book assistance
-      * Can ask adviser engine on its best move and/or principal variation
-        * After pressing the text Advise button, the adviser will search for best move. Once the color of pv line becomes blue that means it is done thinking and the user can now make a move on the board.
-      * Can Save game
-      * Change to Neutral mode
-    2. Engine opponent to move
-      * User can interrupt engine while thinking by
-        * Move now
-        * New Game
-        * Quit the app
-        * Hide/unhide engine search info
-        * Hide/unhide 2 user books
-        * Change mode back to neutral
 
 ### E. Credits
 * PySimpleGUI<br>
