@@ -28,7 +28,8 @@ pip install pyperclip
 2. If you want to run from the exe
 * Download the exe file from the release link
 
-### C. How to play
+### C. How to
+#### To start the gui
 * Execute python_easy_chess_gui.py<br>
 Typical command line:<br>
 `python python_easy_chess_gui.py`
@@ -55,17 +56,31 @@ Typical command line:<br>
 * If current mode is Neutral, Board->Flip
 * If current mode is Play, Mode->Neutral, then Board->Flip
 
-#### To set book options
-* Book->Set Book, only available in Neutral mode.
+#### To set opponent engine book options
+* Book->Set Book, only available in Neutral mode. This book is used by your opponent engine. This book is named pecg_book.bin and is located in Book folder. You can build a polyglot book name it pecg_book.bin and replace the default.
 
 #### To select engine
 * Engine->Set Engine Opponent, available only in Neutral mode.
 
 #### To Hide/Unhide engine search info
-* Right-click on Opponent Search Info label
+* Right-click on Opponent Search Info label an press Show. This would only work on Play mode.
 
 #### To Hide/Unhide Book info
-* Right-click on BOOK 1 or BOOK 2 labels
+* Right-click on BOOK 1 or BOOK 2 labels and press Show. This would only work on Play mode.
+
+#### To request Adviser search info
+* Right-click on Adviser and press start. This would only work on Play mode.
+
+#### To select opponent engine
+* Engine->Set Engine Opponent
+
+#### To set time control of engine
+* Time->Engine
+
+#### To install engine
+* Engine->Manage->Install  
+After the uci engine is installed, you have to Edit it to modify its options, etc. Only uci engines are supported so far.
+* Engine->Manage->Edit
 
 ### E. Credits
 * PySimpleGUI<br>
