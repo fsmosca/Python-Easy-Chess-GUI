@@ -368,6 +368,7 @@ class RunEngine(threading.Thread):
         self.tc_type = tc_type
         self.period_moves = period_moves
         self.is_ownbook = False
+        self.is_move_delay = False
 
     def stop(self):
         """ Interrupt engine search """
@@ -574,8 +575,8 @@ class RunEngine(threading.Thread):
                 self.eng_queue.put('{}'.format(info_to_send))
             self.bm = result.move
 
-        # Apply engine move delay
-        if False:
+        # Apply engine move delay if movetime is small
+        if self.is_move_delay:
             while True:
                 if time.perf_counter() - start_time >= self.move_delay_sec:
                     break
