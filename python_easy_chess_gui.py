@@ -452,11 +452,6 @@ class RunEngine(threading.Thread):
             logging.warning(e)
             self.eng_queue.put('bestmove {}'.format(self.bm))
             return
-        except:
-            logging.warning('Failed to start {}.'.format(self.engine_path_and_file))
-            logging.warning('Unexpected exception')
-            self.eng_queue.put('bestmove {}'.format(self.bm))
-            return
 
         # Set engine option values
         try:
