@@ -435,7 +435,6 @@ class RunEngine(threading.Thread):
 
         :return: bestmove thru que
         """
-        self.bm = None
         folder = Path(self.engine_path_and_file)
         folder = folder.parents[0]
 
