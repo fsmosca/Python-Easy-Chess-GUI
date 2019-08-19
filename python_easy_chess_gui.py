@@ -460,14 +460,7 @@ class RunEngine(threading.Thread):
             logging.warning('{} in configuring engine.'.format(e))
 
         # Set search limits
-        if self.tc_type == 'fischer':
-            limit = chess.engine.Limit(
-                depth=self.max_depth if self.max_depth != MAX_DEPTH else None,
-                white_clock=self.base_ms/1000,
-                black_clock=self.base_ms/1000,
-                white_inc=self.inc_ms/1000,
-                black_inc=self.inc_ms/1000)
-        elif self.tc_type == 'delay':
+        if self.tc_type == 'delay':
             limit = chess.engine.Limit(
                 depth=self.max_depth if self.max_depth != MAX_DEPTH else None,
                 white_clock=self.base_ms/1000,
@@ -478,6 +471,13 @@ class RunEngine(threading.Thread):
             limit = chess.engine.Limit(time=self.base_ms/1000,
                                        depth=self.max_depth if
                                        self.max_depth != MAX_DEPTH else None)
+        else:
+            limit = chess.engine.Limit(
+                depth=self.max_depth if self.max_depth != MAX_DEPTH else None,
+                white_clock=self.base_ms/1000,
+                black_clock=self.base_ms/1000,
+                white_inc=self.inc_ms/1000,
+                black_inc=self.inc_ms/1000)
         start_time = time.perf_counter()
         if self.analysis:
             is_time_check = False
