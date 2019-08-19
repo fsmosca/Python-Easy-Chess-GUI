@@ -586,8 +586,11 @@ class RunEngine(threading.Thread):
         # If bm is None, we will use engine.play()
         if self.bm is None:
             logging.info('bm is none, we will try engine,play().')
-            result = self.engine.play(self.board, limit)
-            self.bm = result.move
+            try:
+                result = self.engine.play(self.board, limit)
+                self.bm = result.move
+            except Exception as e:
+                logging.exception('Error in running engine')
         self.eng_queue.put('bestmove {}' .format(self.bm))
         logging.info('bestmove {}'.format(self.bm))
 
