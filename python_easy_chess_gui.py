@@ -60,14 +60,13 @@ if False:
              'funcName)s :: line: %(lineno)d :: %(levelname)s :: %(message)s'
 else:
     log_format = '%(asctime)s :: %(funcName)s :: line: %(lineno)d :: %(' \
-                 'levelname)s :: %(' \
-                 'message)s'
+                 'levelname)s :: %(message)s'
 logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
                     format=log_format)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.0 RC1'
+APP_VERSION = 'v1.0 RC2'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -1726,8 +1725,10 @@ class EasyChessGui:
 
                     # Mode: Play, Stm: User, Run adviser engine
                     if button == 'Start::right_adviser_k':
-                        self.adviser_threads = self.get_engine_threads(self.adviser_id_name)
-                        self.adviser_hash = self.get_engine_hash(self.adviser_id_name)
+                        self.adviser_threads = self.get_engine_threads(
+                            self.adviser_id_name)
+                        self.adviser_hash = self.get_engine_hash(
+                            self.adviser_id_name)
                         adviser_base_ms = 60000  # 60s
                         adviser_inc_ms = 0
 
@@ -2303,13 +2304,11 @@ class EasyChessGui:
                     k2 = 'w_base_time_k'
 
                 # Update elapse box
-                elapse_str = self.get_time_mm_ss_ms(
-                    engine_timer.elapse)
+                elapse_str = self.get_time_mm_ss_ms(engine_timer.elapse)
                 window.Element(k1).Update(elapse_str)
 
                 # Update remaining time box
-                elapse_str = self.get_time_h_mm_ss(
-                    engine_timer.base)
+                elapse_str = self.get_time_h_mm_ss(engine_timer.base)
                 window.Element(k2).Update(elapse_str)
 
                 window.FindElement('_gamestatus_').Update('Mode     Play')
@@ -2644,8 +2643,7 @@ class EasyChessGui:
                                     elapse = int(time.perf_counter() - t1)
                                     w.Element('status_k').Update(
                                         player_name + ' was deleted. Done! '
-                                                      'in ' + str(elapse) +
-                                        's')
+                                        'in ' + str(elapse) + 's')
                                     break
                                 else:
                                     w.Element('status_k').Update(
@@ -2731,8 +2729,7 @@ class EasyChessGui:
                     [sg.Radio('Fischer', 'tc_radio', key='fischer_type_k',
                               default=True if
                               self.engine_tc_type == 'fischer' else False),
-                     sg.Radio('Time Per Move', 'tc_radio',
-                              key='timepermove_k',
+                     sg.Radio('Time Per Move', 'tc_radio', key='timepermove_k',
                               default=True if
                               self.engine_tc_type == 'timepermove' else
                               False, tooltip='Only base time will be used.')
