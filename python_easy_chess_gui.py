@@ -677,6 +677,57 @@ class EasyChessGui:
 
         self.gui_theme = 'Reddit'
 
+        self.is_save_time_left = True
+        self.is_save_user_comment = True
+
+    def update_game(self, mc, user_move, time_left, user_comment):
+        """
+        Used for saving moves in the game.
+
+        :param mc: move count
+        :param user_move:
+        :param time_left:
+        :param user_comment: Can be a 'book' from the engine
+        :return:
+        """
+        # Save user comment
+        if self.is_save_user_comment:
+            # If comment is empty
+            if not (user_comment and user_comment.strip()):
+                if mc == 1:
+                    self.node = self.game.add_variation(user_move)
+                else:
+                    self.node = self.node.add_variation(user_move)
+
+                # Save clock (time left after a move) as move comment
+                if self.is_save_time_left:
+                    rem_time = self.get_time_h_mm_ss(time_left, False)
+                    self.node.comment = '[%clk {}]'.format(rem_time)
+            else:
+                if mc == 1:
+                    self.node = self.game.add_variation(user_move)
+                else:
+                    self.node = self.node.add_variation(user_move)
+
+                # Save clock, add clock as comment after a move
+                if self.is_save_time_left:
+                    rem_time = self.get_time_h_mm_ss(time_left, False)
+                    self.node.comment = '[%clk {}] {}'.format(rem_time,
+                                                         user_comment)
+                else:
+                    self.node.comment = user_comment
+        # Do not save user comment
+        else:
+            if mc == 1:
+                self.node = self.game.add_variation(user_move)
+            else:
+                self.node = self.node.add_variation(user_move)
+
+            # Save clock, add clock as comment after a move
+            if self.is_save_time_left:
+                rem_time = self.get_time_h_mm_ss(time_left, False)
+                self.node.comment = '[%clk {}]'.format(rem_time)
+
     def create_new_window(self, window, flip=False):
         """ Close the window param just before turning the new window """
 
@@ -1162,8 +1213,10 @@ class EasyChessGui:
 
     def get_time_h_mm_ss(self, time_ms, symbol=True):
         """
-        Returns time in h:mmm:ss format
+        Returns time in h:mm:ss format.
+
         :param time_ms:
+        :param symbol:
         :return:
         """
         s, ms = divmod(int(time_ms), 1000)
@@ -1208,6 +1261,7 @@ class EasyChessGui:
     def init_game(self):
         """ Initialize game with initial pgn tag values """
         self.game = chess.pgn.Game()
+        self.node = None
         self.game.headers['Event'] = INIT_PGN_TAG['Event']
         self.game.headers['Date'] = self.get_tag_date()
         self.game.headers['White'] = INIT_PGN_TAG['White']
@@ -2004,48 +2058,10 @@ class EasyChessGui:
                                 # Update clock, reset elapse to zero
                                 human_timer.update_base()
 
-                                if move_cnt == 1:
-                                    # Save comment from comment box
-                                    if True:
-                                        user_comment = value['comment_k']
-
-                                        # If comment is empty
-                                        if not (user_comment and user_comment.strip()):
-                                            node = self.game.add_variation(user_move)
-                                        else:
-                                            node = self.game.add_variation(user_move)
-                                            node.comment = user_comment
-                                    else:
-                                        node = self.game.add_variation(user_move)
-                                else:
-                                    # Save comment from comment box
-                                    if True:
-                                        user_comment = value['comment_k']
-                                        if not (user_comment and user_comment.strip()):
-                                            node = node.add_variation(user_move)
-                                            rem_time = self.get_time_h_mm_ss(
-                                                human_timer.base, False)
-                                            node.comment = '[%clk {}]'.format(
-                                                rem_time, user_comment)
-                                        else:
-                                            node = node.add_variation(user_move)
-
-                                            # Combine user and clk comment
-
-                                            # Add comment after the move
-                                            node.comment = user_comment
-
-                                            # Add clk as comment after a move
-                                            rem_time = self.get_time_h_mm_ss(
-                                                human_timer.base, False)
-                                            node.comment = '[%clk {}] {}'.format(
-                                                rem_time, user_comment)
-                                    else:
-                                        node = node.add_variation(user_move)
-                                        rem_time = self.get_time_h_mm_ss(
-                                            human_timer.base, False)
-                                        node.comment = '[%clk {}]'.format(
-                                            rem_time, user_comment)
+                                # Update game, move from human
+                                time_left = human_timer.base
+                                user_comment = value['comment_k']
+                                self.update_game(move_cnt, user_move, time_left, user_comment)
 
                                 window.FindElement('_movelist_').Update(disabled=False)
                                 window.FindElement('_movelist_').Update('')
@@ -2268,20 +2284,13 @@ class EasyChessGui:
                 # Update timer
                 engine_timer.update_base()
 
-                if move_cnt == 1:
-                    node = self.game.add_variation(best_move)
-                    if is_book_from_gui:
-                        node.comment = 'book'
+                # Update game, move from engine
+                time_left = engine_timer.base
+                if is_book_from_gui:
+                    engine_comment = 'book'
                 else:
-                    node = node.add_variation(best_move)
-                    if is_book_from_gui:
-                        node.comment = 'book'
-
-                # Add clk as comment after a move
-                if not is_book_from_gui:
-                    rem_time = self.get_time_h_mm_ss(
-                        engine_timer.base, False)
-                    node.comment = '[%clk {}]'.format(rem_time)
+                    engine_comment = ''
+                self.update_game(move_cnt, best_move, time_left, engine_comment)
 
                 window.FindElement('_movelist_').Update(disabled=False)
                 window.FindElement('_movelist_').Update('')
