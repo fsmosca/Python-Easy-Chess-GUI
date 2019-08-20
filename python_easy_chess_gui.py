@@ -284,8 +284,8 @@ class GuiBook:
             self.__book_move = entry.move
         except IndexError:
             logging.warning('No more book move.')
-        except:
-            logging.warning('Unexpected error in probing polyglot book move.')
+        except Exception:
+            logging.exception('Failed to get book move.')
         finally:
             reader.close()
 
@@ -420,14 +420,15 @@ class RunEngine(threading.Thread):
                                 self.engine.configure({n['name']: user_value})
                                 logging.info('Set {} to {}'.format(
                                     n['name'], user_value))
-                            except Exception as e:
-                                logging.warning('{}'.format(e))
+                            except Exception:
+                                logging.exception('{Failed to configure '
+                                                  'engine}')
 
         # Don't use UCI_Analyse mode
         try:
             self.engine.configure({'UCI_AnalyseMode': False})
-        except:
-            pass
+        except Exception:
+            logging.exception('Failed to set UCI_AnalyseMode.')
 
     def run(self):
         """
@@ -447,17 +448,17 @@ class RunEngine(threading.Thread):
             logging.warning('Failed to start {}.'.format(self.engine_path_and_file))
             self.eng_queue.put('bestmove {}'.format(self.bm))
             return
-        except Exception as e:
-            logging.warning('Failed to start {}.'.format(self.engine_path_and_file))
-            logging.warning(e)
+        except Exception:
+            logging.exception('Failed to start {}.'.format(
+                self.engine_path_and_file))
             self.eng_queue.put('bestmove {}'.format(self.bm))
             return
 
         # Set engine option values
         try:
             self.configure_engine()
-        except Exception as e:
-            logging.warning('{} in configuring engine.'.format(e))
+        except Exception:
+            logging.exception('Failed to configure engine.')
 
         # Set search limits
         if self.tc_type == 'delay':
@@ -534,8 +535,8 @@ class RunEngine(threading.Thread):
                                     and self.max_depth != MAX_DEPTH:
                                 logging.info('Max depth limit is reached.')
                                 break
-                    except:
-                        logging.info('Error in parsing engine search info')
+                    except Exception:
+                        logging.exception('Failed to parse search info.')
         else:
             result = self.engine.play(self.board, limit,info=chess.engine.INFO_ALL)
             logging.info('result: {}'.format(result))
@@ -589,8 +590,8 @@ class RunEngine(threading.Thread):
             try:
                 result = self.engine.play(self.board, limit)
                 self.bm = result.move
-            except Exception as e:
-                logging.exception('Error in running engine')
+            except Exception:
+                logging.exception('Failed to get engine bestmove.')
         self.eng_queue.put('bestmove {}' .format(self.bm))
         logging.info('bestmove {}'.format(self.bm))
 
@@ -601,8 +602,8 @@ class RunEngine(threading.Thread):
             self.engine.quit()
         except AttributeError:
             logging.info('AttributeError, self.engine is already None')
-        except Exception as e:
-            logging.info('Unexpected exception {}'.format(e))
+        except Exception:
+            logging.exception('Failed to quit engine.')
 
     def short_variation_san(self):
         """ Returns variation in san but without move numbers """
@@ -848,7 +849,7 @@ class EasyChessGui:
                     creationflags=subprocess.CREATE_NO_WINDOW)
             id_name = engine.id['name']
             engine.quit()
-        except:
+        except Exception:
             logging.exception('Failed to get id name.')
 
         q.put(['Done', id_name])
@@ -869,8 +870,8 @@ class EasyChessGui:
                         logging.info('This engine {} has no options.'.format(
                             eng_id_name))
                         break
-                    except Exception as err:
-                        logging.info('Unexpected error {}.'.format(err))
+                    except Exception:
+                        logging.exception('Failed to get engine hash.')
 
         return eng_hash
 
@@ -894,8 +895,8 @@ class EasyChessGui:
                         logging.info('This engine {} has no options.'.format(
                             eng_id_name))
                         break
-                    except Exception as err:
-                        logging.info('Unexpected error {}.'.format(err))
+                    except Exception:
+                        logging.exception('Failed to get engine threads.')
 
         return eng_threads
 
@@ -1154,10 +1155,8 @@ class EasyChessGui:
                 engine = chess.engine.SimpleEngine.popen_uci(
                     engine_path_and_file, cwd=folder,
                     creationflags=subprocess.CREATE_NO_WINDOW)
-            except Exception as e:
-                logging.warning(
-                    'Failed to start {}.'.format(engine_path_and_file))
-                logging.warning(e)
+            except Exception:
+                logging.exception('Failed to start engine.')
                 continue
 
             engine_id_name = engine.id['name']
@@ -1243,14 +1242,11 @@ class EasyChessGui:
                 window.FindElement('search_info_all_k').Update(
                         '' if is_hide else msg_line)
         else:
-            # print(msg_str)
-            # best_move = chess.Move.from_uci(msg.split()[1])
-
             # Best move can be None because engine dies
             try:
                 best_move = chess.Move.from_uci(msg.split()[1])
-            except:
-                logging.warning('Engine sent a {} bestmove.'.format(best_move))
+            except Exception:
+                logging.exception('Engine sent {}.'.format(best_move))
                 sg.Popup('Engine error, it sent a {} bestmove.\n'.format(
                     best_move) + 'Back to Neutral mode, it is better to '
                                  'change engine {}.'.format(
@@ -1344,8 +1340,9 @@ class EasyChessGui:
 
             try:
                 pc = board.piece_at(s^56)
-            except:
+            except Exception:
                 pc = None
+                logging.exception('Failed to get piece.')
 
             if pc is not None:
                 pt = pc.piece_type
@@ -1593,8 +1590,9 @@ class EasyChessGui:
 
         try:
             user_depth = int(user_depth)
-        except:
+        except Exception:
             user_depth = self.max_depth
+            logging.exception('Failed to get user depth.')
 
         self.max_depth = min(MAX_DEPTH, max(MIN_DEPTH, user_depth))
 
@@ -1718,8 +1716,8 @@ class EasyChessGui:
                             self.get_fen()
                             self.set_new_game()
                             board = chess.Board(self.fen)
-                        except:
-                            logging.info('Error in parsing FEN from clipboard.')
+                        except Exception:
+                            logging.exception('Error in parsing FEN from clipboard.')
                             continue
 
                         self.fen_to_psg_board(window)
@@ -1819,7 +1817,7 @@ class EasyChessGui:
                                     # Reformat msg, remove the word pv at the end
                                     msg_line = ' '.join(msg.split()[0:-1])
                                     window.Element('advise_info_k').Update(msg_line)
-                            except:
+                            except Exception:
                                 continue
 
                             if 'bestmove' in msg:
@@ -1829,8 +1827,8 @@ class EasyChessGui:
                                     msg_line = ' '.join(msg_line.split()[0:3])
                                     msg_line += ' - ' + self.adviser_id_name
                                     window.Element('advise_info_k').Update(msg_line)
-                                except Exception as e:
-                                    logging.warning('Adviser engine error as {}'.format(e))
+                                except Exception:
+                                    logging.exception('Adviser engine error')
                                     sg.Popup('Adviser engine {} error.\n'.format(
                                             self.adviser_id_name) + \
                                             'It is better to change this engine.\n' +
@@ -1966,8 +1964,8 @@ class EasyChessGui:
                             self.get_fen()
                             self.set_new_game()
                             board = chess.Board(self.fen)
-                        except:
-                            logging.info('Error in parsing FEN from clipboard.')
+                        except Exception:
+                            logging.exception('Error in parsing FEN from clipboard.')
                             continue
 
                         self.fen_to_psg_board(window)
@@ -2232,7 +2230,7 @@ class EasyChessGui:
                         # Get the engine search info and display it in GUI text boxes
                         try:
                             msg = self.queue.get_nowait()
-                        except:
+                        except Exception:
                             continue
 
                         msg_str = str(msg)
@@ -2620,7 +2618,7 @@ class EasyChessGui:
                                     'Players are displayed. Done! in ' +
                                     str(elapse) + 's')
                                 break
-                            except:
+                            except Exception:
                                 continue
                         t.join()
                         player_list = msg[0]
@@ -2635,6 +2633,9 @@ class EasyChessGui:
                             sg.Popup('Please locate your pgn file by '
                                      'pressing the Browse button followed by Display Players.',
                                      title=win_title, icon='Icon/pecg.ico')
+                            break
+                        except Exception:
+                            logging.exception('Failed to get player.')
                             break
 
                         t1 = time.perf_counter()
@@ -2659,7 +2660,7 @@ class EasyChessGui:
                                 else:
                                     w.Element('status_k').Update(
                                         msg + '/' + str(sum_games))
-                            except:
+                            except Exception:
                                 continue
                         t.join()
 
@@ -2865,7 +2866,7 @@ class EasyChessGui:
                                     try:
                                         msg = que.get_nowait()
                                         break
-                                    except:
+                                    except Exception:
                                         pass
                                 t.join()
 
@@ -2915,9 +2916,9 @@ class EasyChessGui:
                                                  'button.',
                                                  title=button_title,
                                                  icon='Icon/pecg.ico')
-                                except:
-                                    logging.info('Failed to get engine file '
-                                                 'and path')
+                                except Exception:
+                                    logging.exception('Failed to get engine '
+                                                      'path and file')
 
                         # Outside add window while loop
                         add_win.Close()
@@ -2935,7 +2936,7 @@ class EasyChessGui:
                                 try:
                                     msg = que.get_nowait()
                                     break
-                                except:
+                                except Exception:
                                     continue
                             t.join()
 
@@ -2983,7 +2984,7 @@ class EasyChessGui:
 
                         try:
                             engine_id_name = v['engine_id_name_k'][0]
-                        except:
+                        except Exception:
                             sg.Popup('Please select an engine to modify.',
                                      title='/Edit/Modify',
                                      icon='Icon/pecg.ico')
@@ -3171,7 +3172,7 @@ class EasyChessGui:
                     if e == 'Delete':
                         try:
                             engine_id_name = v['engine_id_name_k'][0]
-                        except:
+                        except Exception:
                             sg.Popup('Please select an engine to delete.',
                                      title=button_title, icon='Icon/pecg.ico')
                             continue
@@ -3246,8 +3247,8 @@ class EasyChessGui:
                         except IndexError:
                             logging.info('User presses OK but did not select '
                                          'an engine.')
-                        except Exception as err:
-                            logging.info('Unexpected errror {}.'.format(err))
+                        except Exception:
+                            logging.exception('Failed to set engine.')
                         finally:
                             if current_engine_id_name != self.opp_id_name:
                                 logging.info('User selected a new opponent {'
@@ -3300,8 +3301,8 @@ class EasyChessGui:
                                     adviser_eng_id_name)
                         except IndexError:
                             logging.info('User presses OK but did not select an engine')
-                        except Exception as err:
-                            logging.info('Unexpected errror {}'.format(err))
+                        except Exception:
+                            logging.exception('Failed to set engine.')
                         break
 
                 window.Enable()
