@@ -1042,7 +1042,7 @@ class EasyChessGui:
 
         return False
 
-    def add_engine_to_config_file(self, engine_path_and_file, pname):
+    def add_engine_to_config_file(self, engine_path_and_file, pname, que):
         """
         Add pname config in pecg_engines.json file.
 
@@ -1063,14 +1063,16 @@ class EasyChessGui:
             engine = chess.engine.SimpleEngine.popen_uci(
                 engine_path_and_file, cwd=folder,
                 creationflags=subprocess.CREATE_NO_WINDOW)
-        except Exception as e:
-            logging.exception('Engine installation failed.')
+        except Exception:
+            logging.exception('Failed to add {} in config file.'.format(pname))
+            que.put('Failure')
             return
 
         try:
             opt_dict = engine.options.items()
-        except Exception as e:
-            logging.warning(e)
+        except Exception:
+            logging.exception('Failed to get engine options.')
+            que.put('Failure')
             return
 
         engine.quit()
@@ -1120,6 +1122,8 @@ class EasyChessGui:
         # Save data to pecg_engines.json
         with open(self.engine_config_file, 'w') as h:
             json.dump(data, h, indent=4)
+
+        que.put('Success')
 
     def check_engine_config_file(self):
         """
@@ -2921,12 +2925,25 @@ class EasyChessGui:
 
                         # Save the new configured engine to pecg_engines.json.
                         if not is_cancel_add_win:
+                            que = queue.Queue()
                             t = threading.Thread(
                                 target=self.add_engine_to_config_file,
                                 args=(new_engine_path_file,
-                                      new_engine_id_name), daemon=True)
+                                      new_engine_id_name, que,), daemon=True)
                             t.start()
+                            while True:
+                                try:
+                                    msg = que.get_nowait()
+                                    break
+                                except:
+                                    continue
                             t.join()
+
+                            if msg == 'Failure':
+                                sg.Popup('Failed to add {} in config '
+                                         'file!'.format(new_engine_id_name),
+                                         title=button_title,
+                                         icon='Icon/pecg.ico')
 
                             self.engine_id_name_list = \
                                 self.get_engine_id_name_list()
