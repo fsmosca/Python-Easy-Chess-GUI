@@ -3323,13 +3323,15 @@ class EasyChessGui:
                 current_max_book_ply = self.max_book_ply
 
                 layout = [
+                        [sg.Text('This is the book used by your '
+                                 'engine opponent.')],
                         [sg.T('Book File', size=(8, 1)),
                          sg.T(self.gui_book_file, size=(36, 1), relief='sunken')],
                         [sg.T('Max Ply', size=(8, 1)),
                          sg.Spin([t for t in range(1, 33, 1)],
                                   initial_value=self.max_book_ply,
                                   size=(6, 1), key='book_ply_k')],
-                        [sg.CBox('GUI book', key = 'use_gui_book_k',
+                        [sg.CBox('Use book', key = 'use_gui_book_k',
                                  default=self.is_use_gui_book)],
                         [sg.Radio('Best move', 'Book Radio',
                                   default = False if self.is_random_book else True),
