@@ -628,7 +628,7 @@ class EasyChessGui:
     def __init__(self, theme, engine_config_file, user_config_file,
                  gui_book_file, computer_book_file, human_book_file,
                  is_use_gui_book, is_random_book, max_book_ply,
-                 max_depth):
+                 max_depth=MAX_DEPTH):
         self.theme = theme
         self.user_config_file = user_config_file
         self.engine_config_file = engine_config_file
@@ -3496,7 +3496,6 @@ class EasyChessGui:
 
 
 def main():
-    max_depth = MAX_DEPTH
     engine_config_file = 'pecg_engines.json'
     user_config_file = 'pecg_user.json'
 
@@ -3512,7 +3511,7 @@ def main():
     pecg = EasyChessGui(theme, engine_config_file, user_config_file,
                         pecg_book, book_from_computer_games,
                         book_from_human_games, is_use_gui_book, is_random_book,
-                        max_book_ply, max_depth)
+                        max_book_ply)
 
     pecg.main_loop()
 
