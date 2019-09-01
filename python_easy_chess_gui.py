@@ -205,6 +205,7 @@ menu_def_neutral = [
         ['&Book', ['Set Book::book_set_k']],
         ['&User', ['Set Name::user_name_k']],
         ['Tools', ['PGN', ['Delete Player::delete_player_k']]],
+        ['&Settings', ['Game::settings_game_k']],
         ['&Help', ['About']],
 ]
 
@@ -678,7 +679,7 @@ class EasyChessGui:
 
         self.gui_theme = 'Reddit'
 
-        self.is_save_time_left = True
+        self.is_save_time_left = False
         self.is_save_user_comment = True
 
     def update_game(self, mc, user_move, time_left, user_comment):
@@ -3367,6 +3368,34 @@ class EasyChessGui:
                         self.is_use_gui_book = v['use_gui_book_k']
                         self.is_random_book = v['random_move_k']
                         logging.info('Book setting is OK')
+                        break
+
+                window.Enable()
+                w.Close()
+                continue
+
+            # Mode: Neutral, Settings menu
+            if button == 'Game::settings_game_k':
+                win_title = 'Settings/Game'
+                layout = [
+                    [sg.CBox('Save time left in game notation',
+                             key='save_time_left_k',
+                             default=self.is_save_time_left,
+                             tooltip='[%clk h:mm:ss] will appear as\n' +
+                                     'move comment and is shown in move\n' +
+                                     'list and saved in pgn file.')],
+                    [sg.OK(), sg.Cancel()],
+                ]
+
+                w = sg.Window(win_title, layout, icon='Icon/pecg.ico')
+                window.Disable()
+
+                while True:
+                    e, v = w.Read(timeout=10)
+                    if e is None or e == 'Cancel':
+                        break
+                    if e == 'OK':
+                        self.is_save_time_left = v['save_time_left_k']
                         break
 
                 window.Enable()
