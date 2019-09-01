@@ -17,6 +17,12 @@ Windows exe file will be available upon release. In the meantime to get it runni
 ##### 2. Install uci engine of your choice
 ![](https://i.imgur.com/GErKZFy.png)
 
+##### 3. Need book assistance? Right-click on BOOK 2 and press show
+![](https://i.imgur.com/SdgNdr6.png)
+
+##### 4. Need what engine adviser will thought about the position? Right-click on Adviser and press start
+![](https://i.imgur.com/LnPed7U.png)
+
 ### C. Installation
 1. If you want to run from the source code
 * Python Easy Chess GUI<br>
