@@ -21,7 +21,7 @@ Windows exe file will be available upon release. In the meantime to get it runni
 ![](https://i.imgur.com/SdgNdr6.png)
 
 ##### 4. Need what engine adviser will thought about the position? Right-click on Adviser and press start
-![](https://i.imgur.com/LnPed7U.png)
+![](https://i.imgur.com/Jziws5W.png)
 
 ### C. Installation
 1. If you want to run from the source code
