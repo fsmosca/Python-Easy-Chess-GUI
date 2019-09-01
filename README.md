@@ -1,7 +1,7 @@
 # Python Easy Chess GUI
 A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users can also load a chess engine and play with it. This program is based on a [demo chess against ai](https://github.com/PySimpleGUI/PySimpleGUI/tree/master/Chess) from PySimpleGUI.<br>
 
-![](https://i.imgur.com/UUHFfym.png)
+![](https://i.imgur.com/1T27kX0.png)
 
 ### A. Requirements
 Windows exe file will be available upon release. In the meantime to get it running the following are required.
@@ -10,7 +10,14 @@ Windows exe file will be available upon release. In the meantime to get it runni
 * PySimpleGUI 4.0.0 and up
 * Pyperclip
 
-### B. Installation
+### B. Features
+##### 1. Save games to repertoire pgn files
+![](https://i.imgur.com/iXO2abq.png)
+
+##### 2. Install uci engine of your choice
+![](https://i.imgur.com/GErKZFy.png)
+
+### C. Installation
 1. If you want to run from the source code
 * Python Easy Chess GUI<br>
 Download the files including the Images, Engines and Book directories. You can use your favorite uci chess engine like stockfish by copying it into the engines dir.
@@ -28,7 +35,7 @@ pip install pyperclip
 2. If you want to run from the exe
 * Download the exe file from the release link
 
-### C. How to
+### D. How to
 #### To start the gui
 * Execute python_easy_chess_gui.py<br>
 Typical command line:<br>
