@@ -983,12 +983,13 @@ class EasyChessGui:
             with open(self.user_config_file, 'w') as h:
                 json.dump(data, h, indent=4)
 
-    def update_engine_to_config_file(self, eng_path_file, pname, user_opt):
+    def update_engine_to_config_file(self, eng_path_file, new_name, old_name, user_opt):
         """
         Update engine config file based on params.
 
         :param eng_path_file: full path of engine
-        :param pname: engine id name
+        :param new_name: new engine id name
+        :param new_name: old engine id name
         :param user_opt: a list of dict, i.e d = ['a':a, 'b':b, ...]
         :return:
         """
@@ -1007,8 +1008,8 @@ class EasyChessGui:
             command = p['command']
             work_dir = p['workingDirectory']
 
-            if file == command and folder == work_dir:
-                p['name'] = pname
+            if file == command and folder == work_dir and old_name == p['name']:
+                p['name'] = new_name
                 for k, v in p.items():
                     if k == 'options':
                         for d in v:
@@ -1023,6 +1024,7 @@ class EasyChessGui:
                                     if k1 == opt_name:
                                         if v1 != opt_value:
                                             d['value'] = v1
+                break
 
         # Save data to pecg_engines.json
         with open(self.engine_config_file, 'w') as h:
@@ -2984,7 +2986,7 @@ class EasyChessGui:
                         button_title += '/' + e
 
                         try:
-                            engine_id_name = v['engine_id_name_k'][0]
+                            orig_idname = engine_id_name = v['engine_id_name_k'][0]
                         except Exception:
                             sg.Popup('Please select an engine to modify.',
                                      title='/Edit/Modify',
@@ -3144,8 +3146,9 @@ class EasyChessGui:
 
                 # Save the new configured engine to pecg_engines.json file
                 if not is_cancel_edit_win and not is_cancel_modify_win:
-                    self.update_engine_to_config_file(engine_path_file,
-                                                engine_id_name, ret_opt_name)
+                    self.update_engine_to_config_file(
+                        engine_path_file, engine_id_name,
+                        orig_idname, ret_opt_name)
                     self.engine_id_name_list = self.get_engine_id_name_list()
 
                 edit_win.Close()
