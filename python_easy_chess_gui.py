@@ -55,18 +55,14 @@ import chess.polyglot
 import logging
 
 
-if False:
-    log_format = '%(asctime)s :: pid: %(process)d :: tid: %(thread)d :: %(' \
-             'funcName)s :: line: %(lineno)d :: %(levelname)s :: %(message)s'
-else:
-    log_format = '%(asctime)s :: %(funcName)s :: line: %(lineno)d :: %(' \
+log_format = '%(asctime)s :: %(funcName)s :: line: %(lineno)d :: %(' \
                  'levelname)s :: %(message)s'
 logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
                     format=log_format)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.0 RC2'
+APP_VERSION = 'v1.0'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
