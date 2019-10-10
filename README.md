@@ -20,7 +20,7 @@ Windows exe file will be available upon release. In the meantime to get it runni
 ##### 3. Need book assistance? Right-click on BOOK 2 and press show
 ![](https://i.imgur.com/SdgNdr6.png)
 
-##### 4. Need what engine adviser will thought about the position? Right-click on Adviser and press start
+##### 4. Need what engine adviser will think about the position? Right-click on Adviser and press start
 ![](https://i.imgur.com/Jziws5W.png)
 
 ### C. Installation
