@@ -1594,6 +1594,25 @@ class EasyChessGui:
             logging.exception('Failed to get user depth.')
 
         self.max_depth = min(MAX_DEPTH, max(MIN_DEPTH, user_depth))
+        
+    def define_timer(self, window, name='human'):
+        """
+        Returns Timer object for either human or engine.
+        """
+        if name == 'human':
+            timer = Timer(self.human_tc_type, self.human_base_time_ms,
+                          self.human_inc_time_ms, self.human_period_moves)           
+        else:
+            timer = Timer(self.engine_tc_type, self.engine_base_time_ms,
+                      self.engine_inc_time_ms, self.engine_period_moves)
+
+        elapse_str = self.get_time_h_mm_ss(timer.base)
+        is_white_base = self.is_user_white and name == 'human' or \
+                not self.is_user_white and name != 'human'
+        window.Element('w_base_time_k' if is_white_base else 'b_base_time_k').Update(
+                elapse_str)
+            
+        return timer    
 
     def play_game(self, window, engine_id_name, board):
         """
@@ -1633,31 +1652,8 @@ class EasyChessGui:
         is_hide_search_info = True
 
         # Init timer
-        if self.is_user_white:
-            human_timer = Timer(self.human_tc_type, self.human_base_time_ms,
-                                self.human_inc_time_ms, self.human_period_moves)
-            elapse_str = self.get_time_h_mm_ss(human_timer.base)
-            window.Element('w_base_time_k').Update(elapse_str)
-
-            engine_timer = Timer(self.engine_tc_type,
-                                    self.engine_base_time_ms,
-                                self.engine_inc_time_ms,
-                                self.engine_period_moves)
-            elapse_str = self.get_time_h_mm_ss(engine_timer.base)
-            window.Element('b_base_time_k').Update(elapse_str)
-        else:
-            engine_timer = Timer(self.engine_tc_type,
-                                 self.engine_base_time_ms,
-                                 self.engine_inc_time_ms,
-                                 self.engine_period_moves)
-            elapse_str = self.get_time_h_mm_ss(engine_timer.base)
-            window.Element('w_base_time_k').Update(elapse_str)
-
-            human_timer = Timer(self.human_tc_type, self.human_base_time_ms,
-                                self.human_inc_time_ms,
-                                self.human_period_moves)
-            elapse_str = self.get_time_h_mm_ss(human_timer.base)
-            window.Element('b_base_time_k').Update(elapse_str)
+        human_timer = self.define_timer(window)
+        engine_timer = self.define_timer(window, 'engine')
 
         # Game loop
         while not board.is_game_over(claim_draw=True):
