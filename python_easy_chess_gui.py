@@ -2474,11 +2474,11 @@ class EasyChessGui:
                      size=(46,1))],
 
             [sg.Text('Move list', size=(16, 1), font=('Consolas', 10))],
-            [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(0, 8),
+            [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(52, 8),
                     font=('Consolas', 10), key='_movelist_', disabled=True)],
 
             [sg.Text('Comment', size=(7, 1), font=('Consolas', 10))],
-            [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(0, 1),
+            [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(52, 3),
                     font=('Consolas', 10), key='comment_k')],
 
             [sg.Text('BOOK 1, Comp games', size=(26, 1),
@@ -2489,9 +2489,9 @@ class EasyChessGui:
                      font=('Consolas', 10),
                      right_click_menu=['Right',
                          ['Show::right_book2_k', 'Hide::right_book2_k']])],
-            [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(0, 1),
+            [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(23, 4),
                     font=('Consolas', 10), key='polyglot_book1_k', disabled=True),
-             sg.Multiline('', do_not_clear=True, autoscroll=False, size=(0, 1),
+             sg.Multiline('', do_not_clear=True, autoscroll=False, size=(25, 4),
                     font=('Consolas', 10), key='polyglot_book2_k', disabled=True)],
 
             [sg.Text('Opponent Search Info', font=('Consolas', 10), size=(30, 1),
