@@ -1782,7 +1782,7 @@ class EasyChessGui:
                             self.adviser_id_name)
                         self.adviser_hash = self.get_engine_hash(
                             self.adviser_id_name)
-                        adviser_base_ms = 60000  # 60s
+                        adviser_base_ms = self.adviser_movetime_sec * 1000
                         adviser_inc_ms = 0
 
                         search = RunEngine(self.queue, self.engine_config_file,
@@ -3273,7 +3273,8 @@ class EasyChessGui:
                         [sg.Listbox(values=self.engine_id_name_list, size=(48,10),
                                     key='adviser_id_name_k')],
                         [sg.T('Movetime (sec)', size=(12, 1)),
-                         sg.Spin([t for t in range(1, 3600, 1)], initial_value=60,
+                         sg.Spin([t for t in range(1, 3600, 1)],
+                                  initial_value=self.adviser_movetime_sec,
                                   size=(8, 1), key='adviser_movetime_k')],
                         [sg.OK(), sg.Cancel()]
                 ]
