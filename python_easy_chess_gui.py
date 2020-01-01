@@ -62,7 +62,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.0'
+APP_VERSION = 'v1.1'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -1955,6 +1955,11 @@ class EasyChessGui:
 
                     # Mode: Play, stm: User
                     if button == 'Paste':
+                        # Pasting fen is only allowed before the game starts.
+                        if len(self.game.variations):
+                            sg.Popup('Press Game->New then paste your fen.',
+                                     title='Mode Play')
+                            continue
                         try:
                             self.get_fen()
                             self.set_new_game()
