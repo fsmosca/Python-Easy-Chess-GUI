@@ -186,7 +186,7 @@ INIT_PGN_TAG = {
 
 # (1) Mode: Neutral
 menu_def_neutral = [
-        ['&Mode', ['Play', 'Exit']],
+        ['&Mode', ['Play']],
         ['Boar&d', ['Flip', 'Color', ['Brown::board_color_k',
                                       'Blue::board_color_k',
                                       'Green::board_color_k',
@@ -206,7 +206,7 @@ menu_def_neutral = [
 
 # (2) Mode: Play, info: hide
 menu_def_play = [
-        ['&Mode', ['Neutral', 'Exit']],
+        ['&Mode', ['Neutral']],
         ['&Game', ['&New::new_game_k',
                    'Save to My Games::save_game_k',
                    'Save to White Repertoire',
@@ -1745,11 +1745,6 @@ class EasyChessGui:
                         is_exit_app = True
                         break
 
-                    if button == 'Exit':
-                        logging.info('Quit app Exit is pressed.')
-                        is_exit_app = True
-                        break
-
                 if is_exit_app or is_exit_game or is_new_game:
                     break
 
@@ -1797,14 +1792,9 @@ class EasyChessGui:
                                 search.stop()
 
                             # Exit app while adviser is thinking                    
-                            if button == 'Exit':
-                                search.stop()
-                                logging.info('Exit app while adviser is searching')
+                            if button is None:
+                                search.stop()                                
                                 is_search_stop_for_exit = True
-                                # Don't break here, we let adviser to stop
-                                # searching and get its best move, then we
-                                # get out of this loop.
-
                             try:
                                 msg = self.queue.get_nowait()
                                 if 'pv' in msg:
@@ -1870,8 +1860,7 @@ class EasyChessGui:
                         is_exit_app = True
                         break
 
-                    if button == 'Exit' or is_search_stop_for_exit:
-                        logging.info('Quit app Exit is pressed.')
+                    if is_search_stop_for_exit:
                         is_exit_app = True
                         break
 
@@ -2195,9 +2184,8 @@ class EasyChessGui:
                             window.Element('polyglot_book2_k').Update('')
 
                         # Exit app while engine is thinking                    
-                        if button == 'Exit':
+                        if button is None:
                             search.stop()
-                            logging.info('Exit app while engine is searching')
                             is_search_stop_for_exit = True
 
                         # Forced engine to move now and create a new game
@@ -2556,11 +2544,6 @@ class EasyChessGui:
         # Mode: Neutral, main loop starts here
         while True:
             button, value = window.Read(timeout=50)
-
-            # Mode: Neutral
-            if button == 'Exit':
-                logging.info('Quit app from main loop, Exit is pressed.')
-                break
 
             # Mode: Neutral
             if button is None:
@@ -3136,7 +3119,7 @@ class EasyChessGui:
 
                         edit_win.Enable()
                         modify_win.Close()
-                        break  # Exit edit_win loop
+                        break  # Get out of edit_win loop
 
                 # Outside edit_win while loop
 
