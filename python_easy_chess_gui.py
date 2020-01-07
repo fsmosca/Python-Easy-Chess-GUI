@@ -61,7 +61,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.2'
+APP_VERSION = 'v1.3'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -1139,7 +1139,7 @@ class EasyChessGui:
             option = []
 
             # cwd=current working dir, engines=folder, fn=exe file
-            epath = Path(cwd, 'engines', fn)
+            epath = Path(cwd, 'Engines', fn)
             engine_path_and_file = str(epath)
             folder = epath.parents[0]
 
