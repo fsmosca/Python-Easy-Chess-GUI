@@ -61,7 +61,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.1'
+APP_VERSION = 'v1.2'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -419,12 +419,6 @@ class RunEngine(threading.Thread):
                             except Exception:
                                 logging.exception('{Failed to configure '
                                                   'engine}')
-
-        # Don't use UCI_Analyse mode
-        try:
-            self.engine.configure({'UCI_AnalyseMode': False})
-        except Exception:
-            logging.exception('Failed to set UCI_AnalyseMode.')
 
     def run(self):
         """
