@@ -61,7 +61,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.3'
+APP_VERSION = 'v1.4'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -364,7 +364,7 @@ class RunEngine(threading.Thread):
         self.tc_type = tc_type
         self.period_moves = period_moves
         self.is_ownbook = False
-        self.is_move_delay = False
+        self.is_move_delay = True
 
     def stop(self):
         """ Interrupt engine search """
