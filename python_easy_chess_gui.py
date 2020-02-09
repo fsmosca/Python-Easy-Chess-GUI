@@ -38,6 +38,7 @@ col is the same as in PySimpleGUI
 import PySimpleGUI as sg
 import os
 import sys
+import subprocess
 import threading
 from pathlib import Path, PurePath  # Python 3.4 and up
 import queue
@@ -60,7 +61,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.8'
+APP_VERSION = 'v1.9'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -441,7 +442,12 @@ class RunEngine(threading.Thread):
         folder = folder.parents[0]
 
         try:
-            self.engine = chess.engine.SimpleEngine.popen_uci(
+            if platform == 'win32':
+                self.engine = chess.engine.SimpleEngine.popen_uci(
+                    self.engine_path_and_file, cwd=folder,
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                self.engine = chess.engine.SimpleEngine.popen_uci(
                     self.engine_path_and_file, cwd=folder)
         except chess.engine.EngineTerminatedError:
             logging.warning('Failed to start {}.'.format(self.engine_path_and_file))
@@ -844,7 +850,12 @@ class EasyChessGui:
         folder = folder.parents[0]
 
         try:
-            engine = chess.engine.SimpleEngine.popen_uci(
+            if platform == 'win32':
+                engine = chess.engine.SimpleEngine.popen_uci(
+                    path_and_file, cwd=folder,
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                engine = chess.engine.SimpleEngine.popen_uci(
                     path_and_file, cwd=folder)
             id_name = engine.id['name']
             engine.quit()
@@ -1062,8 +1073,13 @@ class EasyChessGui:
             data = json.load(json_file)
 
         try:
-            engine = chess.engine.SimpleEngine.popen_uci(
-                engine_path_and_file, cwd=folder)
+            if platform == 'win32':
+                engine = chess.engine.SimpleEngine.popen_uci(
+                    engine_path_and_file, cwd=folder,
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                engine = chess.engine.SimpleEngine.popen_uci(
+                    engine_path_and_file, cwd=folder)
         except Exception:
             logging.exception('Failed to add {} in config file.'.format(pname))
             que.put('Failure')
@@ -1152,10 +1168,15 @@ class EasyChessGui:
             folder = epath.parents[0]
 
             try:
-                engine = chess.engine.SimpleEngine.popen_uci(
-                    engine_path_and_file, cwd=folder)
+                if platform == 'win32':
+                    engine = chess.engine.SimpleEngine.popen_uci(
+                        engine_path_and_file, cwd=folder,
+                        creationflags=subprocess.CREATE_NO_WINDOW)
+                else:
+                    engine = chess.engine.SimpleEngine.popen_uci(
+                        engine_path_and_file, cwd=folder)
             except Exception:
-                logging.exception('Failed to start engine.')
+                logging.exception(f'Failed to start engine {fn}!')
                 continue
 
             engine_id_name = engine.id['name']
