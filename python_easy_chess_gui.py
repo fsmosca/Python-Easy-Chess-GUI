@@ -60,7 +60,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.7'
+APP_VERSION = 'v1.8'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -2505,6 +2505,31 @@ class EasyChessGui:
         ]
 
         return layout
+    
+    def set_default_adviser_engine(self):    
+        try:
+            self.adviser_id_name = self.engine_id_name_list[1] \
+                   if len(self.engine_id_name_list) >= 2 \
+                   else self.engine_id_name_list[0]
+            self.adviser_file, self.adviser_path_and_file = \
+                self.get_engine_file(self.adviser_id_name)
+        except IndexError as e:
+            logging.warning(e)
+        except Exception:
+            logging.exception('Error in getting adviser engine!')
+    
+    def get_default_engine_opponent(self):
+        engine_id_name = None
+        try:
+            engine_id_name = self.opp_id_name = self.engine_id_name_list[0]
+            self.opp_file, self.opp_path_and_file = self.get_engine_file(
+                engine_id_name)
+        except IndexError as e:
+            logging.warning(e)
+        except Exception:
+            logging.exception('Error in getting opponent engine!')
+            
+        return engine_id_name
 
     def main_loop(self):
         """
@@ -2529,26 +2554,10 @@ class EasyChessGui:
         self.engine_id_name_list = self.get_engine_id_name_list()
 
         # Define default opponent engine, user can change this later.
-        try:
-            engine_id_name = self.opp_id_name = self.engine_id_name_list[0]
-            self.opp_file, self.opp_path_and_file = self.get_engine_file(
-                engine_id_name)
-        except IndexError as e:
-            logging.warning(e)
-        except Exception:
-            logging.exception('Error in getting opponent engine!')
+        engine_id_name = self.get_default_engine_opponent()
 
         # Define default adviser engine, user can change this later.
-        try:
-            self.adviser_id_name = self.engine_id_name_list[1] \
-                   if len(self.engine_id_name_list) >= 2 \
-                   else self.engine_id_name_list[0]
-            self.adviser_file, self.adviser_path_and_file = self.get_engine_file(
-                self.adviser_id_name)
-        except IndexError as e:
-            logging.warning(e)
-        except Exception:
-            logging.exception('Error in getting adviser engine!')
+        self.set_default_adviser_engine()
 
         self.init_game()
 
@@ -2955,6 +2964,15 @@ class EasyChessGui:
 
                 install_win.Close()
                 window.Enable()
+                
+                # Define default engine opponent and adviser
+                if engine_id_name is None:
+                    engine_id_name = self.get_default_engine_opponent()
+                if self.adviser_id_name is None:
+                    self.set_default_adviser_engine()
+                    
+                self.update_labels_and_game_tags(window, human=self.username)
+                
                 continue
 
             # Mode: Neutral
