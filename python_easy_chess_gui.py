@@ -60,7 +60,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.5'
+APP_VERSION = 'v1.6'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -2496,6 +2496,7 @@ class EasyChessGui:
 
         :return:
         """
+        engine_id_name = None
         layout = self.build_main_layout(True)
 
         # Use white layout as default window
@@ -2511,16 +2512,26 @@ class EasyChessGui:
         self.engine_id_name_list = self.get_engine_id_name_list()
 
         # Define default opponent engine, user can change this later.
-        engine_id_name = self.opp_id_name = self.engine_id_name_list[0]
-        self.opp_file, self.opp_path_and_file = self.get_engine_file(
-            engine_id_name)
+        try:
+            engine_id_name = self.opp_id_name = self.engine_id_name_list[0]
+            self.opp_file, self.opp_path_and_file = self.get_engine_file(
+                engine_id_name)
+        except IndexError as e:
+            logging.warning(e)
+        except Exception:
+            logging.exception('Error in getting opponent engine!')
 
         # Define default adviser engine, user can change this later.
-        self.adviser_id_name = self.engine_id_name_list[1] \
-               if len(self.engine_id_name_list) >= 2 \
-               else self.engine_id_name_list[0]
-        self.adviser_file, self.adviser_path_and_file = self.get_engine_file(
-            self.adviser_id_name)
+        try:
+            self.adviser_id_name = self.engine_id_name_list[1] \
+                   if len(self.engine_id_name_list) >= 2 \
+                   else self.engine_id_name_list[0]
+            self.adviser_file, self.adviser_path_and_file = self.get_engine_file(
+                self.adviser_id_name)
+        except IndexError as e:
+            logging.warning(e)
+        except Exception:
+            logging.exception('Error in getting adviser engine!')
 
         self.init_game()
 
@@ -3434,6 +3445,12 @@ class EasyChessGui:
 
             # Mode: Neutral
             if button == 'Play':
+                if engine_id_name is None:
+                    logging.warning('Install engine first!')
+                    sg.Popup('Install engine first! in Engine/Manage/Install',
+                             icon='Icon/pecg.ico', title='Mode')
+                    continue
+                    
                 # Change menu from Neutral to Play
                 self.menu_elem.Update(menu_def_play)
                 self.psg_board = copy.deepcopy(initial_board)
