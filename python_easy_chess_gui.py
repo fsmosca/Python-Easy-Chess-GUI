@@ -60,8 +60,19 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.6'
+APP_VERSION = 'v1.7'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
+
+
+platform = sys.platform
+    
+
+ico_path = {'win32': {'pecg': 'Icon/pecg.ico', 'enemy': 'Icon/enemy.ico',
+                      'adviser': 'Icon/adviser.ico'}, 
+            'linux': {'pecg': 'Icon/pecg.png', 'enemy': 'Icon/enemy.png',
+                      'adviser': 'Icon/adviser.png'},
+            'darwin': {'pecg': 'Icon/pecg.png', 'enemy': 'Icon/enemy.png',
+                      'adviser': 'Icon/adviser.png'}}
 
 
 MIN_DEPTH = 1
@@ -731,7 +742,8 @@ class EasyChessGui:
             layout,
             default_button_element_size=(12, 1),
             auto_size_buttons=False,
-            location=(loc[0], loc[1]), icon='Icon/pecg.ico')
+            location=(loc[0], loc[1]),
+            icon=ico_path[platform]['pecg'])
 
         # Initialize White and black boxes
         while True:
@@ -1237,7 +1249,8 @@ class EasyChessGui:
                 sg.Popup('Engine error, it sent a {} bestmove.\n'.format(
                     best_move) + 'Back to Neutral mode, it is better to '
                                  'change engine {}.'.format(
-                    self.opp_id_name), icon='Icon/pecg.ico', title=BOX_TITLE)
+                    self.opp_id_name), icon=ico_path[platform]['pecg'],
+                    title=BOX_TITLE)
 
         return best_move
 
@@ -1460,7 +1473,7 @@ class EasyChessGui:
                                  board_layout,
                                  default_button_element_size=(12, 1),
                                  auto_size_buttons=False,
-                                 icon='Icon/pecg.ico')
+                                 icon=ico_path[platform]['pecg'])
 
         while True:
             button, value = promo_window.Read(timeout=0)
@@ -1573,7 +1586,7 @@ class EasyChessGui:
         user_depth = sg.PopupGetText(
                     'Current depth is {}\n\nInput depth [{} to {}]'.format(
                     self.max_depth, MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE,
-                            icon='Icon/pecg.ico')
+                            icon=ico_path[platform]['pecg'])
 
         try:
             user_depth = int(user_depth)
@@ -1806,7 +1819,8 @@ class EasyChessGui:
                                             self.adviser_id_name) + \
                                             'It is better to change this engine.\n' +
                                             'Change to Neutral mode first.',
-                                            icon='Icon/pecg.ico', title=BOX_TITLE)
+                                            icon=ico_path[platform]['pecg'],
+                                            title=BOX_TITLE)
                                 break
 
                         search.join()
@@ -1887,7 +1901,8 @@ class EasyChessGui:
                         # Verify resign
                         reply = sg.Popup('Do you really want to resign?',
                                          button_type=sg.POPUP_BUTTONS_YES_NO,
-                                         title=BOX_TITLE, icon='Icon/pecg.ico')
+                                         title=BOX_TITLE,
+                                         icon=ico_path[platform]['pecg'])
                         if reply == 'Yes':
                             is_user_resigns = True
                             break
@@ -2345,7 +2360,8 @@ class EasyChessGui:
         self.save_game()
 
         if board.is_game_over(claim_draw=True):
-            sg.Popup('Game is over.', title=BOX_TITLE, icon='Icon/pecg.ico')
+            sg.Popup('Game is over.', title=BOX_TITLE,
+                     icon=ico_path[platform]['pecg'])
 
         if is_exit_app:
             window.Close()
@@ -2502,7 +2518,8 @@ class EasyChessGui:
         # Use white layout as default window
         window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
                            layout, default_button_element_size=(12, 1),
-                           auto_size_buttons=False, icon='Icon/pecg.ico')
+                           auto_size_buttons=False,
+                           icon=ico_path[platform]['pecg'])
 
         # Read user config file, if missing create and new one
         self.check_user_config_file()
@@ -2568,7 +2585,8 @@ class EasyChessGui:
                 ]
 
                 window.Disable()
-                w = sg.Window(win_title, layout, icon='Icon/pecg.ico')
+                w = sg.Window(win_title, layout,
+                              icon=ico_path[platform]['pecg'])
                 while True:
                     e, v = w.Read(timeout=10)
                     if e is None or e == 'Cancel':
@@ -2580,7 +2598,8 @@ class EasyChessGui:
                             sg.Popup('Please locate your pgn file by pressing '
                                      'the Browse button followed by Display '
                                      'Players.',
-                                     title=win_title, icon='Icon/pecg.ico')
+                                     title=win_title,
+                                     icon=ico_path[platform]['pecg'])
                             break
 
                         t1 = time.perf_counter()
@@ -2614,7 +2633,8 @@ class EasyChessGui:
                             logging.info(e)
                             sg.Popup('Please locate your pgn file by '
                                      'pressing the Browse button followed by Display Players.',
-                                     title=win_title, icon='Icon/pecg.ico')
+                                     title=win_title,
+                                     icon=ico_path[platform]['pecg'])
                             break
                         except Exception:
                             logging.exception('Failed to get player.')
@@ -2678,7 +2698,7 @@ class EasyChessGui:
 
                 window.Disable()
                 w = sg.Window(win_title, layout,
-                              icon='Icon/pecg.ico')
+                              icon=ico_path[platform]['pecg'])
                 while True:
                     e, v = w.Read(timeout=10)
                     if e is None:
@@ -2733,7 +2753,7 @@ class EasyChessGui:
 
                 window.Disable()
                 w = sg.Window(win_title, layout,
-                              icon='Icon/pecg.ico')
+                              icon=ico_path[platform]['pecg'])
                 while True:
                     e, v = w.Read(timeout=10)
                     if e is None:
@@ -2772,7 +2792,8 @@ class EasyChessGui:
                         [sg.OK(), sg.Cancel()]
                 ]
                 window.Disable()
-                w = sg.Window(win_title, layout, icon='Icon/pecg.ico')
+                w = sg.Window(win_title, layout,
+                              icon=ico_path[platform]['pecg'])
                 while True:
                     e, v = w.Read(timeout=10)
                     if e is None:
@@ -2806,7 +2827,7 @@ class EasyChessGui:
                 window.Disable()
                 install_win = sg.Window(title=button_title,
                                         layout=install_layout,
-                                        icon='Icon/pecg.ico')
+                                        icon=ico_path[platform]['pecg'])
 
                 while True:
                     e, v = install_win.Read(timeout=100)
@@ -2889,7 +2910,7 @@ class EasyChessGui:
                                                 'Engine->Manage->Edit'.format(
                                                     new_engine_id_name),
                                             title=button_title,
-                                            icon='Icon/pecg.ico')
+                                            icon=ico_path[platform]['pecg'])
                                             continue
                                         break
                                     else:
@@ -2897,7 +2918,7 @@ class EasyChessGui:
                                             'name, or press Get Id Name '
                                                  'button.',
                                                  title=button_title,
-                                                 icon='Icon/pecg.ico')
+                                                 icon=ico_path[platform]['pecg'])
                                 except Exception:
                                     logging.exception('Failed to get engine '
                                                       'path and file')
@@ -2926,7 +2947,7 @@ class EasyChessGui:
                                 sg.Popup('Failed to add {} in config '
                                          'file!'.format(new_engine_id_name),
                                          title=button_title,
-                                         icon='Icon/pecg.ico')
+                                         icon=ico_path[platform]['pecg'])
 
                             self.engine_id_name_list = \
                                 self.get_engine_id_name_list()
@@ -2953,7 +2974,7 @@ class EasyChessGui:
 
                 window.Disable()
                 edit_win = sg.Window(button_title, layout=edit_layout,
-                                        icon='Icon/pecg.ico')
+                                        icon=ico_path[platform]['pecg'])
                 is_cancel_edit_win = False
                 while True:
                     e, v = edit_win.Read(timeout=100)
@@ -2969,7 +2990,7 @@ class EasyChessGui:
                         except Exception:
                             sg.Popup('Please select an engine to modify.',
                                      title='/Edit/Modify',
-                                     icon='Icon/pecg.ico')
+                                     icon=ico_path[platform]['pecg'])
                             continue
 
                         # Read engine config file
@@ -3103,7 +3124,7 @@ class EasyChessGui:
                         edit_win.Disable()
                         modify_win = sg.Window(button_title,
                                                layout=modify_layout,
-                                               icon='Icon/pecg.ico')
+                                               icon=ico_path[platform]['pecg'])
                         is_cancel_modify_win = False
                         while True:
                             e1, v1 = modify_win.Read(timeout=100)
@@ -3145,7 +3166,7 @@ class EasyChessGui:
                 ]
                 window.Disable()
                 delete_win = sg.Window(button_title, layout=delete_layout,
-                                     icon='Icon/pecg.ico')
+                                     icon=ico_path[platform]['pecg'])
                 is_cancel = False
                 while True:
                     e, v = delete_win.Read(timeout=100)
@@ -3157,7 +3178,8 @@ class EasyChessGui:
                             engine_id_name = v['engine_id_name_k'][0]
                         except Exception:
                             sg.Popup('Please select an engine to delete.',
-                                     title=button_title, icon='Icon/pecg.ico')
+                                     title=button_title,
+                                     icon=ico_path[platform]['pecg'])
                             continue
                         with open(self.engine_config_file, 'r') as json_file:
                             data = json.load(json_file)
@@ -3203,7 +3225,7 @@ class EasyChessGui:
 
                 # Create new window and disable the main window
                 w = sg.Window(BOX_TITLE + '/Select opponent', layout,
-                              icon='Icon/enemy.ico')
+                              icon=ico_path[platform]['enemy'])
                 window.Disable()
 
                 while True:
@@ -3263,7 +3285,8 @@ class EasyChessGui:
                 ]
 
                 # Create new window and disable the main window
-                w = sg.Window(BOX_TITLE + '/Select Adviser', layout, icon='Icon/adviser.ico')
+                w = sg.Window(BOX_TITLE + '/Select Adviser', layout,
+                              icon=ico_path[platform]['adviser'])
                 window.Disable()
 
                 while True:
@@ -3325,7 +3348,8 @@ class EasyChessGui:
                         [sg.OK(), sg.Cancel()],
                 ]
 
-                w = sg.Window(BOX_TITLE + '/Set Book', layout, icon='Icon/pecg.ico')
+                w = sg.Window(BOX_TITLE + '/Set Book', layout,
+                              icon=ico_path[platform]['pecg'])
                 window.Disable()
 
                 while True:
@@ -3370,7 +3394,8 @@ class EasyChessGui:
                     [sg.OK(), sg.Cancel()],
                 ]
 
-                w = sg.Window(win_title, layout, icon='Icon/pecg.ico')
+                w = sg.Window(win_title, layout,
+                              icon=ico_path[platform]['pecg'])
                 window.Disable()
 
                 while True:
@@ -3448,7 +3473,7 @@ class EasyChessGui:
                 if engine_id_name is None:
                     logging.warning('Install engine first!')
                     sg.Popup('Install engine first! in Engine/Manage/Install',
-                             icon='Icon/pecg.ico', title='Mode')
+                             icon=ico_path[platform]['pecg'], title='Mode')
                     continue
                     
                 # Change menu from Neutral to Play
