@@ -38,7 +38,6 @@ col is the same as in PySimpleGUI
 import PySimpleGUI as sg
 import os
 import sys
-import subprocess
 import threading
 from pathlib import Path, PurePath  # Python 3.4 and up
 import queue
@@ -61,7 +60,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.4'
+APP_VERSION = 'v1.5'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -432,8 +431,7 @@ class RunEngine(threading.Thread):
 
         try:
             self.engine = chess.engine.SimpleEngine.popen_uci(
-                    self.engine_path_and_file, cwd=folder,
-                    creationflags=subprocess.CREATE_NO_WINDOW)
+                    self.engine_path_and_file, cwd=folder)
         except chess.engine.EngineTerminatedError:
             logging.warning('Failed to start {}.'.format(self.engine_path_and_file))
             self.eng_queue.put('bestmove {}'.format(self.bm))
@@ -835,8 +833,7 @@ class EasyChessGui:
 
         try:
             engine = chess.engine.SimpleEngine.popen_uci(
-                    path_and_file, cwd=folder,
-                    creationflags=subprocess.CREATE_NO_WINDOW)
+                    path_and_file, cwd=folder)
             id_name = engine.id['name']
             engine.quit()
         except Exception:
@@ -1054,8 +1051,7 @@ class EasyChessGui:
 
         try:
             engine = chess.engine.SimpleEngine.popen_uci(
-                engine_path_and_file, cwd=folder,
-                creationflags=subprocess.CREATE_NO_WINDOW)
+                engine_path_and_file, cwd=folder)
         except Exception:
             logging.exception('Failed to add {} in config file.'.format(pname))
             que.put('Failure')
@@ -1145,8 +1141,7 @@ class EasyChessGui:
 
             try:
                 engine = chess.engine.SimpleEngine.popen_uci(
-                    engine_path_and_file, cwd=folder,
-                    creationflags=subprocess.CREATE_NO_WINDOW)
+                    engine_path_and_file, cwd=folder)
             except Exception:
                 logging.exception('Failed to start engine.')
                 continue
