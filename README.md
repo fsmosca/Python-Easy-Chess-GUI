@@ -20,7 +20,7 @@ Windows exe file will be available upon release. In the meantime to get it runni
 #### 2.1 It is recommended to configure the engine setting after installation
 Configure engine via Engine->Manage->Edit, select engine and press modify.
 
-![](https://i.imgur.com/YPvrNlW.png)
+![](https://i.imgur.com/PmDzCvz.png)
 
 #### 3. Need book assistance? Right-click on BOOK 2 and press show
 ![](https://i.imgur.com/SdgNdr6.png)
