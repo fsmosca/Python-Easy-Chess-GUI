@@ -61,7 +61,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.9'
+APP_VERSION = 'v1.10'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -3552,9 +3552,9 @@ def main():
     engine_config_file = 'pecg_engines.json'
     user_config_file = 'pecg_user.json'
 
-    pecg_book = 'book/pecg_book.bin'
-    book_from_computer_games = 'book/computer.bin'
-    book_from_human_games = 'book/human.bin'
+    pecg_book = 'Book/pecg_book.bin'
+    book_from_computer_games = 'Book/computer.bin'
+    book_from_human_games = 'Book/human.bin'
 
     is_use_gui_book = True
     is_random_book = True  # If false then use best book move
