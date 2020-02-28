@@ -61,7 +61,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.10'
+APP_VERSION = 'v1.11'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -1024,13 +1024,15 @@ class EasyChessGui:
                         for d in v:
                             # d = {'name': 'Ponder', 'default': False,
                             # 'value': False, 'type': 'check'}
-
+                            
+                            default_type = type(d['default'])                            
                             opt_name = d['name']
                             opt_value = d['value']
                             for u in user_opt:
                                 # u = {'name': 'CDrill 1400'}
                                 for k1, v1 in u.items():
                                     if k1 == opt_name:
+                                        v1 = int(v1) if default_type == int else v1
                                         if v1 != opt_value:
                                             d['value'] = v1
                 break
