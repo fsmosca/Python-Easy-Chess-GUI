@@ -61,7 +61,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.11'
+APP_VERSION = 'v1.12'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -2054,7 +2054,7 @@ class EasyChessGui:
 
                                 # Update board if e.p capture
                                 elif board.is_en_passant(user_move):
-                                    self.update_ep(user_move, board.turn)
+                                    self.update_ep(window, user_move, board.turn)
 
                                 # Empty the board from_square, applied to any types of move
                                 self.psg_board[move_from[0]][move_from[1]] = BLANK
@@ -2277,7 +2277,7 @@ class EasyChessGui:
 
                 # Update board if e.p capture
                 elif board.is_en_passant(best_move):
-                    self.update_ep(best_move, board.turn)
+                    self.update_ep(window, best_move, board.turn)
 
                 # Update board if move is a promotion
                 elif best_move.promotion is not None:
