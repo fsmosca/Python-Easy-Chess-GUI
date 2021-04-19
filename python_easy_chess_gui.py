@@ -61,7 +61,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.12'
+APP_VERSION = 'v1.13'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -2410,6 +2410,7 @@ class EasyChessGui:
         files = os.listdir(engine_path)
         for file in files:
             if not file.endswith('.gz') and not file.endswith('.dll') \
+                    and not file.endswith('.DS_Store') \
                     and not file.endswith('.bin') \
                     and not file.endswith('.dat'):
                 engine_list.append(file)
