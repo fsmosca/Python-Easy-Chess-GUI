@@ -52,6 +52,7 @@ import chess.pgn
 import chess.engine
 import chess.polyglot
 import logging
+import platform as sys_plat
 
 
 log_format = '%(asctime)s :: %(funcName)s :: line: %(lineno)d :: %(' \
@@ -61,11 +62,12 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.13'
+APP_VERSION = 'v1.14'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
 platform = sys.platform
+sys_os = sys_plat.system()
     
 
 ico_path = {'win32': {'pecg': 'Icon/pecg.ico', 'enemy': 'Icon/enemy.ico',
@@ -442,7 +444,7 @@ class RunEngine(threading.Thread):
         folder = folder.parents[0]
 
         try:
-            if platform == 'win32':
+            if sys_os == 'Windows':
                 self.engine = chess.engine.SimpleEngine.popen_uci(
                     self.engine_path_and_file, cwd=folder,
                     creationflags=subprocess.CREATE_NO_WINDOW)
@@ -850,7 +852,7 @@ class EasyChessGui:
         folder = folder.parents[0]
 
         try:
-            if platform == 'win32':
+            if sys_os == 'Windows':
                 engine = chess.engine.SimpleEngine.popen_uci(
                     path_and_file, cwd=folder,
                     creationflags=subprocess.CREATE_NO_WINDOW)
@@ -1075,7 +1077,7 @@ class EasyChessGui:
             data = json.load(json_file)
 
         try:
-            if platform == 'win32':
+            if sys_os == 'Windows':
                 engine = chess.engine.SimpleEngine.popen_uci(
                     engine_path_and_file, cwd=folder,
                     creationflags=subprocess.CREATE_NO_WINDOW)
@@ -1170,7 +1172,7 @@ class EasyChessGui:
             folder = epath.parents[0]
 
             try:
-                if platform == 'win32':
+                if sys_os == 'Windows':
                     engine = chess.engine.SimpleEngine.popen_uci(
                         engine_path_and_file, cwd=folder,
                         creationflags=subprocess.CREATE_NO_WINDOW)
