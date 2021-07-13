@@ -4,11 +4,14 @@ A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users 
 ![](https://i.imgur.com/DT0lOO2.png)
 
 ### A. Requirements
-Windows exe file will be available upon release. In the meantime to get it running the following are required.
+If you want to run from the python source the following are required or see the installation section below.
 * Python 3.7 and up
 * Python-chess v0.28.0 and up
 * PySimpleGUI 4.4.1 and up
 * Pyperclip
+* Download this repo
+
+Or you can just download the [executable file](https://github.com/fsmosca/Python-Easy-Chess-GUI/releases) along with other files such as book and images.
 
 ### B. Features
 #### 1. Save games to repertoire pgn files
