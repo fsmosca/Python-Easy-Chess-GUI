@@ -1263,7 +1263,7 @@ class EasyChessGui:
             if 'info_all' in msg_str:
                 info_all = ' '.join(msg_str.split()[0:-1]).strip()
                 msg_line = '{}\n'.format(info_all)
-                window.FindElement('search_info_all_k').Update(
+                window.find_element('search_info_all_k').Update(
                         '' if is_hide else msg_line)
         else:
             # Best move can be None because engine dies
@@ -1308,13 +1308,13 @@ class EasyChessGui:
 
     def clear_elements(self, window):
         """ Clear movelist, score, pv, time, depth and nps boxes """
-        window.FindElement('search_info_all_k').Update('')
-        window.FindElement('_movelist_').Update(disabled=False)
-        window.FindElement('_movelist_').Update('', disabled=True)
-        window.FindElement('polyglot_book1_k').Update('')
-        window.FindElement('polyglot_book2_k').Update('')
-        window.FindElement('advise_info_k').Update('')
-        window.FindElement('comment_k').Update('')
+        window.find_element('search_info_all_k').Update('')
+        window.find_element('_movelist_').Update(disabled=False)
+        window.find_element('_movelist_').Update('', disabled=True)
+        window.find_element('polyglot_book1_k').Update('')
+        window.find_element('polyglot_book2_k').Update('')
+        window.find_element('advise_info_k').Update('')
+        window.find_element('comment_k').Update('')
         window.Element('w_base_time_k').Update('')
         window.Element('b_base_time_k').Update('')
         window.Element('w_elapse_k').Update('')
@@ -1324,13 +1324,13 @@ class EasyChessGui:
         """ Update player names """
         engine_id = self.opp_id_name
         if self.is_user_white:
-            window.FindElement('_White_').Update(human)
-            window.FindElement('_Black_').Update(engine_id)
+            window.find_element('_White_').Update(human)
+            window.find_element('_Black_').Update(engine_id)
             self.game.headers['White'] = human
             self.game.headers['Black'] = engine_id
         else:
-            window.FindElement('_White_').Update(engine_id)
-            window.FindElement('_Black_').Update(human)
+            window.find_element('_White_').Update(engine_id)
+            window.find_element('_Black_').Update(human)
             self.game.headers['White'] = engine_id
             self.game.headers['Black'] = human
 
@@ -1412,7 +1412,7 @@ class EasyChessGui:
         """ 
         Change the color of a square based on square row and col.
         """
-        btn_sq = window.FindElement(key=(row, col))
+        btn_sq = window.find_element(key=(row, col))
         is_dark_square = True if (row + col) % 2 else False
         bd_sq_color = self.move_sq_dark_color if is_dark_square else \
                       self.move_sq_light_color
@@ -1458,7 +1458,7 @@ class EasyChessGui:
                 color = self.sq_dark_color if (i + j) % 2 else \
                         self.sq_light_color
                 piece_image = images[self.psg_board[i][j]]
-                elem = window.FindElement(key=(i, j))
+                elem = window.find_element(key=(i, j))
                 elem.Update(button_color=('white', color),
                             image_filename=piece_image, )
 
@@ -1649,8 +1649,8 @@ class EasyChessGui:
         :param board: current board position
         :return:
         """
-        window.FindElement('_movelist_').Update(disabled=False)
-        window.FindElement('_movelist_').Update('', disabled=True)
+        window.find_element('_movelist_').Update(disabled=False)
+        window.find_element('_movelist_').Update('', disabled=True)
 
         is_human_stm = True if self.is_user_white else False
 
@@ -1713,7 +1713,7 @@ class EasyChessGui:
             # Mode: Play, Stm: computer (first move), Allow user to change settings.
             # User can start the engine by Engine->Go.
             if not is_engine_ready:
-                window.FindElement('_gamestatus_').Update(
+                window.find_element('_gamestatus_').Update(
                         'Mode     Play, press Engine->Go')
                 while True:
                     button, value = window.Read(timeout=100)
@@ -1746,13 +1746,13 @@ class EasyChessGui:
                         # If user is black and side to move is black
                         if not self.is_user_white and not board.turn:
                             is_human_stm = True
-                            window.FindElement('_gamestatus_').Update(
+                            window.find_element('_gamestatus_').Update(
                                 'Mode     Play')
 
                         # Elif user is black and side to move is white
                         elif not self.is_user_white and board.turn:
                             is_human_stm = False
-                            window.FindElement('_gamestatus_').Update(
+                            window.find_element('_gamestatus_').Update(
                                     'Mode     Play, press Engine->Go')
 
                         # When computer is to move in the first move, don't
@@ -1966,7 +1966,7 @@ class EasyChessGui:
                         else:
                             is_human_stm = True
                         is_engine_ready = True
-                        window.FindElement('_gamestatus_').Update(
+                        window.find_element('_gamestatus_').Update(
                                 'Mode     Play, Engine is thinking ...')
                         break
 
@@ -1990,7 +1990,7 @@ class EasyChessGui:
                         is_human_stm = True if board.turn else False
                         is_engine_ready = True if is_human_stm else False
 
-                        window.FindElement('_gamestatus_').Update(
+                        window.find_element('_gamestatus_').Update(
                                 'Mode     Play, side: {}'.format(
                                         'white' if board.turn else 'black'))
 
@@ -2016,7 +2016,7 @@ class EasyChessGui:
                             is_promote = False
                             move_to = button
                             to_row, to_col = move_to
-                            button_square = window.FindElement(key=(fr_row, fr_col))
+                            button_square = window.find_element(key=(fr_row, fr_col))
 
                             # If move is cancelled, pressing same button twice
                             if move_to == move_from:
@@ -2082,13 +2082,13 @@ class EasyChessGui:
                                 user_comment = value['comment_k']
                                 self.update_game(move_cnt, user_move, time_left, user_comment)
 
-                                window.FindElement('_movelist_').Update(disabled=False)
-                                window.FindElement('_movelist_').Update('')
-                                window.FindElement('_movelist_').Update(
+                                window.find_element('_movelist_').Update(disabled=False)
+                                window.find_element('_movelist_').Update('')
+                                window.find_element('_movelist_').Update(
                                     self.game.variations[0], append=True, disabled=True)
 
                                 # Clear comment and engine search box
-                                window.FindElement('comment_k').Update('')
+                                window.find_element('comment_k').Update('')
                                 window.Element('search_info_all_k').Update('')
 
                                 # Change the color of the "fr" and "to" board squares
@@ -2158,7 +2158,7 @@ class EasyChessGui:
                     search.get_board(board)
                     search.daemon = True
                     search.start()
-                    window.FindElement('_gamestatus_').Update(
+                    window.find_element('_gamestatus_').Update(
                             'Mode     Play, Engine is thinking ...')
 
                     while True:
@@ -2310,9 +2310,9 @@ class EasyChessGui:
                     engine_comment = ''
                 self.update_game(move_cnt, best_move, time_left, engine_comment)
 
-                window.FindElement('_movelist_').Update(disabled=False)
-                window.FindElement('_movelist_').Update('')
-                window.FindElement('_movelist_').Update(
+                window.find_element('_movelist_').Update(disabled=False)
+                window.find_element('_movelist_').Update('')
+                window.find_element('_movelist_').Update(
                     self.game.variations[0], append=True, disabled=True)
 
                 # Change the color of the "fr" and "to" board squares
@@ -2336,7 +2336,7 @@ class EasyChessGui:
                 elapse_str = self.get_time_h_mm_ss(engine_timer.base)
                 window.Element(k2).Update(elapse_str)
 
-                window.FindElement('_gamestatus_').Update('Mode     Play')
+                window.find_element('_gamestatus_').Update('Mode     Play')
 
         # Auto-save game
         logging.info('Saving game automatically')
@@ -3502,7 +3502,7 @@ class EasyChessGui:
 
             # Mode: Neutral
             if button == 'Flip':
-                window.FindElement('_gamestatus_').Update('Mode     Neutral')
+                window.find_element('_gamestatus_').Update('Mode     Neutral')
                 self.clear_elements(window)
                 window = self.create_new_window(window, True)
                 continue
@@ -3528,12 +3528,12 @@ class EasyChessGui:
                 while True:
                     button, value = window.Read(timeout=100)
 
-                    window.FindElement('_gamestatus_').Update('Mode     Play')
-                    window.FindElement('_movelist_').Update(disabled=False)
-                    window.FindElement('_movelist_').Update('', disabled=True)
+                    window.find_element('_gamestatus_').Update('Mode     Play')
+                    window.find_element('_movelist_').Update(disabled=False)
+                    window.find_element('_movelist_').Update('', disabled=True)
 
                     start_new_game = self.play_game(window, engine_id_name, board)
-                    window.FindElement('_gamestatus_').Update('Mode     Neutral')
+                    window.find_element('_gamestatus_').Update('Mode     Neutral')
 
                     self.psg_board = copy.deepcopy(initial_board)
                     self.redraw_board(window)
