@@ -2,6 +2,7 @@ import logging
 import os
 
 import chess
+import chess.polyglot
 
 
 class Timer:

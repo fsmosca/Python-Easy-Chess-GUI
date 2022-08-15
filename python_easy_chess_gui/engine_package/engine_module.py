@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 import chess
+import chess.engine
 
 from python_easy_chess_gui.config import (
     MAX_DEPTH,
