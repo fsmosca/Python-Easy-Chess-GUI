@@ -1,3 +1,7 @@
+# Ignore Python cache
+__pycache__
+*.pyc
+
 # Ignore test files
 *.pgn
 *.epd
@@ -11,7 +15,7 @@ build/*
 dist/*
 
 # Ignore files inside Engines dir
-Engines/*
+/python_easy_chess_gui/Engines/
 
 # Ignore opening books such as polyglot
 *.bin
@@ -19,3 +23,12 @@ Engines/*
 # Ignore text files, except README.txt
 *.txt
 !README.md
+
+# Ignore PyCharm
+/.idea/
+
+# Ignore venv
+/venv/
+
+# Ignore temporary files
+pecg_*
