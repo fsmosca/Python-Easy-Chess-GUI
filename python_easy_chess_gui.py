@@ -62,7 +62,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.14'
+APP_VERSION = 'v1.15'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -2049,7 +2049,7 @@ class EasyChessGui:
                                 user_move = chess.Move(fr_sq, to_sq)
 
                             # Check if user move is legal
-                            if user_move in board.legal_moves:
+                            if user_move in list(board.legal_moves):
                                 # Update rook location if this is a castle move
                                 if board.is_castling(user_move):
                                     self.update_rook(window, str(user_move))
