@@ -49,6 +49,11 @@ pip install pyperclip
 2. If you want to run from the exe
 * Download the exe file from the release link
 
+#### Note
+
+If you are on linux be sure to give permission to uci engine with:  
+`chmod +x uci_engine_fn`.
+
 ### D. How to
 #### To start the gui
 * Execute python_easy_chess_gui.py<br>
