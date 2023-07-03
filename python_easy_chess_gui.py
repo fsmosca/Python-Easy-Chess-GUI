@@ -62,7 +62,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.16'
+APP_VERSION = 'v1.17'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -131,12 +131,35 @@ white_init_promote_board = [[QUEENW, ROOKW, BISHOPW, KNIGHTW]]
 black_init_promote_board = [[QUEENB, ROOKB, BISHOPB, KNIGHTB]]
 
 
-HELP_MSG = """(A) To play a game
+HELP_MSG = """The GUI has 2 modes, Play and Neutral. After startup
+you are in Neutral mode. You can go to mode Play through Mode menu.
+
+All games are auto-saved in pecg_auto_save_games.pgn.
+Visit Game menu in Play mode to see other options to save the game.
+
+It has to be noted you need to setup an engine to make the GUI works.
+You can view which engines are ready for use via:
+Engine->Set Engine Opponent.
+
+(A) To setup an engine, you should be in Neutral mode.
+1. Engine->Manage->Install, press the add button.
+2. After engine setup, you can configure the engine options with:
+  a. Engine->Manage-Edit
+  b. Select the engine you want to edit and press Modify.
+
+Before playing a game, you should select an engine opponent via
+Engine->Set Engine Opponent.
+
+You can also set an engine Adviser in the Engine menu.
+During a game you can ask help from Adviser by right-clicking
+the Adviser label and press show.
+
+(B) To play a game
 You should be in Play mode.
 1. Mode->Play
 2. Make move on the board
 
-(B) To play as black
+(C) To play as black
 You should be in Neutral mode
 1. Board->Flip
 2. Mode->Play
@@ -144,19 +167,19 @@ You should be in Neutral mode
 If you are already in Play mode, go back to 
 Neutral mode via Mode->Neutral
 
-(C) To flip board
+(D) To flip board
 You should be in Neutral mode
 1. Board->Flip
   
-(D) To paste FEN
+(E) To paste FEN
 You should be in Play mode
 1. Mode->Play
 2. FEN->Paste
 
-(E) To show engine search info after the move                
+(F) To show engine search info after the move                
 1. Right-click on the Opponent Search Info and press Show
 
-(F) To Show book 1 and 2
+(G) To Show book 1 and 2
 1. Right-click on Book 1 or 2 press Show
 """
 
