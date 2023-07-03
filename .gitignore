@@ -22,3 +22,7 @@ Engines/*
 
 venv
 .idea
+
+# Project
+pecg_user.json
+pecg_engines.json
