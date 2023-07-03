@@ -181,6 +181,14 @@ You should be in Play mode
 
 (G) To Show book 1 and 2
 1. Right-click on Book 1 or 2 press Show
+
+(H) To change board color
+1. You should be in Neutral mode.
+2. Board->Color.
+
+(I) To change board theme
+1. You should be in Neutral mode.
+2. Board->Theme.
 """
 
 
@@ -237,7 +245,7 @@ menu_def_neutral = [
         ['&User', ['Set Name::user_name_k']],
         ['Tools', ['PGN', ['Delete Player::delete_player_k']]],
         ['&Settings', ['Game::settings_game_k']],
-        ['&Help', ['About']],
+        ['&Help', ['GUI']],
 ]
 
 # (2) Mode: Play, info: hide
@@ -252,7 +260,7 @@ menu_def_play = [
                    'User Draws::user_draws_k']],
         ['FEN', ['Paste']],
         ['&Engine', ['Go', 'Move Now']],
-        ['&Help', ['About']],
+        ['&Help', ['GUI']],
 ]
 
 
@@ -1751,7 +1759,7 @@ class EasyChessGui:
                         is_exit_game = True
                         break
 
-                    if button == 'About':
+                    if button == 'GUI':
                         sg.PopupScrolled(HELP_MSG, title=BOX_TITLE)
                         continue
 
@@ -1978,7 +1986,7 @@ class EasyChessGui:
                         break
 
                     # Mode: Play, stm: User
-                    if button == 'About':
+                    if button == 'GUI':
                         sg.PopupScrolled(HELP_MSG, title=BOX_TITLE,)
                         break
 
@@ -3531,8 +3539,8 @@ class EasyChessGui:
                 continue
 
             # Mode: Neutral
-            if button == 'About':
-                sg.PopupScrolled(HELP_MSG, title='Help/About')
+            if button == 'GUI':
+                sg.PopupScrolled(HELP_MSG, title='Help/GUI')
                 continue
 
             # Mode: Neutral
