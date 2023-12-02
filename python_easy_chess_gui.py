@@ -2924,7 +2924,11 @@ class EasyChessGui:
                                 break
                             if e1 == 'Get Id Name':
                                 new_engine_path_file = v1['engine_path_file_k']
-
+                                if not new_engine_path_file:
+                                    sg.Popup('Please input engine id name. Field was empty',
+                                        title=button_title + '/Get Id name')
+                                    is_cancel_add_win = True                                    
+                                    break   
                                 que = queue.Queue()
                                 t = threading.Thread(target=self.get_engine_id_name,
                                                      args=(new_engine_path_file, que,),
