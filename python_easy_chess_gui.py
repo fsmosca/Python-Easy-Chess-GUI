@@ -62,8 +62,8 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.18'
-BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
+APP_VERSION = 'v1.18.1'
+BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 
 
 platform = sys.platform
@@ -1302,11 +1302,12 @@ class EasyChessGui:
                 best_move = chess.Move.from_uci(msg.split()[1])
             except Exception:
                 logging.exception('Engine sent {}.'.format(best_move))
-                sg.Popup('Engine error, it sent a {} bestmove.\n'.format(
-                    best_move) + 'Back to Neutral mode, it is better to '
-                                 'change engine {}.'.format(
-                    self.opp_id_name), icon=ico_path[platform]['pecg'],
-                    title=BOX_TITLE)
+                sg.Popup(
+                    f'Engine error, it sent a {best_move} bestmove.\n \
+                    Back to Neutral mode, it is better to change engine {self.opp_id_name}.',
+                    icon=ico_path[platform]['pecg'],
+                    title=BOX_TITLE
+                )
 
         return best_move
 
@@ -1640,9 +1641,10 @@ class EasyChessGui:
     def set_depth_limit(self):
         """ Returns max depth based from user setting """
         user_depth = sg.PopupGetText(
-                    'Current depth is {}\n\nInput depth [{} to {}]'.format(
-                    self.max_depth, MIN_DEPTH, MAX_DEPTH), title=BOX_TITLE,
-                            icon=ico_path[platform]['pecg'])
+            f'Current depth is {self.max_depth}\n\nInput depth [{MIN_DEPTH} to {MAX_DEPTH}]',
+            title=BOX_TITLE,
+            icon=ico_path[platform]['pecg']
+        )
 
         try:
             user_depth = int(user_depth)
@@ -1871,12 +1873,13 @@ class EasyChessGui:
                                     window.Element('advise_info_k').Update(msg_line)
                                 except Exception:
                                     logging.exception('Adviser engine error')
-                                    sg.Popup('Adviser engine {} error.\n'.format(
-                                            self.adviser_id_name) + \
-                                            'It is better to change this engine.\n' +
-                                            'Change to Neutral mode first.',
-                                            icon=ico_path[platform]['pecg'],
-                                            title=BOX_TITLE)
+                                    sg.Popup(
+                                        f'Adviser engine {self.adviser_id_name} error.\n \
+                                        It is better to change this engine.\n \
+                                        Change to Neutral mode first.',
+                                        icon=ico_path[platform]['pecg'],
+                                        title=BOX_TITLE
+                                    )
                                 break
 
                         search.join()
@@ -2661,11 +2664,12 @@ class EasyChessGui:
                         pgn = v['pgn_k']
                         if pgn == '':
                             logging.info('Missing pgn file.')
-                            sg.Popup('Please locate your pgn file by pressing '
-                                     'the Browse button followed by Display '
-                                     'Players.',
-                                     title=win_title,
-                                     icon=ico_path[platform]['pecg'])
+                            sg.Popup(
+                                'Please locate your pgn file by pressing \
+                                the Browse button followed by Display Players.',
+                                title=win_title,
+                                icon=ico_path[platform]['pecg']
+                            )
                             break
 
                         t1 = time.perf_counter()
@@ -2977,16 +2981,13 @@ class EasyChessGui:
                                     new_engine_id_name = v1['engine_id_name_k']
                                     if new_engine_id_name != '':
                                         # Check if new_engine_id_name is already existing
-                                        if self.is_name_exists(
-                                                new_engine_id_name):
+                                        if self.is_name_exists(new_engine_id_name):
                                             sg.Popup(
-                                                '{} is existing. Please '
-                                                'modify the name! You can '
-                                                'modify the config later thru '
-                                                'Engine->Manage->Edit'.format(
-                                                    new_engine_id_name),
-                                            title=button_title,
-                                            icon=ico_path[platform]['pecg'])
+                                                f'{new_engine_id_name} is existing. Please modify the name! \
+                                                You can modify the config later thru Engine->Manage->Edit',
+                                                title=button_title,
+                                                icon=ico_path[platform]['pecg']
+                                            )
                                             continue
                                         break
                                     else:
@@ -3020,10 +3021,11 @@ class EasyChessGui:
                             t.join()
 
                             if msg == 'Failure':
-                                sg.Popup('Failed to add {} in config '
-                                         'file!'.format(new_engine_id_name),
-                                         title=button_title,
-                                         icon=ico_path[platform]['pecg'])
+                                sg.Popup(
+                                    f'Failed to add {new_engine_id_name} in config file!',
+                                    title=button_title,
+                                    icon=ico_path[platform]['pecg']
+                                )
 
                             self.engine_id_name_list = \
                                 self.get_engine_id_name_list()
