@@ -62,7 +62,7 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.17'
+APP_VERSION = 'v1.18'
 BOX_TITLE = '{} {}'.format(APP_NAME, APP_VERSION)
 
 
@@ -2924,45 +2924,51 @@ class EasyChessGui:
                                 break
                             if e1 == 'Get Id Name':
                                 new_engine_path_file = v1['engine_path_file_k']
-                                if not new_engine_path_file:
-                                    sg.Popup('Please input engine id name. Field was empty',
-                                        title=button_title + '/Get Id name')
-                                    is_cancel_add_win = True                                    
-                                    break   
-                                que = queue.Queue()
-                                t = threading.Thread(target=self.get_engine_id_name,
-                                                     args=(new_engine_path_file, que,),
-                                                     daemon=True)
-                                t.start()
-                                is_update_list = False
-                                while True:
-                                    try:
-                                        msg = que.get_nowait()
+
+                                # We can only get the engine id name if the engine is defined.
+                                if new_engine_path_file:
+                                    que = queue.Queue()
+                                    t = threading.Thread(
+                                        target=self.get_engine_id_name,
+                                        args=(new_engine_path_file, que,),
+                                        daemon=True
+                                    )
+                                    t.start()
+                                    is_update_list = False
+                                    while True:
+                                        try:
+                                            msg = que.get_nowait()
+                                            break
+                                        except Exception:
+                                            pass
+                                    t.join()
+
+                                    if msg[0] == 'Done' and msg[1] is not None:
+                                        is_update_list = True
+                                        new_engine_id_name = msg[1]
+                                    else:
+                                        is_cancel_add_win = True
+                                        sg.Popup(
+                                            'This engine cannot be '
+                                            'installed. Please select '
+                                            'another engine. It should be uci '
+                                            'engine.',
+                                            title=button_title + '/Get Id name')
+
+                                    if is_update_list:
+                                        add_win.Element('engine_id_name_k').Update(
+                                            new_engine_id_name)
+
+                                    # If we fail to install the engine, we exit
+                                    # the install window
+                                    if is_cancel_add_win:
                                         break
-                                    except Exception:
-                                        pass
-                                t.join()
 
-                                if msg[0] == 'Done' and msg[1] is not None:
-                                    is_update_list = True
-                                    new_engine_id_name = msg[1]
                                 else:
-                                    is_cancel_add_win = True
                                     sg.Popup(
-                                        'This engine cannot be '
-                                        'installed. Please select '
-                                        'another engine. It should be uci '
-                                        'engine.',
-                                        title=button_title + '/Get Id name')
-
-                                if is_update_list:
-                                    add_win.Element('engine_id_name_k').Update(
-                                        new_engine_id_name)
-
-                                # If we fail to install the engine, we exit
-                                # the install window
-                                if is_cancel_add_win:
-                                    break
+                                        'Please define the engine or browse to the location of the engine file first.',
+                                        title=button_title + '/Get Id name'
+                                    )
 
                             if e1 == 'OK':
                                 try:
