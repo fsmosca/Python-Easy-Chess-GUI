@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" 
+"""
 python_easy_chess_gui.py
 
 Requirements:
@@ -62,20 +62,19 @@ logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.18.1'
+APP_VERSION = 'v1.18.2'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 
 
 platform = sys.platform
 sys_os = sys_plat.system()
-    
 
-ico_path = {'win32': {'pecg': 'Icon/pecg.ico', 'enemy': 'Icon/enemy.ico',
-                      'adviser': 'Icon/adviser.ico'}, 
-            'linux': {'pecg': 'Icon/pecg.png', 'enemy': 'Icon/enemy.png',
-                      'adviser': 'Icon/adviser.png'},
-            'darwin': {'pecg': 'Icon/pecg.png', 'enemy': 'Icon/enemy.png',
-                      'adviser': 'Icon/adviser.png'}}
+
+ico_path = {
+    'win32': {'pecg': 'Icon/pecg.ico', 'enemy': 'Icon/enemy.ico', 'adviser': 'Icon/adviser.ico'},
+    'linux': {'pecg': 'Icon/pecg.png', 'enemy': 'Icon/enemy.png', 'adviser': 'Icon/adviser.png'},
+    'darwin': {'pecg': 'Icon/pecg.png', 'enemy': 'Icon/enemy.png', 'adviser': 'Icon/adviser.png'}
+}
 
 
 MIN_DEPTH = 1
@@ -164,19 +163,19 @@ You should be in Neutral mode
 1. Board->Flip
 2. Mode->Play
 3. Engine->Go
-If you are already in Play mode, go back to 
+If you are already in Play mode, go back to
 Neutral mode via Mode->Neutral
 
 (D) To flip board
 You should be in Neutral mode
 1. Board->Flip
-  
+
 (E) To paste FEN
 You should be in Play mode
 1. Mode->Play
 2. FEN->Paste
 
-(F) To show engine search info after the move                
+(F) To show engine search info after the move
 1. Right-click on the Opponent Search Info and press Show
 
 (G) To Show book 1 and 2
@@ -218,7 +217,7 @@ images = {BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
 promote_psg_to_pyc = {KNIGHTB: chess.KNIGHT, BISHOPB: chess.BISHOP,
                       ROOKB: chess.ROOK, QUEENB: chess.QUEEN,
                       KNIGHTW: chess.KNIGHT, BISHOPW: chess.BISHOP,
-                      ROOKW: chess.ROOK, QUEENW: chess.QUEEN,}
+                      ROOKW: chess.ROOK, QUEENW: chess.QUEEN}
 
 
 INIT_PGN_TAG = {
@@ -235,9 +234,7 @@ menu_def_neutral = [
                                       'Blue::board_color_k',
                                       'Green::board_color_k',
                                       'Gray::board_color_k'],
-                    'Theme', GUI_THEME
-                   ]
-        ],
+                    'Theme', GUI_THEME]],
         ['&Engine', ['Set Engine Adviser', 'Set Engine Opponent', 'Set Depth',
                      'Manage', ['Install', 'Edit', 'Delete']]],
         ['&Time', ['User::tc_k', 'Engine::tc_k']],
@@ -362,8 +359,7 @@ class GuiBook:
                 move = v['move']
                 score = v['score']
                 weight = score/total_score
-                moves += '{:4s}   {:<5d}   {:<2.1f}%\n'.format(move, score,
-                                                            100*weight)
+                moves += '{:4s}   {:<5d}   {:<2.1f}%\n'.format(move, score, 100*weight)
 
         return moves, is_found
 
@@ -422,16 +418,16 @@ class RunEngine(threading.Thread):
         """ Read the engine config file pecg_engines.json and set the engine to
         use the user_value of the value key. Our option name has 2 values,
         default_value and user_value.
-        
+
         Example for hash option
         'name': Hash
         'default': default_value
         'value': user_value
-        
+
         If default_value and user_value are not the same, we will set the
         engine to use the user_value by the command,
         setoption name Hash value user_value
-        
+
         However if default_value and user_value are the same, we will not send
         commands to set the option value because the value is default already.
         """
@@ -532,11 +528,9 @@ class RunEngine(threading.Thread):
                             self.depth = int(info['depth'])
 
                         if 'score' in info:
-                            self.score = int(info['score'].relative.score(
-                                mate_score=32000))/100
+                            self.score = int(info['score'].relative.score(mate_score=32000))/100
 
-                        self.time = info['time'] if 'time' in info \
-                                else time.perf_counter() - start_time
+                        self.time = info['time'] if 'time' in info else time.perf_counter() - start_time
 
                         if 'pv' in info and not ('upperbound' in info or
                                                  'lowerbound' in info):
@@ -576,7 +570,7 @@ class RunEngine(threading.Thread):
                     except Exception:
                         logging.exception('Failed to parse search info.')
         else:
-            result = self.engine.play(self.board, limit,info=chess.engine.INFO_ALL)
+            result = self.engine.play(self.board, limit, info=chess.engine.INFO_ALL)
             logging.info('result: {}'.format(result))
             try:
                 self.depth = result.info['depth']
@@ -687,7 +681,10 @@ class EasyChessGui:
         self.adviser_movetime_sec = 10
         self.pecg_auto_save_game = 'pecg_auto_save_games.pgn'
         self.my_games = 'pecg_my_games.pgn'
-        self.repertoire_file = {'white': 'pecg_white_repertoire.pgn', 'black': 'pecg_black_repertoire.pgn'}
+        self.repertoire_file = {
+            'white': 'pecg_white_repertoire.pgn',
+            'black': 'pecg_black_repertoire.pgn'
+        }
         self.init_game()
         self.fen = None
         self.psg_board = None
@@ -751,8 +748,7 @@ class EasyChessGui:
                 # Save clock, add clock as comment after a move
                 if self.is_save_time_left:
                     rem_time = self.get_time_h_mm_ss(time_left, False)
-                    self.node.comment = '[%clk {}] {}'.format(rem_time,
-                                                         user_comment)
+                    self.node.comment = '[%clk {}] {}'.format(rem_time, user_comment)
                 else:
                     self.node.comment = user_comment
         # Do not save user comment
@@ -777,12 +773,14 @@ class EasyChessGui:
 
         layout = self.build_main_layout(self.is_user_white)
 
-        w = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
+        w = sg.Window(
+            '{} {}'.format(APP_NAME, APP_VERSION),
             layout,
             default_button_element_size=(12, 1),
             auto_size_buttons=False,
             location=(loc[0], loc[1]),
-            icon=ico_path[platform]['pecg'])
+            icon=ico_path[platform]['pecg']
+        )
 
         # Initialize White and black boxes
         while True:
@@ -802,7 +800,7 @@ class EasyChessGui:
         :param que:
         :return:
         """
-        logging.info(f'Enters delete_player()')
+        logging.info('Enters delete_player()')
 
         pgn_path = Path(pgn)
         folder_path = pgn_path.parents[0]
@@ -855,7 +853,7 @@ class EasyChessGui:
         que.put('Done')
 
     def get_players(self, pgn, q):
-        logging.info(f'Enters get_players()')
+        logging.info('Enters get_players()')
         players = []
         games = 0
         with open(pgn) as h:
@@ -1057,8 +1055,8 @@ class EasyChessGui:
                         for d in v:
                             # d = {'name': 'Ponder', 'default': False,
                             # 'value': False, 'type': 'check'}
-                            
-                            default_type = type(d['default'])                            
+
+                            default_type = type(d['default'])
                             opt_name = d['name']
                             opt_value = d['value']
                             for u in user_opt:
@@ -1156,7 +1154,7 @@ class EasyChessGui:
                                'default': o.default,
                                'value': o.default,
                                'type': o.type,
-                               'choices':o.var})
+                               'choices': o.var})
             else:
                 option.append({'name': o.name,
                                'default': o.default,
@@ -1241,7 +1239,7 @@ class EasyChessGui:
                                    'default': o.default,
                                    'value': o.default,
                                    'type': o.type,
-                                   'choices':o.var})
+                                   'choices': o.var})
                 else:
                     option.append({'name': o.name,
                                    'default': o.default,
@@ -1290,7 +1288,7 @@ class EasyChessGui:
         best_move = None
         msg_str = str(msg)
 
-        if not 'bestmove ' in msg_str:
+        if 'bestmove ' not in msg_str:
             if 'info_all' in msg_str:
                 info_all = ' '.join(msg_str.split()[0:-1]).strip()
                 msg_line = '{}\n'.format(info_all)
@@ -1396,7 +1394,7 @@ class EasyChessGui:
                 psgboard.append(piece_r)
 
             try:
-                pc = board.piece_at(s^56)
+                pc = board.piece_at(s ^ 56)
             except Exception:
                 pc = None
                 logging.exception('Failed to get piece.')
@@ -1441,13 +1439,12 @@ class EasyChessGui:
         self.redraw_board(window)
 
     def change_square_color(self, window, row, col):
-        """ 
+        """
         Change the color of a square based on square row and col.
         """
         btn_sq = window.find_element(key=(row, col))
         is_dark_square = True if (row + col) % 2 else False
-        bd_sq_color = self.move_sq_dark_color if is_dark_square else \
-                      self.move_sq_light_color
+        bd_sq_color = self.move_sq_dark_color if is_dark_square else self.move_sq_light_color
         btn_sq.Update(button_color=('white', bd_sq_color))
 
     def relative_row(self, s, stm):
@@ -1514,10 +1511,9 @@ class EasyChessGui:
         piece = None
         board_layout, row = [], []
 
-        psg_promote_board = copy.deepcopy(white_init_promote_board) if stm \
-                else copy.deepcopy(black_init_promote_board)
+        psg_promote_board = copy.deepcopy(white_init_promote_board) if stm else copy.deepcopy(black_init_promote_board)
 
-        # Loop through board and create buttons with images        
+        # Loop through board and create buttons with images.
         for i in range(1):
             for j in range(4):
                 piece_image = images[psg_promote_board[i][j]]
@@ -1653,25 +1649,27 @@ class EasyChessGui:
             logging.exception('Failed to get user depth.')
 
         self.max_depth = min(MAX_DEPTH, max(MIN_DEPTH, user_depth))
-        
+
     def define_timer(self, window, name='human'):
         """
         Returns Timer object for either human or engine.
         """
         if name == 'human':
-            timer = Timer(self.human_tc_type, self.human_base_time_ms,
-                          self.human_inc_time_ms, self.human_period_moves)           
+            timer = Timer(
+                self.human_tc_type, self.human_base_time_ms,
+                self.human_inc_time_ms, self.human_period_moves
+            )
         else:
-            timer = Timer(self.engine_tc_type, self.engine_base_time_ms,
-                      self.engine_inc_time_ms, self.engine_period_moves)
+            timer = Timer(
+                self.engine_tc_type, self.engine_base_time_ms,
+                self.engine_inc_time_ms, self.engine_period_moves
+            )
 
         elapse_str = self.get_time_h_mm_ss(timer.base)
-        is_white_base = self.is_user_white and name == 'human' or \
-                not self.is_user_white and name != 'human'
-        window.Element('w_base_time_k' if is_white_base else 'b_base_time_k').Update(
-                elapse_str)
-            
-        return timer    
+        is_white_base = (self.is_user_white and name == 'human') or (not self.is_user_white and name != 'human')
+        window.Element('w_base_time_k' if is_white_base else 'b_base_time_k').Update(elapse_str)
+
+        return timer
 
     def play_game(self, window, engine_id_name, board):
         """
@@ -1722,7 +1720,7 @@ class EasyChessGui:
             if is_hide_book1:
                 window.Element('polyglot_book1_k').Update('')
             else:
-                # Load 2 polyglot book files        
+                # Load 2 polyglot book files.
                 ref_book1 = GuiBook(self.computer_book_file, board,
                                     self.is_random_book)
                 all_moves, is_found = ref_book1.get_all_moves()
@@ -1835,12 +1833,14 @@ class EasyChessGui:
                         adviser_base_ms = self.adviser_movetime_sec * 1000
                         adviser_inc_ms = 0
 
-                        search = RunEngine(self.queue, self.engine_config_file,
+                        search = RunEngine(
+                            self.queue, self.engine_config_file,
                             self.adviser_path_and_file, self.adviser_id_name,
                             self.max_depth, adviser_base_ms, adviser_inc_ms,
-                                           tc_type='timepermove',
-                                           period_moves=0,
-                                           is_stream_search_info=True)
+                            tc_type='timepermove',
+                            period_moves=0,
+                            is_stream_search_info=True
+                        )
                         search.get_board(board)
                         search.daemon = True
                         search.start()
@@ -1851,9 +1851,9 @@ class EasyChessGui:
                             if button == 'Stop::right_adviser_k':
                                 search.stop()
 
-                            # Exit app while adviser is thinking                    
+                            # Exit app while adviser is thinking.
                             if button is None:
-                                search.stop()                                
+                                search.stop()
                                 is_search_stop_for_exit = True
                             try:
                                 msg = self.queue.get_nowait()
@@ -1934,21 +1934,21 @@ class EasyChessGui:
 
                     if button == 'Save to My Games::save_game_k':
                         logging.info('Saving game manually')
-                        with open(self.my_games, mode = 'a+') as f:
+                        with open(self.my_games, mode='a+') as f:
                             self.game.headers['Event'] = 'My Games'
                             f.write('{}\n\n'.format(self.game))
                         break
 
                     # Mode: Play, Stm: user
                     if button == 'Save to White Repertoire':
-                        with open(self.repertoire_file['white'], mode = 'a+') as f:
+                        with open(self.repertoire_file['white'], mode='a+') as f:
                             self.game.headers['Event'] = 'White Repertoire'
                             f.write('{}\n\n'.format(self.game))
                         break
 
                     # Mode: Play, Stm: user
                     if button == 'Save to Black Repertoire':
-                        with open(self.repertoire_file['black'], mode = 'a+') as f:
+                        with open(self.repertoire_file['black'], mode='a+') as f:
                             self.game.headers['Event'] = 'Black Repertoire'
                             f.write('{}\n\n'.format(self.game))
                         break
@@ -2160,8 +2160,8 @@ class EasyChessGui:
                                 button_square.Update(button_color=('white', color))
                                 continue
 
-                if is_new_game or is_exit_game or is_exit_app or \
-                    is_user_resigns or is_user_wins or is_user_draws:
+                if (is_new_game or is_exit_game or is_exit_app or
+                        is_user_resigns or is_user_wins or is_user_draws):
                     break
 
             # Else if side to move is not human
@@ -2183,12 +2183,12 @@ class EasyChessGui:
                 # Mode: Play, stm: Computer, If there is no book move,
                 # let the engine search the best move
                 if best_move is None:
-                    search = RunEngine(self.queue, self.engine_config_file,
-                        self.opp_path_and_file, self.opp_id_name,
-                        self.max_depth, engine_timer.base,
-                                       engine_timer.inc,
-                                       tc_type=engine_timer.tc_type,
-                                       period_moves=board.fullmove_number)
+                    search = RunEngine(
+                        self.queue, self.engine_config_file, self.opp_path_and_file,
+                        self.opp_id_name, self.max_depth, engine_timer.base,
+                        engine_timer.inc, tc_type=engine_timer.tc_type,
+                        period_moves=board.fullmove_number
+                    )
                     search.get_board(board)
                     search.daemon = True
                     search.start()
@@ -2246,7 +2246,7 @@ class EasyChessGui:
                             is_hide_book2 = True
                             window.Element('polyglot_book2_k').Update('')
 
-                        # Exit app while engine is thinking                    
+                        # Exit app while engine is thinking.
                         if button is None:
                             search.stop()
                             is_search_stop_for_exit = True
@@ -2385,7 +2385,7 @@ class EasyChessGui:
             self.game.headers['Result'] = '1/2-1/2'
             self.game.headers['Termination'] = 'Adjudication'
         else:
-            self.game.headers['Result'] = board.result(claim_draw = True)
+            self.game.headers['Result'] = board.result(claim_draw=True)
 
         base_h = int(self.human_base_time_ms / 1000)
         inc_h = int(self.human_inc_time_ms / 1000)
@@ -2432,7 +2432,7 @@ class EasyChessGui:
 
     def save_game(self):
         """ Save game in append mode """
-        with open(self.pecg_auto_save_game, mode = 'a+') as f:
+        with open(self.pecg_auto_save_game, mode='a+') as f:
             f.write('{}\n\n'.format(self.game))
 
     def get_engines(self):
@@ -2467,7 +2467,7 @@ class EasyChessGui:
         board_layout = []
 
         if is_user_white:
-            # Save the board with black at the top        
+            # Save the board with black at the top.
             start = 0
             end = 8
             step = 1
@@ -2521,35 +2521,34 @@ class EasyChessGui:
                      relief='sunken')
              ],
             [sg.Text('Adviser', size=(7, 1), font=('Consolas', 10), key='adviser_k',
-                     right_click_menu=['Right',
-                         ['Start::right_adviser_k', 'Stop::right_adviser_k']]),
+                     right_click_menu=[
+                        'Right',
+                        ['Start::right_adviser_k', 'Stop::right_adviser_k']
+                    ]),
              sg.Text('', font=('Consolas', 10), key='advise_info_k', relief='sunken',
-                     size=(46,1))],
+                     size=(46, 1))],
 
             [sg.Text('Move list', size=(16, 1), font=('Consolas', 10))],
             [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(52, 8),
-                    font=('Consolas', 10), key='_movelist_', disabled=True)],
+                          font=('Consolas', 10), key='_movelist_', disabled=True)],
 
             [sg.Text('Comment', size=(7, 1), font=('Consolas', 10))],
             [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(52, 3),
-                    font=('Consolas', 10), key='comment_k')],
+                          font=('Consolas', 10), key='comment_k')],
 
             [sg.Text('BOOK 1, Comp games', size=(26, 1),
                      font=('Consolas', 10),
-                     right_click_menu=['Right',
-                         ['Show::right_book1_k', 'Hide::right_book1_k']]),
+                     right_click_menu=['Right', ['Show::right_book1_k', 'Hide::right_book1_k']]),
              sg.Text('BOOK 2, Human games',
                      font=('Consolas', 10),
-                     right_click_menu=['Right',
-                         ['Show::right_book2_k', 'Hide::right_book2_k']])],
+                     right_click_menu=['Right', ['Show::right_book2_k', 'Hide::right_book2_k']])],
             [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(23, 4),
-                    font=('Consolas', 10), key='polyglot_book1_k', disabled=True),
+                          font=('Consolas', 10), key='polyglot_book1_k', disabled=True),
              sg.Multiline('', do_not_clear=True, autoscroll=False, size=(25, 4),
-                    font=('Consolas', 10), key='polyglot_book2_k', disabled=True)],
-
+                          font=('Consolas', 10), key='polyglot_book2_k', disabled=True)],
             [sg.Text('Opponent Search Info', font=('Consolas', 10), size=(30, 1),
                      right_click_menu=['Right',
-                         ['Show::right_search_info_k', 'Hide::right_search_info_k']])],
+                                       ['Show::right_search_info_k', 'Hide::right_search_info_k']])],
             [sg.Text('', key='search_info_all_k', size=(55, 1),
                      font=('Consolas', 10), relief='sunken')],
         ]
@@ -2565,8 +2564,8 @@ class EasyChessGui:
         ]
 
         return layout
-    
-    def set_default_adviser_engine(self):    
+
+    def set_default_adviser_engine(self):
         try:
             self.adviser_id_name = self.engine_id_name_list[1] \
                    if len(self.engine_id_name_list) >= 2 \
@@ -2577,7 +2576,7 @@ class EasyChessGui:
             logging.warning(e)
         except Exception:
             logging.exception('Error in getting adviser engine!')
-    
+
     def get_default_engine_opponent(self):
         engine_id_name = None
         try:
@@ -2588,7 +2587,7 @@ class EasyChessGui:
             logging.warning(e)
         except Exception:
             logging.exception('Error in getting opponent engine!')
-            
+
         return engine_id_name
 
     def main_loop(self):
@@ -2609,7 +2608,7 @@ class EasyChessGui:
         # Read user config file, if missing create and new one
         self.check_user_config_file()
 
-        # If engine config file (pecg_engines.json) is missing, then create it        
+        # If engine config file (pecg_engines.json) is missing, then create it.
         self.check_engine_config_file()
         self.engine_id_name_list = self.get_engine_id_name_list()
 
@@ -2643,13 +2642,11 @@ class EasyChessGui:
                 sum_games = 0
                 layout = [
                     [sg.Text('PGN', size=(4, 1)),
-                     sg.Input(size=(40,1), key='pgn_k'), sg.FileBrowse()],
-                    [sg.Button('Display Players', size=(48,1))],
-                    [sg.Text('Status:', size=(48, 1), key='status_k',
-                             relief='sunken')],
+                     sg.Input(size=(40, 1), key='pgn_k'), sg.FileBrowse()],
+                    [sg.Button('Display Players', size=(48, 1))],
+                    [sg.Text('Status:', size=(48, 1), key='status_k', relief='sunken')],
                     [sg.T('Current players in the pgn', size=(43, 1))],
-                    [sg.Listbox([], size=(53, 10),
-                                key='player_k')],
+                    [sg.Listbox([], size=(53, 10), key='player_k')],
                     [sg.Button('Delete Player'), sg.Cancel()]
                 ]
 
@@ -2674,8 +2671,11 @@ class EasyChessGui:
 
                         t1 = time.perf_counter()
                         que = queue.Queue()
-                        t = threading.Thread(target=self.get_players,
-                                             args=(pgn, que,),daemon=True)
+                        t = threading.Thread(
+                            target=self.get_players,
+                            args=(pgn, que,),
+                            daemon=True
+                        )
                         t.start()
                         msg = None
                         while True:
@@ -2698,7 +2698,7 @@ class EasyChessGui:
 
                     if e == 'Delete Player':
                         try:
-                            player_name =  v['player_k'][0]
+                            player_name = v['player_k'][0]
                         except IndexError as e:
                             logging.info(e)
                             sg.Popup('Please locate your pgn file by '
@@ -2712,9 +2712,11 @@ class EasyChessGui:
 
                         t1 = time.perf_counter()
                         que = queue.Queue()
-                        t = threading.Thread(target=self.delete_player,
-                                         args=(player_name, v['pgn_k'], que,),
-                                         daemon=True)
+                        t = threading.Thread(
+                            target=self.delete_player,
+                            args=(player_name, v['pgn_k'], que,),
+                            daemon=True
+                        )
                         t.start()
                         msg = None
                         while True:
@@ -2758,11 +2760,9 @@ class EasyChessGui:
                      sg.Input(self.human_period_moves, key='period_moves_k',
                               size=(8, 1), visible=False)],
                     [sg.Radio('Fischer', 'tc_radio', key='fischer_type_k',
-                                 default=True if
-                                 self.human_tc_type=='fischer' else False),
+                              default=True if self.human_tc_type == 'fischer' else False),
                      sg.Radio('Delay', 'tc_radio', key='delay_type_k',
-                              default=True if self.human_tc_type == 'delay'
-                     else False)],
+                              default=True if self.human_tc_type == 'delay' else False)],
                     [sg.OK(), sg.Cancel()]
                 ]
 
@@ -2857,8 +2857,8 @@ class EasyChessGui:
                 layout = [
                         [sg.Text('Current username: {}'.format(
                             self.username))],
-                        [sg.T('Name', size=(4,1)), sg.Input(
-                                self.username, key='username_k', size=(32,1))],
+                        [sg.T('Name', size=(4, 1)), sg.Input(
+                                self.username, key='username_k', size=(32, 1))],
                         [sg.OK(), sg.Cancel()]
                 ]
                 window.Hide()
@@ -2890,7 +2890,7 @@ class EasyChessGui:
                 install_layout = [
                         [sg.Text('Current configured engine names')],
                         [sg.Listbox(values=self.engine_id_name_list,
-                                    size=(48,10), disabled=True)],
+                                    size=(48, 10), disabled=True)],
                         [sg.Button('Add'), sg.Button('Cancel')]
                 ]
 
@@ -2906,14 +2906,15 @@ class EasyChessGui:
                     if e == 'Add':
                         button_title += '/' + e
 
-                        add_layout = [[sg.Text('Engine', size=(6, 1)),
-                                       sg.Input(key='engine_path_file_k'),
-                                       sg.FileBrowse()],
-                                     [sg.Text('Name', size=(6, 1)),
-                                      sg.Input(key='engine_id_name_k',
-                                               tooltip='Input name'),
-                                      sg.Button('Get Id Name')],
-                                      [sg.OK(), sg.Cancel()]]
+                        add_layout = [
+                            [sg.Text('Engine', size=(6, 1)), sg.Input(key='engine_path_file_k'), sg.FileBrowse()],
+                            [
+                                sg.Text('Name', size=(6, 1)),
+                                sg.Input(key='engine_id_name_k', tooltip='Input name'),
+                                sg.Button('Get Id Name')
+                            ],
+                            [sg.OK(), sg.Cancel()]
+                        ]
 
                         install_win.Hide()
                         add_win = sg.Window(button_title, add_layout)
@@ -2991,11 +2992,11 @@ class EasyChessGui:
                                             continue
                                         break
                                     else:
-                                        sg.Popup('Please input engine id '
-                                            'name, or press Get Id Name '
-                                                 'button.',
-                                                 title=button_title,
-                                                 icon=ico_path[platform]['pecg'])
+                                        sg.Popup(
+                                            'Please input engine id name, or press Get Id Name button.',
+                                            title=button_title,
+                                            icon=ico_path[platform]['pecg']
+                                        )
                                 except Exception:
                                     logging.exception('Failed to get engine '
                                                       'path and file')
@@ -3033,15 +3034,15 @@ class EasyChessGui:
 
                 install_win.Close()
                 window.UnHide()
-                
+
                 # Define default engine opponent and adviser
                 if engine_id_name is None:
                     engine_id_name = self.get_default_engine_opponent()
                 if self.adviser_id_name is None:
                     self.set_default_adviser_engine()
-                    
+
                 self.update_labels_and_game_tags(window, human=self.username)
-                
+
                 continue
 
             # Mode: Neutral
@@ -3053,15 +3054,22 @@ class EasyChessGui:
 
                 edit_layout = [
                         [sg.Text('Current configured engine names')],
-                        [sg.Listbox(values=self.engine_id_name_list,
-                                    size=(48,10),
-                                    key='engine_id_name_k')],
+                        [
+                            sg.Listbox(
+                                values=self.engine_id_name_list,
+                                size=(48, 10),
+                                key='engine_id_name_k'
+                            )
+                        ],
                         [sg.Button('Modify'), sg.Button('Cancel')]
                 ]
 
                 window.Hide()
-                edit_win = sg.Window(button_title, layout=edit_layout,
-                                        icon=ico_path[platform]['pecg'])
+                edit_win = sg.Window(
+                    button_title,
+                    layout=edit_layout,
+                    icon=ico_path[platform]['pecg']
+                )
                 is_cancel_edit_win = False
                 while True:
                     e, v = edit_win.Read(timeout=100)
@@ -3252,8 +3260,11 @@ class EasyChessGui:
                     [sg.Button('Delete'), sg.Cancel()]
                 ]
                 window.Hide()
-                delete_win = sg.Window(button_title, layout=delete_layout,
-                                     icon=ico_path[platform]['pecg'])
+                delete_win = sg.Window(
+                    button_title,
+                    layout=delete_layout,
+                    icon=ico_path[platform]['pecg']
+                )
                 is_cancel = False
                 while True:
                     e, v = delete_win.Read(timeout=100)
@@ -3303,10 +3314,8 @@ class EasyChessGui:
                     current_engine_file))
 
                 layout = [
-                        [sg.T('Current Opponent: {}'.format(self.opp_id_name),
-                              size=(40,1))],
-                        [sg.Listbox(values=self.engine_id_name_list, size=(48,10),
-                                    key='engine_id_k')],
+                        [sg.T('Current Opponent: {}'.format(self.opp_id_name), size=(40, 1))],
+                        [sg.Listbox(values=self.engine_id_name_list, size=(48, 10), key='engine_id_k')],
                         [sg.OK(), sg.Cancel()]
                 ]
 
@@ -3361,13 +3370,13 @@ class EasyChessGui:
 
                 layout = [
                         [sg.T('Current Adviser: {}'.format(self.adviser_id_name),
-                              size=(40,1))],
-                        [sg.Listbox(values=self.engine_id_name_list, size=(48,10),
+                              size=(40, 1))],
+                        [sg.Listbox(values=self.engine_id_name_list, size=(48, 10),
                                     key='adviser_id_name_k')],
                         [sg.T('Movetime (sec)', size=(12, 1)),
                          sg.Spin([t for t in range(1, 3600, 1)],
-                                  initial_value=self.adviser_movetime_sec,
-                                  size=(8, 1), key='adviser_movetime_k')],
+                                 initial_value=self.adviser_movetime_sec,
+                                 size=(8, 1), key='adviser_movetime_k')],
                         [sg.OK(), sg.Cancel()]
                 ]
 
@@ -3417,21 +3426,20 @@ class EasyChessGui:
                 current_max_book_ply = self.max_book_ply
 
                 layout = [
-                        [sg.Text('This is the book used by your '
-                                 'engine opponent.')],
+                        [sg.Text('This is the book used by your engine opponent.')],
                         [sg.T('Book File', size=(8, 1)),
                          sg.T(self.gui_book_file, size=(36, 1), relief='sunken')],
                         [sg.T('Max Ply', size=(8, 1)),
                          sg.Spin([t for t in range(1, 33, 1)],
-                                  initial_value=self.max_book_ply,
-                                  size=(6, 1), key='book_ply_k')],
-                        [sg.CBox('Use book', key = 'use_gui_book_k',
+                                 initial_value=self.max_book_ply,
+                                 size=(6, 1), key='book_ply_k')],
+                        [sg.CBox('Use book', key='use_gui_book_k',
                                  default=self.is_use_gui_book)],
                         [sg.Radio('Best move', 'Book Radio',
-                                  default = False if self.is_random_book else True),
+                                  default=False if self.is_random_book else True),
                          sg.Radio('Random move', 'Book Radio',
                                   key='random_move_k',
-                                  default = True if self.is_random_book else False)],
+                                  default=True if self.is_random_book else False)],
                         [sg.OK(), sg.Cancel()],
                 ]
 
@@ -3562,7 +3570,7 @@ class EasyChessGui:
                     sg.Popup('Install engine first! in Engine/Manage/Install',
                              icon=ico_path[platform]['pecg'], title='Mode')
                     continue
-                    
+
                 # Change menu from Neutral to Play
                 self.menu_elem.Update(menu_def_play)
                 self.psg_board = copy.deepcopy(initial_board)
