@@ -210,23 +210,26 @@ kingB = os.path.join(IMAGE_PATH, 'bK.png')
 kingW = os.path.join(IMAGE_PATH, 'wK.png')
 
 
-images = {BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
-          KNIGHTB: knightB, KNIGHTW: knightW,
-          ROOKB: rookB, ROOKW: rookW, KINGB: kingB, KINGW: kingW,
-          QUEENB: queenB, QUEENW: queenW, BLANK: blank}
+images = {
+    BISHOPB: bishopB, BISHOPW: bishopW, PAWNB: pawnB, PAWNW: pawnW,
+    KNIGHTB: knightB, KNIGHTW: knightW, ROOKB: rookB, ROOKW: rookW,
+    KINGB: kingB, KINGW: kingW, QUEENB: queenB, QUEENW: queenW, BLANK: blank
+}
 
 
 # Promote piece from psg (pysimplegui) to pyc (python-chess)
-promote_psg_to_pyc = {KNIGHTB: chess.KNIGHT, BISHOPB: chess.BISHOP,
-                      ROOKB: chess.ROOK, QUEENB: chess.QUEEN,
-                      KNIGHTW: chess.KNIGHT, BISHOPW: chess.BISHOP,
-                      ROOKW: chess.ROOK, QUEENW: chess.QUEEN}
+promote_psg_to_pyc = {
+    KNIGHTB: chess.KNIGHT, BISHOPB: chess.BISHOP,
+    ROOKB: chess.ROOK, QUEENB: chess.QUEEN,
+    KNIGHTW: chess.KNIGHT, BISHOPW: chess.BISHOP,
+    ROOKW: chess.ROOK, QUEENW: chess.QUEEN
+}
 
 
 INIT_PGN_TAG = {
-        'Event': 'Human vs computer',
-        'White': 'Human',
-        'Black': 'Computer',
+    'Event': 'Human vs computer',
+    'White': 'Human',
+    'Black': 'Computer'
 }
 
 
