@@ -65,7 +65,7 @@ logging.basicConfig(
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.18.2'
+APP_VERSION = 'v1.18.3'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 
 
@@ -1672,11 +1672,11 @@ class EasyChessGui:
 
         return timer
 
-    def play_game(self, window, engine_id_name: str, board: chess.Board):
+    def play_game(self, window: sg.Window, board: chess.Board):
         """Play a game against an engine or human.
 
         Args:
-          window:
+          window: A PySimplegUI window.
           board: current board position
         """
         window.find_element('_movelist_').Update(disabled=False)
@@ -3582,7 +3582,7 @@ class EasyChessGui:
                     window.find_element('_movelist_').Update(disabled=False)
                     window.find_element('_movelist_').Update('', disabled=True)
 
-                    start_new_game = self.play_game(window, engine_id_name, board)
+                    start_new_game = self.play_game(window, board)
                     window.find_element('_gamestatus_').Update('Mode     Neutral')
 
                     self.psg_board = copy.deepcopy(initial_board)
