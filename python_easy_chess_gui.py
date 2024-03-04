@@ -268,13 +268,14 @@ menu_def_play = [
 
 
 class Timer:
-    def __init__(self, tc_type='fischer', base=300000, inc=10000,
-                 period_moves=40):
-        """
-        :param tc_type: time control type ['fischer, delay, classical']
-        :param base: base time in ms
-        :param inc: increment time in ms can be negative and 0
-        :param period_moves: number of moves in a period
+    def __init__(self, tc_type: str = 'fischer', base: int = 300000, inc: int = 10000, period_moves: int = 40) -> None:
+        """Manages time control.
+
+        Args:
+          tc_type: time control type ['fischer, delay, classical']
+          base: base time in ms
+          inc: increment time in ms can be negative and 0
+          period_moves: number of moves in a period
         """
         self.tc_type = tc_type  # ['fischer', 'delay', 'timepermove']
         self.base = base
@@ -283,12 +284,8 @@ class Timer:
         self.elapse = 0
         self.init_base_time = self.base
 
-    def update_base(self):
-        """
-        Update base time after every move
-
-        :return:
-        """
+    def update_base(self) -> None:
+        """Updates base time after every move."""
         if self.tc_type == 'delay':
             self.base += min(0, self.inc - self.elapse)
         elif self.tc_type == 'fischer':
@@ -303,21 +300,21 @@ class Timer:
 
 
 class GuiBook:
-    def __init__(self, book_file, board, is_random=True):
-        """
-        Handle gui polyglot book for engine opponent.
+    def __init__(self, book_file: str, board, is_random: bool = True) -> None:
+        """Handles gui polyglot book for engine opponent.
 
-        :param book_file: polgylot book filename
-        :param board: given board position
-        :param is_random: randomly select move from book
+        Args:
+          book_file: polgylot book filename
+          board: given board position
+          is_random: randomly select move from book
         """
         self.book_file = book_file
         self.board = board
         self.is_random = is_random
         self.__book_move = None
 
-    def get_book_move(self):
-        """ Returns book move either random or best move """
+    def get_book_move(self) -> None:
+        """Gets book move either random or best move."""
         reader = chess.polyglot.open_reader(self.book_file)
         try:
             if self.is_random:
@@ -413,15 +410,17 @@ class RunEngine(threading.Thread):
         self.is_move_delay = True
 
     def stop(self):
-        """ Interrupt engine search """
+        """Interrupt engine search."""
         self._kill.set()
 
     def get_board(self, board):
-        """ Get the current board position """
+        """Get the current board position."""
         self.board = board
 
     def configure_engine(self):
-        """ Read the engine config file pecg_engines.json and set the engine to
+        """Configures the engine internal settings.
+         
+        Read the engine config file pecg_engines.json and set the engine to
         use the user_value of the value key. Our option name has 2 values,
         default_value and user_value.
 
@@ -467,11 +466,9 @@ class RunEngine(threading.Thread):
                                                   'engine}')
 
     def run(self):
-        """
-        Run engine to get search info and bestmove. If there is error we
-        still send bestmove None.
-
-        :return: bestmove thru que
+        """Run engine to get search info and bestmove.
+         
+        If there is error we still send bestmove None.
         """
         folder = Path(self.engine_path_and_file)
         folder = folder.parents[0]
@@ -634,7 +631,7 @@ class RunEngine(threading.Thread):
         logging.info('bestmove {}'.format(self.bm))
 
     def quit_engine(self):
-        """ Quit engine """
+        """Quit engine."""
         logging.info('quit engine')
         try:
             self.engine.quit()
@@ -644,7 +641,7 @@ class RunEngine(threading.Thread):
             logging.exception('Failed to quit engine.')
 
     def short_variation_san(self):
-        """ Returns variation in san but without move numbers """
+        """Returns variation in san but without move numbers."""
         if self.pv is None:
             return None
 
@@ -722,15 +719,14 @@ class EasyChessGui:
         self.is_save_time_left = False
         self.is_save_user_comment = True
 
-    def update_game(self, mc, user_move, time_left, user_comment):
-        """
-        Used for saving moves in the game.
+    def update_game(self, mc: int, user_move: str, time_left: int, user_comment: str):
+        """Saves moves in the game.
 
-        :param mc: move count
-        :param user_move:
-        :param time_left:
-        :param user_comment: Can be a 'book' from the engine
-        :return:
+        Args:
+          mc: move count
+          user_move: user's move
+          time_left: time left
+          user_comment: Can be a 'book' from the engine
         """
         # Save user comment
         if self.is_save_user_comment:
@@ -770,8 +766,7 @@ class EasyChessGui:
                 self.node.comment = '[%clk {}]'.format(rem_time)
 
     def create_new_window(self, window, flip=False):
-        """ Close the window param just before turning the new window """
-
+        """Hide current window and creates a new window."""
         loc = window.CurrentLocation()
         window.Hide()
         if flip:
@@ -1677,14 +1672,12 @@ class EasyChessGui:
 
         return timer
 
-    def play_game(self, window, engine_id_name, board):
-        """
-        User can play a game against and engine.
+    def play_game(self, window, engine_id_name: str, board: chess.Board):
+        """Play a game against an engine or human.
 
-        :param window:
-        :param engine_id_name:
-        :param board: current board position
-        :return:
+        Args:
+          window:
+          board: current board position
         """
         window.find_element('_movelist_').Update(disabled=False)
         window.find_element('_movelist_').Update('', disabled=True)
