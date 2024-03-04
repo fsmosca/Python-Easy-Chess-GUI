@@ -459,11 +459,9 @@ class RunEngine(threading.Thread):
                         if user_value != default_value:
                             try:
                                 self.engine.configure({n['name']: user_value})
-                                logging.info('Set {} to {}'.format(
-                                    n['name'], user_value))
+                                logging.info('Set {} to {}'.format(n['name'], user_value))
                             except Exception:
-                                logging.exception('{Failed to configure '
-                                                  'engine}')
+                                logging.exception('{Failed to configure engine.}')
 
     def run(self):
         """Run engine to get search info and bestmove.
@@ -909,8 +907,7 @@ class EasyChessGui:
                             if n['name'].lower() == 'hash':
                                 return n['value']
                     except KeyError:
-                        logging.info('This engine {} has no options.'.format(
-                            eng_id_name))
+                        logging.info('This engine ' + eng_id_name + ' has no option.')
                         break
                     except Exception:
                         logging.exception('Failed to get engine hash.')
@@ -1115,7 +1112,7 @@ class EasyChessGui:
                 engine = chess.engine.SimpleEngine.popen_uci(
                     engine_path_and_file, cwd=folder)
         except Exception:
-            logging.exception('Failed to add {} in config file.'.format(pname))
+            logging.exception('Failed to add ' + pname + ' in config file.')
             que.put('Failure')
             return
 
@@ -1135,12 +1132,10 @@ class EasyChessGui:
                 # Adjust hash and threads values
                 if o.name.lower() == 'threads':
                     value = 1
-                    logging.info('config {} is set to {}'.format(o.name,
-                                                                 value))
+                    logging.info('config ' + o.name + ' is set to ' + value)
                 elif o.name.lower() == 'hash':
                     value = 32
-                    logging.info('config {} is set to {}'.format(o.name,
-                                                                 value))
+                    logging.info('config ' + o.name + ' is set to ' + value)
                 else:
                     value = o.default
 
