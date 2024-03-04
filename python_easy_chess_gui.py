@@ -82,12 +82,12 @@ ico_path = {
 
 MIN_DEPTH = 1
 MAX_DEPTH = 1000
-MANAGED_UCI_OPTIONS = ['ponder', 'uci_chess960', 'multipv', 'uci_analysemode',
-                       'ownbook']
-GUI_THEME = ['Green', 'GreenTan', 'LightGreen', 'BluePurple', 'Purple',
-             'BlueMono', 'GreenMono', 'BrownBlue', 'BrightColors',
-             'NeutralBlue', 'Kayak', 'SandyBeach', 'TealMono', 'Topanga',
-             'Dark', 'Black', 'DarkAmber']
+MANAGED_UCI_OPTIONS = ['ponder', 'uci_chess960', 'multipv', 'uci_analysemode', 'ownbook']
+GUI_THEME = [
+    'Green', 'GreenTan', 'LightGreen', 'BluePurple', 'Purple', 'BlueMono', 'GreenMono', 'BrownBlue',
+    'BrightColors', 'NeutralBlue', 'Kayak', 'SandyBeach', 'TealMono', 'Topanga', 'Dark', 'Black', 'DarkAmber'
+]
+
 IMAGE_PATH = 'Images/60'  # path to the chess pieces
 
 
