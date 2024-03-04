@@ -459,9 +459,9 @@ class RunEngine(threading.Thread):
                         if user_value != default_value:
                             try:
                                 self.engine.configure({n['name']: user_value})
-                                logging.info('Set {} to {}'.format(n['name'], user_value))
+                                logging.info('Set ' + n['name'] + ' to ' + str(user_value))
                             except Exception:
-                                logging.exception('{Failed to configure engine.}')
+                                logging.exception('Failed to configure engine.')
 
     def run(self):
         """Run engine to get search info and bestmove.
@@ -1132,10 +1132,10 @@ class EasyChessGui:
                 # Adjust hash and threads values
                 if o.name.lower() == 'threads':
                     value = 1
-                    logging.info('config ' + o.name + ' is set to ' + value)
+                    logging.info('config ' + o.name + ' is set to ' + str(value))
                 elif o.name.lower() == 'hash':
                     value = 32
-                    logging.info('config ' + o.name + ' is set to ' + value)
+                    logging.info('config ' + o.name + ' is set to ' + str(value))
                 else:
                     value = o.default
 
@@ -1260,7 +1260,6 @@ class EasyChessGui:
         s, ms = divmod(int(time_ms), 1000)
         m, s = divmod(s, 60)
 
-        # return '{:02d}m:{:02d}s:{:03d}ms'.format(m, s, ms)
         return '{:02d}m:{:02d}s'.format(m, s)
 
     def get_time_h_mm_ss(self, time_ms, symbol=True):
@@ -1295,7 +1294,7 @@ class EasyChessGui:
             try:
                 best_move = chess.Move.from_uci(msg.split()[1])
             except Exception:
-                logging.exception('Engine sent {}.'.format(best_move))
+                logging.exception('Engine sent ' + best_move)
                 sg.Popup(
                     f'Engine error, it sent a {best_move} bestmove.\n \
                     Back to Neutral mode, it is better to change engine {self.opp_id_name}.',
