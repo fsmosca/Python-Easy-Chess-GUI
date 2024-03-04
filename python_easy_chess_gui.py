@@ -625,8 +625,8 @@ class RunEngine(threading.Thread):
                 self.bm = result.move
             except Exception:
                 logging.exception('Failed to get engine bestmove.')
-        self.eng_queue.put('bestmove {}' .format(self.bm))
-        logging.info('bestmove {}'.format(self.bm))
+        self.eng_queue.put(f'bestmove {self.bm}')
+        logging.info(f'bestmove {self.bm}')
 
     def quit_engine(self):
         """Quit engine."""
@@ -841,7 +841,7 @@ class EasyChessGui:
                     game = chess.pgn.read_game(h)
 
         if output_path.exists():
-            logging.info('Deleting player {} is successful.'.format(name))
+            logging.info(f'Deleting player {name} is successful.')
 
             # Delete the orig file and rename the current output to orig file
             pgn_path.unlink()
@@ -907,7 +907,7 @@ class EasyChessGui:
                             if n['name'].lower() == 'hash':
                                 return n['value']
                     except KeyError:
-                        logging.info('This engine ' + eng_id_name + ' has no option.')
+                        logging.info(f'This engine {eng_id_name} has no option.')
                         break
                     except Exception:
                         logging.exception('Failed to get engine hash.')
@@ -931,8 +931,7 @@ class EasyChessGui:
                             if n['name'].lower() == 'threads':
                                 return n['value']
                     except KeyError:
-                        logging.info('This engine {} has no options.'.format(
-                            eng_id_name))
+                        logging.info(f'This engine {eng_id_name} has no options.')
                         break
                     except Exception:
                         logging.exception('Failed to get engine threads.')
@@ -1112,7 +1111,7 @@ class EasyChessGui:
                 engine = chess.engine.SimpleEngine.popen_uci(
                     engine_path_and_file, cwd=folder)
         except Exception:
-            logging.exception('Failed to add ' + pname + ' in config file.')
+            logging.exception(f'Failed to add {pname} in config file.')
             que.put('Failure')
             return
 
@@ -1132,10 +1131,10 @@ class EasyChessGui:
                 # Adjust hash and threads values
                 if o.name.lower() == 'threads':
                     value = 1
-                    logging.info('config ' + o.name + ' is set to ' + str(value))
+                    logging.info(f'config {o.name} is set to {value}')
                 elif o.name.lower() == 'hash':
                     value = 32
-                    logging.info('config ' + o.name + ' is set to ' + str(value))
+                    logging.info(f'config {o.name} is set to {value}')
                 else:
                     value = o.default
 
@@ -1294,7 +1293,7 @@ class EasyChessGui:
             try:
                 best_move = chess.Move.from_uci(msg.split()[1])
             except Exception:
-                logging.exception('Engine sent ' + best_move)
+                logging.exception(f'Engine sent {best_move}')
                 sg.Popup(
                     f'Engine error, it sent a {best_move} bestmove.\n \
                     Back to Neutral mode, it is better to change engine {self.opp_id_name}.',
@@ -1531,7 +1530,7 @@ class EasyChessGui:
                 move_from = button
                 fr_row, fr_col = move_from
                 piece = psg_promote_board[fr_row][fr_col]
-                logging.info('promote piece: {}'.format(piece))
+                logging.info(f'promote piece: {piece}')
                 break
 
         promo_window.Close()
@@ -1600,8 +1599,7 @@ class EasyChessGui:
 
             # If user pressed x we set the promo to queen
             if psg_promo is None:
-                logging.info('User did not select a promotion piece, '
-                             'set this to queen.')
+                logging.info('User did not select a promotion piece, set this to queen.')
                 psg_promo = QUEENW if stm else QUEENB
 
             pyc_promo = promote_psg_to_pyc[psg_promo]
