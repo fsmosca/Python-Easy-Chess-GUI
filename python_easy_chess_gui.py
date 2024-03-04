@@ -55,10 +55,13 @@ import logging
 import platform as sys_plat
 
 
-log_format = '%(asctime)s :: %(funcName)s :: line: %(lineno)d :: %(' \
-                 'levelname)s :: %(message)s'
-logging.basicConfig(filename='pecg_log.txt', filemode='w', level=logging.DEBUG,
-                    format=log_format)
+log_format = '%(asctime)s :: %(funcName)s :: line: %(lineno)d :: %(levelname)s :: %(message)s'
+logging.basicConfig(
+    filename='pecg_log.txt',
+    filemode='w',
+    level=logging.DEBUG,
+    format=log_format
+)
 
 
 APP_NAME = 'Python Easy Chess GUI'
