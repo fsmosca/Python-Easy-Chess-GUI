@@ -65,7 +65,7 @@ logging.basicConfig(
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.18.3'
+APP_VERSION = 'v1.19.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 
 
@@ -1915,6 +1915,7 @@ class EasyChessGui:
 
                     if is_search_stop_for_exit:
                         is_exit_app = True
+                        logging.warning('Search is stopped for exit.')
                         break
 
                     # Mode: Play, Stm: User
@@ -2188,6 +2189,11 @@ class EasyChessGui:
 
                     while True:
                         button, value = window.Read(timeout=100)
+
+                        if button == sg.WIN_CLOSED:
+                            logging.warning('User closes the window while the engine is thinking.')
+                            search.stop()
+                            sys.exit(0)  # the engine is run on daemon threads so it will quit as well
 
                         # Update elapse box in m:s format
                         elapse_str = self.get_time_mm_ss_ms(engine_timer.elapse)
