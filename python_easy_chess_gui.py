@@ -67,7 +67,7 @@ logging.basicConfig(
 APP_NAME = 'Python Easy Chess GUI'
 APP_VERSION = 'v1.19.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
-REVIEW_MAX_DISPLAY_GAMES = 5000
+REVIEW_MAX_DISPLAY_GAMES = 10000
 
 
 platform = sys.platform
@@ -2775,7 +2775,11 @@ class EasyChessGui:
         while True:
             button, value = review_window.Read(timeout=50)
 
-            if button is None or button == 'Neutral':
+            if button is None:
+                review_window.Close()
+                sys.exit(0)
+
+            if button == 'Neutral':
                 break
 
             if button == 'GUI':
