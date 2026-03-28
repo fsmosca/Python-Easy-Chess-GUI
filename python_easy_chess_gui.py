@@ -68,6 +68,8 @@ APP_NAME = 'Python Easy Chess GUI'
 APP_VERSION = 'v1.19.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
+REVIEW_ANALYSIS_MULTIPV_LINES = 3
+REVIEW_MOVE_LIST_HEIGHT = 11
 
 
 platform = sys.platform
@@ -581,7 +583,7 @@ class RunEngine(threading.Thread):
                         break
 
                     try:
-                        line_index = int(info.get('multipv', 1))
+                        line_number = int(info.get('multipv', 1))
                         depth = int(info['depth']) if 'depth' in info else self.depth
                         score = self.score
                         if 'score' in info:
@@ -601,14 +603,14 @@ class RunEngine(threading.Thread):
                             else:
                                 pv = self.board.variation_san(self.pv)
 
-                            if line_index == 1:
+                            if line_number == 1:
                                 self.bm = info['pv'][0]
 
-                        if line_index == 1 and depth is not None:
+                        if line_number == 1 and depth is not None:
                             self.depth = depth
-                        if line_index == 1 and score is not None:
+                        if line_number == 1 and score is not None:
                             self.score = score
-                        if line_index == 1:
+                        if line_number == 1:
                             self.time = elapsed
                             if pv is not None:
                                 self.pv = pv
@@ -617,7 +619,7 @@ class RunEngine(threading.Thread):
                             if self.multipv > 1:
                                 info_to_send = \
                                     '{} | {:+5.2f} | {} | {:0.1f}s | {} multipv_info'.format(
-                                        line_index, score, depth, elapsed, pv)
+                                        line_number, score, depth, elapsed, pv)
                             else:
                                 info_to_send = \
                                     '{:+5.2f} | {} | {:0.1f}s | {} info_all'.format(
@@ -814,7 +816,7 @@ class EasyChessGui:
         self.review_move_index = 0
         self.review_move_labels = []
         self.review_boards = []
-        self.review_analysis_lines = [''] * 3
+        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
         self.review_analysis_enabled = False
         self.review_analysis_status = 'Analysis stopped'
         self.review_analysis_search = None
@@ -2708,7 +2710,7 @@ class EasyChessGui:
         self.review_move_index = 0
         self.review_move_labels = ['Start position']
         self.review_boards = []
-        self.review_analysis_lines = [''] * 3
+        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
         self.review_analysis_status = 'Analysis stopped'
 
         board = game.board()
@@ -2776,13 +2778,13 @@ class EasyChessGui:
         if self.analysis_path_and_file is None or self.analysis_id_name is None:
             self.review_analysis_enabled = False
             self.review_analysis_status = 'No analysis engine selected'
-            self.review_analysis_lines = [''] * 3
+            self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
             self.update_review_analysis_panel(window)
             return
 
         self.stop_review_analysis()
         self.review_analysis_enabled = True
-        self.review_analysis_lines = [''] * 3
+        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
         self.review_analysis_status = \
             'Analysing with {} at position {}'.format(
                 self.analysis_id_name, self.review_move_index)
@@ -2793,10 +2795,10 @@ class EasyChessGui:
             self.analysis_path_and_file, self.analysis_id_name,
             self.max_depth, self.engine_base_time_ms, self.engine_inc_time_ms,
             tc_type=self.engine_tc_type,
-            period_moves=self.review_boards[self.review_move_index].fullmove_number,
+            period_moves=0,
             is_stream_search_info=True,
             existing_engine=self.review_analysis_engine,
-            multipv=3
+            multipv=REVIEW_ANALYSIS_MULTIPV_LINES
         )
         search.get_board(self.review_boards[self.review_move_index].copy(stack=False))
         search.is_move_delay = False
@@ -2808,7 +2810,7 @@ class EasyChessGui:
     def refresh_review_analysis(self, window):
         """Restart analysis after the Review mode position changes."""
         if not self.review_analysis_enabled:
-            self.review_analysis_lines = [''] * 3
+            self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
             self.review_analysis_status = 'Analysis stopped'
             self.update_review_analysis_panel(window)
             return
@@ -2830,7 +2832,10 @@ class EasyChessGui:
             if 'multipv_info' in msg_str:
                 try:
                     line_no, info_line = msg_str.split(' | ', 1)
-                    line_index = max(1, min(3, int(line_no.strip()))) - 1
+                    line_number = int(line_no.strip())
+                    if not 1 <= line_number <= REVIEW_ANALYSIS_MULTIPV_LINES:
+                        raise ValueError('Invalid MultiPV line number')
+                    line_index = line_number - 1
                     self.review_analysis_lines[line_index] = info_line.rsplit(
                         ' multipv_info', 1)[0]
                     updated = True
@@ -2902,7 +2907,8 @@ class EasyChessGui:
                           font=('Consolas', 10), key='review_header_k',
                           disabled=True)],
             [sg.Text('Move list', size=(16, 1), font=('Consolas', 10))],
-            [sg.Listbox(values=['Start position'], size=(52, 11),
+            # Reduced from 16 rows to 11 to make room for the analysis panel below.
+            [sg.Listbox(values=['Start position'], size=(52, REVIEW_MOVE_LIST_HEIGHT),
                         font=('Consolas', 10), key='review_move_list_k',
                         enable_events=True)],
             [sg.Text('Position 0/0', size=(20, 1), font=('Consolas', 10),
@@ -2968,6 +2974,8 @@ class EasyChessGui:
             button, value = review_window.Read(timeout=50)
             self.poll_review_analysis(review_window)
 
+            # Skip timeout events as analysis updates are processed by
+            # poll_review_analysis() called earlier in the loop.
             if button == sg.TIMEOUT_KEY:
                 continue
 
@@ -3030,7 +3038,7 @@ class EasyChessGui:
 
             if button == 'review_stop_analysis_k':
                 self.review_analysis_enabled = False
-                self.review_analysis_lines = [''] * 3
+                self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
                 self.review_analysis_status = 'Analysis stopped'
                 self.stop_review_analysis()
                 self.update_review_analysis_panel(review_window)
