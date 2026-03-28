@@ -2616,7 +2616,14 @@ class EasyChessGui:
                     w['status_k'].Update('Status: Please select a game.')
                     continue
 
-                selected_index = selection_list.index(selected_text)
+                try:
+                    selected_index = int(selected_text.split('.', 1)[0]) - 1
+                except (IndexError, ValueError):
+                    w['status_k'].Update('Status: Please select a valid game.')
+                    continue
+                if not 0 <= selected_index < len(selected_games):
+                    w['status_k'].Update('Status: Please select a valid game.')
+                    continue
                 selected_game_obj = self.load_review_game(
                     selected_pgn, selected_games[selected_index])
                 if selected_game_obj is None:
