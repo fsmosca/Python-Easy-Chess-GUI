@@ -69,7 +69,8 @@ APP_VERSION = 'v1.19.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
-REVIEW_MOVE_LIST_HEIGHT = 11
+REVIEW_ANALYSIS_PV_MOVES = 7
+REVIEW_MOVE_LIST_HEIGHT = 9
 
 
 platform = sys.platform
@@ -2750,6 +2751,17 @@ class EasyChessGui:
         window['review_analysis_status_k'].Update(self.review_analysis_status)
         window['review_analysis_k'].Update(analysis_text)
 
+    def shorten_review_analysis_line(self, info_line):
+        """Limit the Review mode PV display so it fits the analysis box."""
+        try:
+            prefix, pv_text = info_line.rsplit(' | ', 1)
+        except ValueError:
+            return info_line
+
+        pv_moves = pv_text.split()
+        limited_pv = ' '.join(pv_moves[:REVIEW_ANALYSIS_PV_MOVES])
+        return '{} | {}'.format(prefix, limited_pv)
+
     def stop_review_analysis(self):
         """Stop the current Review mode analysis search."""
         if self.review_analysis_search is not None:
@@ -2836,8 +2848,9 @@ class EasyChessGui:
                     if not 1 <= line_number <= REVIEW_ANALYSIS_MULTIPV_LINES:
                         raise ValueError('Invalid MultiPV line number')
                     line_index = line_number - 1
-                    self.review_analysis_lines[line_index] = info_line.rsplit(
-                        ' multipv_info', 1)[0]
+                    info_line = info_line.rsplit(' multipv_info', 1)[0]
+                    self.review_analysis_lines[line_index] = \
+                        self.shorten_review_analysis_line(info_line)
                     updated = True
                 except Exception:
                     logging.exception('Failed to parse Review mode analysis info.')
@@ -2907,16 +2920,12 @@ class EasyChessGui:
                           font=('Consolas', 10), key='review_header_k',
                           disabled=True)],
             [sg.Text('Move list', size=(16, 1), font=('Consolas', 10))],
-            # Reduced from 16 rows to 11 to make room for the analysis panel below.
+            # Reduced height to keep the analysis box close to the board height.
             [sg.Listbox(values=['Start position'], size=(52, REVIEW_MOVE_LIST_HEIGHT),
                         font=('Consolas', 10), key='review_move_list_k',
                         enable_events=True)],
             [sg.Text('Position 0/0', size=(20, 1), font=('Consolas', 10),
-                     key='review_nav_k', relief='sunken'),
-             sg.Button('Start Analysis', key='review_start_analysis_k',
-                       tooltip='Start or restart engine analysis for the current position.'),
-             sg.Button('Stop Analysis', key='review_stop_analysis_k',
-                       tooltip='Stop engine analysis updates in Review mode.')],
+                     key='review_nav_k', relief='sunken')],
             [sg.Text('Analysis stopped', size=(52, 1), font=('Consolas', 10),
                      key='review_analysis_status_k', relief='sunken')],
             [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
@@ -2924,17 +2933,21 @@ class EasyChessGui:
                           disabled=True)]
         ]
 
-        board_column = [
-            [sg.Column(board_layout)],
-            [sg.Button('First', size=(10, 1)),
-             sg.Button('Previous', size=(10, 1)),
-             sg.Button('Next', size=(10, 1)),
-             sg.Button('Last', size=(10, 1))]
-        ]
+        board_column = [[sg.Column(board_layout)]]
 
         layout = [
             [sg.Menu(menu_def_review, tearoff=False)],
-            [sg.Column(board_column), sg.Column(board_controls)]
+            [sg.Column(board_column, vertical_alignment='top'),
+             sg.Column(board_controls, vertical_alignment='top')],
+            [sg.Button('First', size=(10, 1)),
+             sg.Button('Previous', size=(10, 1)),
+             sg.Button('Next', size=(10, 1)),
+             sg.Button('Last', size=(10, 1)),
+             sg.Text('', size=(12, 1)),
+             sg.Button('Start Analysis', key='review_start_analysis_k',
+                       tooltip='Start or restart engine analysis for the current position.'),
+             sg.Button('Stop Analysis', key='review_stop_analysis_k',
+                       tooltip='Stop engine analysis updates in Review mode.')]
         ]
 
         return layout
