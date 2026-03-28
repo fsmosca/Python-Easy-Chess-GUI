@@ -2521,11 +2521,14 @@ class EasyChessGui:
         black = headers.get('Black', '?')
         result = headers.get('Result', '*')
         event = headers.get('Event', '?')
-        date = headers.get('Date', '????.??.??')
+        date = headers.get('Date', 'Unknown')
         return f'{index + 1:>3}. {white} vs {black} | {result} | {event} | {date}'
 
-    def select_review_game(self, pgn_file, games):
+    def select_review_game(self, pgn_file=None, games=None):
         """Ask user to select a game from a pgn file."""
+        if games is None:
+            games = []
+
         selection_list = [
             self.get_review_game_text(game, index)
             for index, game in enumerate(games)
@@ -2562,7 +2565,7 @@ class EasyChessGui:
 
                 try:
                     selected_games = self.load_pgn_games(selected_pgn)
-                except Exception:
+                except (FileNotFoundError, OSError, UnicodeError):
                     logging.exception('Failed to load pgn games.')
                     w['status_k'].Update('Status: Failed to read PGN file.')
                     selected_games = []
@@ -2639,14 +2642,17 @@ class EasyChessGui:
             f"White: {headers.get('White', '?')}",
             f"Black: {headers.get('Black', '?')}",
             f"Event: {headers.get('Event', '?')}",
-            f"Date: {headers.get('Date', '????.??.??')}    Result: {headers.get('Result', '*')}"
+            f"Date: {headers.get('Date', 'Unknown')}    Result: {headers.get('Result', '*')}"
         ])
 
         if self.review_pgn_file:
             window['review_pgn_k'].Update(self.review_pgn_file)
 
-        game_number = self.review_game_index + 1 \
-            if self.review_game_index is not None else 1
+        game_number = (
+            self.review_game_index + 1
+            if self.review_game_index is not None
+            else 1
+        )
         window['_gamestatus_'].Update(
             f'Mode     Review, game {game_number}/{len(self.review_games)}')
         window['review_header_k'].Update(header_text)
@@ -2713,7 +2719,7 @@ class EasyChessGui:
 
     def start_review_mode(self, window):
         """Open review mode in a separate window."""
-        selected_game = self.select_review_game('', [])
+        selected_game = self.select_review_game()
         if selected_game is None:
             return
 
@@ -2740,7 +2746,7 @@ class EasyChessGui:
                 continue
 
             if button == 'Load PGN::review_load_pgn_k':
-                selected_game = self.select_review_game(self.review_pgn_file, [])
+                selected_game = self.select_review_game(self.review_pgn_file)
                 if selected_game is None:
                     continue
 
@@ -2785,6 +2791,7 @@ class EasyChessGui:
                 try:
                     selected_move = value['review_move_list_k'][0]
                 except IndexError:
+                    self.update_review_window(review_window)
                     continue
                 self.review_move_index = self.review_move_labels.index(
                     selected_move)
