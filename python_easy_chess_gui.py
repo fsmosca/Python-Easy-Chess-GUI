@@ -732,6 +732,7 @@ class EasyChessGui:
 
         self.is_save_time_left = False
         self.is_save_user_comment = True
+        self.is_time_forfeit_enabled = True
 
     def update_game(self, mc: int, user_move: str, time_left: int, user_comment: str):
         """Saves moves in the game.
@@ -1705,6 +1706,7 @@ class EasyChessGui:
         is_user_resigns = False
         is_user_wins = False
         is_user_draws = False
+        is_user_time_forfeit = False
         is_search_stop_for_exit = False
         is_search_stop_for_new_game = False
         is_search_stop_for_neutral = False
@@ -1830,6 +1832,17 @@ class EasyChessGui:
                         k = 'b_elapse_k'
                     window.Element(k).Update(elapse_str)
                     human_timer.elapse += 100
+
+                    # Check if human has run out of time
+                    if (self.is_time_forfeit_enabled and
+                            human_timer.elapse >= human_timer.base):
+                        color = 'white' if self.is_user_white else 'black'
+                        sg.Popup(
+                            '{} loses on time!'.format(color.capitalize()),
+                            title=BOX_TITLE,
+                            icon=ico_path[platform]['pecg'])
+                        is_user_time_forfeit = True
+                        break
 
                     if not is_human_stm:
                         break
@@ -2172,7 +2185,8 @@ class EasyChessGui:
                                 continue
 
                 if (is_new_game or is_exit_game or is_exit_app or
-                        is_user_resigns or is_user_wins or is_user_draws):
+                        is_user_resigns or is_user_wins or is_user_draws or
+                        is_user_time_forfeit):
                     break
 
             # Else if side to move is not human
@@ -2406,6 +2420,10 @@ class EasyChessGui:
         if is_user_resigns:
             self.game.headers['Result'] = '0-1' if self.is_user_white else '1-0'
             self.game.headers['Termination'] = '{} resigns'.format(
+                    'white' if self.is_user_white else 'black')
+        elif is_user_time_forfeit:
+            self.game.headers['Result'] = '0-1' if self.is_user_white else '1-0'
+            self.game.headers['Termination'] = '{} forfeits on time'.format(
                     'white' if self.is_user_white else 'black')
         elif is_user_wins:
             self.game.headers['Result'] = '1-0' if self.is_user_white else '0-1'
@@ -3515,6 +3533,12 @@ class EasyChessGui:
                              tooltip='[%clk h:mm:ss] will appear as\n' +
                                      'move comment and is shown in move\n' +
                                      'list and saved in pgn file.')],
+                    [sg.CBox('Adjudicate game on time forfeit',
+                             key='time_forfeit_k',
+                             default=self.is_time_forfeit_enabled,
+                             tooltip='When enabled, the game is\n' +
+                                     'adjudicated when the player\n' +
+                                     'runs out of time.')],
                     [sg.OK(), sg.Cancel()],
                 ]
 
@@ -3528,6 +3552,7 @@ class EasyChessGui:
                         break
                     if e == 'OK':
                         self.is_save_time_left = v['save_time_left_k']
+                        self.is_time_forfeit_enabled = v['time_forfeit_k']
                         break
 
                 window.UnHide()
