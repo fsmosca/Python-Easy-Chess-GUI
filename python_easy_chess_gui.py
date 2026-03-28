@@ -2615,8 +2615,11 @@ class EasyChessGui:
 
         for move in game.mainline_moves():
             san = board.san(move)
-            prefix = f'{board.fullmove_number}. ' if board.turn == chess.WHITE \
+            prefix = (
+                f'{board.fullmove_number}. '
+                if board.turn == chess.WHITE
                 else f'{board.fullmove_number}... '
+            )
             self.review_move_labels.append(f'{prefix}{san}')
             board.push(move)
             self.review_boards.append(board.copy(stack=False))
@@ -2710,7 +2713,7 @@ class EasyChessGui:
 
     def start_review_mode(self, window):
         """Open review mode in a separate window."""
-        selected_game = self.select_review_game(self.my_games, [])
+        selected_game = self.select_review_game('', [])
         if selected_game is None:
             return
 
