@@ -133,8 +133,8 @@ white_init_promote_board = [[QUEENW, ROOKW, BISHOPW, KNIGHTW]]
 black_init_promote_board = [[QUEENB, ROOKB, BISHOPB, KNIGHTB]]
 
 
-HELP_MSG = """The GUI has 2 modes, Play and Neutral. After startup
-you are in Neutral mode. You can go to mode Play through Mode menu.
+HELP_MSG = """The GUI has 3 modes, Play, Review and Neutral. After startup
+you are in Neutral mode. You can go to Play or Review through Mode menu.
 
 All games are auto-saved in pecg_auto_save_games.pgn.
 Visit Game menu in Play mode to see other options to save the game.
@@ -191,6 +191,11 @@ You should be in Play mode
 (I) To change board theme
 1. You should be in Neutral mode.
 2. Board->Theme.
+
+(J) To review a PGN game
+1. Mode->Review
+2. Load a PGN file, select a game and press OK
+3. Use First/Previous/Next/Last or click a move in the move list
 """
 
 
@@ -235,7 +240,7 @@ INIT_PGN_TAG = {
 
 # (1) Mode: Neutral
 menu_def_neutral = [
-        ['&Mode', ['Play']],
+        ['&Mode', ['Play', 'Review']],
         ['Boar&d', ['Flip', 'Color', ['Brown::board_color_k',
                                       'Blue::board_color_k',
                                       'Green::board_color_k',
@@ -263,6 +268,15 @@ menu_def_play = [
                    'User Draws::user_draws_k']],
         ['FEN', ['Paste']],
         ['&Engine', ['Go', 'Move Now']],
+        ['&Help', ['GUI']],
+]
+
+# (3) Mode: Review
+menu_def_review = [
+        ['&Mode', ['Neutral']],
+        ['&Game', ['Load PGN::review_load_pgn_k',
+                   'Select Game::review_select_game_k']],
+        ['Boar&d', ['Flip']],
         ['&Help', ['GUI']],
 ]
 
@@ -733,6 +747,13 @@ class EasyChessGui:
         self.is_save_time_left = False
         self.is_save_user_comment = True
         self.is_time_forfeit_enabled = True
+        self.review_pgn_file = None
+        self.review_games = []
+        self.review_game = None
+        self.review_game_index = None
+        self.review_move_index = 0
+        self.review_move_labels = []
+        self.review_boards = []
 
     def update_game(self, mc: int, user_move: str, time_left: int, user_comment: str):
         """Saves moves in the game.
@@ -2482,6 +2503,302 @@ class EasyChessGui:
         with open(self.pecg_auto_save_game, mode='a+') as f:
             f.write('{}\n\n'.format(self.game))
 
+    def load_pgn_games(self, pgn):
+        """Load all games from a pgn file."""
+        games = []
+        with open(pgn, encoding='utf-8', errors='replace') as h:
+            while True:
+                game = chess.pgn.read_game(h)
+                if game is None:
+                    break
+                games.append(game)
+        return games
+
+    def get_review_game_text(self, game, index):
+        """Return one-line summary of a game for review list."""
+        headers = game.headers
+        white = headers.get('White', '?')
+        black = headers.get('Black', '?')
+        result = headers.get('Result', '*')
+        event = headers.get('Event', '?')
+        date = headers.get('Date', '????.??.??')
+        return f'{index + 1:>3}. {white} vs {black} | {result} | {event} | {date}'
+
+    def select_review_game(self, pgn_file, games):
+        """Ask user to select a game from a pgn file."""
+        selection_list = [
+            self.get_review_game_text(game, index)
+            for index, game in enumerate(games)
+        ]
+
+        layout = [
+            [sg.Text('PGN', size=(4, 1)),
+             sg.Input(default_text=pgn_file or '', size=(46, 1), key='pgn_k'),
+             sg.FileBrowse()],
+            [sg.Button('Display Games', size=(58, 1))],
+            [sg.Text('Status: Load a PGN, select a game, then press OK.',
+                     size=(58, 1), key='status_k', relief='sunken')],
+            [sg.Listbox(selection_list, size=(74, 12), key='game_k')],
+            [sg.Button('OK'), sg.Cancel()]
+        ]
+
+        w = sg.Window('Review/Load PGN', layout,
+                      icon=ico_path[platform]['pecg'])
+
+        selected_game = None
+        selected_games = games
+        selected_pgn = pgn_file or ''
+
+        while True:
+            e, v = w.Read(timeout=50)
+            if e is None or e == 'Cancel':
+                break
+
+            if e == 'Display Games':
+                selected_pgn = v['pgn_k']
+                if not selected_pgn:
+                    w['status_k'].Update('Status: Please choose a PGN file.')
+                    continue
+
+                try:
+                    selected_games = self.load_pgn_games(selected_pgn)
+                except Exception:
+                    logging.exception('Failed to load pgn games.')
+                    w['status_k'].Update('Status: Failed to read PGN file.')
+                    selected_games = []
+                    w['game_k'].Update([])
+                    continue
+
+                if not selected_games:
+                    w['status_k'].Update('Status: No games found in PGN file.')
+                    w['game_k'].Update([])
+                    continue
+
+                selection_list = [
+                    self.get_review_game_text(game, index)
+                    for index, game in enumerate(selected_games)
+                ]
+                w['game_k'].Update(selection_list, set_to_index=[0])
+                w['status_k'].Update(
+                    f'Status: Loaded {len(selected_games)} game(s). Select one and press OK.')
+                continue
+
+            if e == 'OK':
+                try:
+                    selected_text = v['game_k'][0]
+                except IndexError:
+                    w['status_k'].Update('Status: Please select a game.')
+                    continue
+
+                selected_index = selection_list.index(selected_text)
+                selected_game = {
+                    'pgn_file': selected_pgn,
+                    'games': selected_games,
+                    'game_index': selected_index,
+                    'game': selected_games[selected_index]
+                }
+                break
+
+        w.Close()
+        return selected_game
+
+    def prepare_review_game(self, game, game_index=None):
+        """Prepare move list and board positions for review."""
+        self.review_game = game
+        self.review_game_index = game_index
+        self.review_move_index = 0
+        self.review_move_labels = ['Start position']
+        self.review_boards = []
+
+        board = game.board()
+        self.review_boards.append(board.copy(stack=False))
+
+        for move in game.mainline_moves():
+            san = board.san(move)
+            prefix = f'{board.fullmove_number}. ' if board.turn == chess.WHITE \
+                else f'{board.fullmove_number}... '
+            self.review_move_labels.append(f'{prefix}{san}')
+            board.push(move)
+            self.review_boards.append(board.copy(stack=False))
+
+    def set_board_from_board_state(self, window, board):
+        """Update the GUI board from a python-chess board."""
+        self.fen = board.fen()
+        self.fen_to_psg_board(window)
+
+    def update_review_window(self, window):
+        """Refresh review widgets based on current review state."""
+        if self.review_game is None or not self.review_boards:
+            return
+
+        headers = self.review_game.headers
+        header_text = '\n'.join([
+            f"White: {headers.get('White', '?')}",
+            f"Black: {headers.get('Black', '?')}",
+            f"Event: {headers.get('Event', '?')}",
+            f"Date: {headers.get('Date', '????.??.??')}    Result: {headers.get('Result', '*')}"
+        ])
+
+        if self.review_pgn_file:
+            window['review_pgn_k'].Update(self.review_pgn_file)
+
+        game_number = self.review_game_index + 1 \
+            if self.review_game_index is not None else 1
+        window['_gamestatus_'].Update(
+            f'Mode     Review, game {game_number}/{len(self.review_games)}')
+        window['review_header_k'].Update(header_text)
+        window['review_nav_k'].Update(
+            f'Position {self.review_move_index}/{len(self.review_boards) - 1}')
+        window['review_move_list_k'].Update(
+            values=self.review_move_labels,
+            set_to_index=[self.review_move_index],
+            scroll_to_index=self.review_move_index)
+
+        self.set_board_from_board_state(
+            window, self.review_boards[self.review_move_index])
+
+    def build_review_layout(self, is_user_white=True):
+        """Create review mode layout with navigation controls."""
+        sg.ChangeLookAndFeel(self.gui_theme)
+        sg.SetOptions(margins=(0, 3), border_width=1)
+
+        board_layout = self.create_board(is_user_white)
+        board_controls = [
+            [sg.Text('Mode     Review', size=(36, 1), font=('Consolas', 10),
+                     key='_gamestatus_')],
+            [sg.Text('PGN file', size=(8, 1), font=('Consolas', 10)),
+             sg.Text('', size=(44, 1), font=('Consolas', 9),
+                     key='review_pgn_k', relief='sunken')],
+            [sg.Text('Game details', size=(16, 1), font=('Consolas', 10))],
+            [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
+                          font=('Consolas', 10), key='review_header_k',
+                          disabled=True)],
+            [sg.Text('Move list', size=(16, 1), font=('Consolas', 10))],
+            [sg.Listbox(values=['Start position'], size=(52, 16),
+                        font=('Consolas', 10), key='review_move_list_k',
+                        enable_events=True)],
+            [sg.Text('Position 0/0', size=(20, 1), font=('Consolas', 10),
+                     key='review_nav_k', relief='sunken')]
+        ]
+
+        board_column = [
+            [sg.Column(board_layout)],
+            [sg.Button('First', size=(10, 1)),
+             sg.Button('Previous', size=(10, 1)),
+             sg.Button('Next', size=(10, 1)),
+             sg.Button('Last', size=(10, 1))]
+        ]
+
+        layout = [
+            [sg.Menu(menu_def_review, tearoff=False)],
+            [sg.Column(board_column), sg.Column(board_controls)]
+        ]
+
+        return layout
+
+    def create_review_window(self, location=None):
+        """Create a review window."""
+        layout = self.build_review_layout(self.is_user_white)
+        return sg.Window(
+            '{} {}'.format(APP_NAME, APP_VERSION),
+            layout,
+            default_button_element_size=(12, 1),
+            auto_size_buttons=False,
+            location=location,
+            icon=ico_path[platform]['pecg']
+        )
+
+    def start_review_mode(self, window):
+        """Open review mode in a separate window."""
+        selected_game = self.select_review_game(self.my_games, [])
+        if selected_game is None:
+            return
+
+        saved_orientation = self.is_user_white
+
+        self.review_pgn_file = selected_game['pgn_file']
+        self.review_games = selected_game['games']
+        self.prepare_review_game(
+            selected_game['game'], selected_game['game_index'])
+
+        location = window.CurrentLocation()
+        window.Hide()
+        review_window = self.create_review_window(location=location)
+        self.update_review_window(review_window)
+
+        while True:
+            button, value = review_window.Read(timeout=50)
+
+            if button is None or button == 'Neutral':
+                break
+
+            if button == 'GUI':
+                sg.PopupScrolled(HELP_MSG, title='Help/GUI')
+                continue
+
+            if button == 'Load PGN::review_load_pgn_k':
+                selected_game = self.select_review_game(self.review_pgn_file, [])
+                if selected_game is None:
+                    continue
+
+                self.review_pgn_file = selected_game['pgn_file']
+                self.review_games = selected_game['games']
+                self.prepare_review_game(
+                    selected_game['game'], selected_game['game_index'])
+                self.update_review_window(review_window)
+                continue
+
+            if button == 'Select Game::review_select_game_k':
+                selected_game = self.select_review_game(
+                    self.review_pgn_file, self.review_games)
+                if selected_game is None:
+                    continue
+
+                self.review_pgn_file = selected_game['pgn_file']
+                self.review_games = selected_game['games']
+                self.prepare_review_game(
+                    selected_game['game'], selected_game['game_index'])
+                self.update_review_window(review_window)
+                continue
+
+            if button == 'Flip':
+                review_location = review_window.CurrentLocation()
+                review_window.Close()
+                self.is_user_white = not self.is_user_white
+                review_window = self.create_review_window(location=review_location)
+                self.update_review_window(review_window)
+                continue
+
+            if button == 'First':
+                self.review_move_index = 0
+            elif button == 'Previous':
+                self.review_move_index = max(0, self.review_move_index - 1)
+            elif button == 'Next':
+                self.review_move_index = min(
+                    len(self.review_boards) - 1, self.review_move_index + 1)
+            elif button == 'Last':
+                self.review_move_index = len(self.review_boards) - 1
+            elif button == 'review_move_list_k':
+                try:
+                    selected_move = value['review_move_list_k'][0]
+                except IndexError:
+                    continue
+                self.review_move_index = self.review_move_labels.index(
+                    selected_move)
+
+            self.update_review_window(review_window)
+
+        review_window.Close()
+        self.review_game = None
+        self.review_game_index = None
+        self.review_move_index = 0
+        self.review_move_labels = []
+        self.review_boards = []
+        self.review_games = []
+        self.review_pgn_file = None
+        self.is_user_white = saved_orientation
+        window.UnHide()
+
     def get_engines(self):
         """
         Get engine filenames [a.exe, b.exe, ...]
@@ -3615,6 +3932,11 @@ class EasyChessGui:
             # Mode: Neutral
             if button == 'GUI':
                 sg.PopupScrolled(HELP_MSG, title='Help/GUI')
+                continue
+
+            # Mode: Neutral
+            if button == 'Review':
+                self.start_review_mode(window)
                 continue
 
             # Mode: Neutral

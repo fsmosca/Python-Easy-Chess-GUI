@@ -86,6 +86,12 @@ Typical command line:<br>
 * If you play as white, you can make your move
 * If you play as black, Engine->Go
 
+#### To review a PGN game
+* Mode->Review
+* Choose a PGN file, press Display Games, select a game and press OK
+* Use the First, Previous, Next and Last buttons below the board
+* You can also click a move in the move list to jump to that position
+
 #### To flip board
 * If current mode is Neutral, Board->Flip
 * If current mode is Play, Mode->Neutral, then Board->Flip
