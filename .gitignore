@@ -22,6 +22,8 @@ Engines/*
 
 venv
 .idea
+__pycache__/
+*.py[cod]
 
 # Project
 pecg_user.json

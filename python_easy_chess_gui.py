@@ -1798,7 +1798,7 @@ class EasyChessGui:
                         break
 
                     if button == 'GUI':
-                        sg.PopupScrolled(HELP_MSG, title=BOX_TITLE)
+                        sg.popup_scrolled(HELP_MSG, title=BOX_TITLE)
                         continue
 
                     if button == 'Paste':
@@ -2040,7 +2040,7 @@ class EasyChessGui:
 
                     # Mode: Play, stm: User
                     if button == 'GUI':
-                        sg.PopupScrolled(HELP_MSG, title=BOX_TITLE,)
+                        sg.popup_scrolled(HELP_MSG, title=BOX_TITLE)
                         break
 
                     # Mode: Play, stm: User
@@ -2783,7 +2783,7 @@ class EasyChessGui:
                 break
 
             if button == 'GUI':
-                sg.PopupScrolled(HELP_MSG, title='Help/GUI')
+                sg.popup_scrolled(HELP_MSG, title='Help/GUI')
                 continue
 
             if button == 'Load PGN::review_load_pgn_k':
