@@ -3976,7 +3976,7 @@ class EasyChessGui:
 
             # Mode: Neutral
             if button == 'GUI':
-                sg.PopupScrolled(HELP_MSG, title='Help/GUI')
+                sg.popup_scrolled(HELP_MSG, title='Help/GUI')
                 continue
 
             # Mode: Neutral
