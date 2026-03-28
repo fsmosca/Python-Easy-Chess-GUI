@@ -67,6 +67,7 @@ logging.basicConfig(
 APP_NAME = 'Python Easy Chess GUI'
 APP_VERSION = 'v1.19.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
+REVIEW_MAX_DISPLAY_GAMES = 5000
 
 
 platform = sys.platform
@@ -2507,20 +2508,32 @@ class EasyChessGui:
         with open(self.pecg_auto_save_game, mode='a+') as f:
             f.write('{}\n\n'.format(self.game))
 
-    def load_pgn_games(self, pgn):
-        """Load all games from a pgn file."""
+    def load_pgn_games(self, pgn, max_games=REVIEW_MAX_DISPLAY_GAMES):
+        """Load review game headers up to a display limit."""
         games = []
+        is_truncated = False
         with open(pgn, encoding='utf-8', errors='replace') as h:
-            while True:
-                game = chess.pgn.read_game(h)
-                if game is None:
+            while len(games) < max_games:
+                offset = h.tell()
+                headers = chess.pgn.read_headers(h)
+                if headers is None:
                     break
-                games.append(game)
-        return games
+                games.append({'offset': offset, 'headers': headers})
+
+            if len(games) == max_games and chess.pgn.read_headers(h) is not None:
+                is_truncated = True
+
+        return games, is_truncated
+
+    def load_review_game(self, pgn, game_entry):
+        """Load a single review game from its file offset."""
+        with open(pgn, encoding='utf-8', errors='replace') as h:
+            h.seek(game_entry['offset'])
+            return chess.pgn.read_game(h)
 
     def get_review_game_text(self, game, index):
         """Return one-line summary of a game for review list."""
-        headers = game.headers
+        headers = game.headers if hasattr(game, 'headers') else game['headers']
         white = headers.get('White', '?')
         black = headers.get('Black', '?')
         result = headers.get('Result', '*')
@@ -2568,7 +2581,7 @@ class EasyChessGui:
                     continue
 
                 try:
-                    selected_games = self.load_pgn_games(selected_pgn)
+                    selected_games, is_truncated = self.load_pgn_games(selected_pgn)
                 except (FileNotFoundError, OSError, UnicodeError) as exc:
                     logging.exception(
                         f'Failed to load pgn games from {selected_pgn}: {exc}')
@@ -2588,8 +2601,12 @@ class EasyChessGui:
                     for index, game in enumerate(selected_games)
                 ]
                 w['game_k'].Update(selection_list, set_to_index=[0])
-                w['status_k'].Update(
-                    f'Status: Loaded {len(selected_games)} game(s). Select one and press OK.')
+                if is_truncated:
+                    w['status_k'].Update(
+                        f'Status: Showing first {len(selected_games)} games only. Select one and press OK.')
+                else:
+                    w['status_k'].Update(
+                        f'Status: Loaded {len(selected_games)} game(s). Select one and press OK.')
                 continue
 
             if e == 'OK':
@@ -2600,11 +2617,17 @@ class EasyChessGui:
                     continue
 
                 selected_index = selection_list.index(selected_text)
+                selected_game_obj = self.load_review_game(
+                    selected_pgn, selected_games[selected_index])
+                if selected_game_obj is None:
+                    w['status_k'].Update('Status: Failed to load selected game.')
+                    continue
+
                 selected_game = {
                     'pgn_file': selected_pgn,
                     'games': selected_games,
                     'game_index': selected_index,
-                    'game': selected_games[selected_index]
+                    'game': selected_game_obj
                 }
                 break
 
