@@ -430,7 +430,10 @@ class RunEngine(threading.Thread):
         self.period_moves = period_moves
         self.is_ownbook = False
         self.is_move_delay = True
-        self.multipv = max(1, int(multipv))
+        try:
+            self.multipv = max(1, int(multipv))
+        except (TypeError, ValueError):
+            self.multipv = 1
 
     def stop(self):
         """Interrupt engine search."""
@@ -2705,6 +2708,8 @@ class EasyChessGui:
         self.review_move_index = 0
         self.review_move_labels = ['Start position']
         self.review_boards = []
+        self.review_analysis_lines = [''] * 3
+        self.review_analysis_status = 'Analysis stopped'
 
         board = game.board()
         self.review_boards.append(board.copy(stack=False))
@@ -2818,6 +2823,7 @@ class EasyChessGui:
             except queue.Empty:
                 break
             except Exception:
+                logging.exception('Failed to read Review mode analysis queue.')
                 break
 
             msg_str = str(msg)
@@ -2901,8 +2907,10 @@ class EasyChessGui:
                         enable_events=True)],
             [sg.Text('Position 0/0', size=(20, 1), font=('Consolas', 10),
                      key='review_nav_k', relief='sunken'),
-             sg.Button('Start Analysis', key='review_start_analysis_k'),
-             sg.Button('Stop Analysis', key='review_stop_analysis_k')],
+             sg.Button('Start Analysis', key='review_start_analysis_k',
+                       tooltip='Start or restart engine analysis for the current position.'),
+             sg.Button('Stop Analysis', key='review_stop_analysis_k',
+                       tooltip='Stop engine analysis updates in Review mode.')],
             [sg.Text('Analysis stopped', size=(52, 1), font=('Consolas', 10),
                      key='review_analysis_status_k', relief='sunken')],
             [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
@@ -3005,7 +3013,7 @@ class EasyChessGui:
 
             if button == 'Flip':
                 review_location = review_window.CurrentLocation()
-                self.close_review_analysis()
+                self.stop_review_analysis()
                 review_window.Close()
                 self.is_user_white = not self.is_user_white
                 review_window = self.create_review_window(location=review_location)
