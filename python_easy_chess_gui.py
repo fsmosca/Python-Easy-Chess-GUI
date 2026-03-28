@@ -2521,7 +2521,7 @@ class EasyChessGui:
         black = headers.get('Black', '?')
         result = headers.get('Result', '*')
         event = headers.get('Event', '?')
-        date = headers.get('Date', 'Unknown')
+        date = headers.get('Date', '?')
         return f'{index + 1:>3}. {white} vs {black} | {result} | {event} | {date}'
 
     def select_review_game(self, pgn_file=None, games=None):
@@ -2566,7 +2566,8 @@ class EasyChessGui:
                 try:
                     selected_games = self.load_pgn_games(selected_pgn)
                 except (FileNotFoundError, OSError, UnicodeError):
-                    logging.exception('Failed to load pgn games.')
+                    logging.exception(
+                        f'Failed to load pgn games from {selected_pgn}.')
                     w['status_k'].Update('Status: Failed to read PGN file.')
                     selected_games = []
                     w['game_k'].Update([])
@@ -2642,7 +2643,7 @@ class EasyChessGui:
             f"White: {headers.get('White', '?')}",
             f"Black: {headers.get('Black', '?')}",
             f"Event: {headers.get('Event', '?')}",
-            f"Date: {headers.get('Date', 'Unknown')}    Result: {headers.get('Result', '*')}"
+            f"Date: {headers.get('Date', '?')}    Result: {headers.get('Result', '*')}"
         ])
 
         if self.review_pgn_file:
@@ -2793,8 +2794,12 @@ class EasyChessGui:
                 except IndexError:
                     self.update_review_window(review_window)
                     continue
-                self.review_move_index = self.review_move_labels.index(
-                    selected_move)
+                try:
+                    self.review_move_index = self.review_move_labels.index(
+                        selected_move)
+                except ValueError:
+                    self.update_review_window(review_window)
+                    continue
 
             self.update_review_window(review_window)
 
