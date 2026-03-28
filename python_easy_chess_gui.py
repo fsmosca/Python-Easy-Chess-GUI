@@ -2704,8 +2704,8 @@ class EasyChessGui:
 
     def build_review_layout(self, is_user_white=True):
         """Create review mode layout with navigation controls."""
-        sg.ChangeLookAndFeel(self.gui_theme)
-        sg.SetOptions(margins=(0, 3), border_width=1)
+        sg.change_look_and_feel(self.gui_theme)
+        sg.set_options(margins=(0, 3), border_width=1)
 
         board_layout = self.create_board(is_user_white)
         board_controls = [
@@ -2905,8 +2905,8 @@ class EasyChessGui:
         oriented such that the white pieces are at the bottom.
         :return: GUI layout
         """
-        sg.ChangeLookAndFeel(self.gui_theme)
-        sg.SetOptions(margins=(0, 3), border_width=1)
+        sg.change_look_and_feel(self.gui_theme)
+        sg.set_options(margins=(0, 3), border_width=1)
 
         # Define board
         board_layout = self.create_board(is_user_white)
