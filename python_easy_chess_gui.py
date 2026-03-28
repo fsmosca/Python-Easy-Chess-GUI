@@ -70,7 +70,8 @@ BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
 REVIEW_ANALYSIS_PV_MOVES = 7
-REVIEW_MOVE_LIST_HEIGHT = 11
+REVIEW_MOVE_LIST_HEIGHT = 13
+REVIEW_ANALYSIS_BOX_HEIGHT = 5
 
 
 platform = sys.platform
@@ -2920,7 +2921,7 @@ class EasyChessGui:
                           font=('Consolas', 10), key='review_header_k',
                           disabled=True)],
             [sg.Text('Move list', size=(16, 1), font=('Consolas', 10))],
-            # Tuned so the analysis panel bottom aligns with the board bottom.
+            # Tuned so the move list and analysis panel align with the board height.
             [sg.Listbox(values=['Start position'], size=(52, REVIEW_MOVE_LIST_HEIGHT),
                         font=('Consolas', 10), key='review_move_list_k',
                         enable_events=True)],
@@ -2928,7 +2929,8 @@ class EasyChessGui:
                      key='review_nav_k', relief='sunken')],
             [sg.Text('Analysis stopped', size=(52, 1), font=('Consolas', 10),
                      key='review_analysis_status_k', relief='sunken')],
-            [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
+            [sg.Multiline('', do_not_clear=True, autoscroll=False,
+                          size=(52, REVIEW_ANALYSIS_BOX_HEIGHT),
                           font=('Consolas', 10), key='review_analysis_k',
                           disabled=True)]
         ]
