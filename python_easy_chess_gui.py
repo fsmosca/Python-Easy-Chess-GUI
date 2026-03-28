@@ -2572,7 +2572,8 @@ class EasyChessGui:
                 except (FileNotFoundError, OSError, UnicodeError) as exc:
                     logging.exception(
                         f'Failed to load pgn games from {selected_pgn}: {exc}')
-                    w['status_k'].Update('Status: Failed to read PGN file.')
+                    w['status_k'].Update(
+                        'Status: Failed to read PGN file. Check the file path and encoding.')
                     selected_games = []
                     w['game_k'].Update([])
                     continue
@@ -2656,7 +2657,7 @@ class EasyChessGui:
         game_number = (
             self.review_game_index + 1
             if self.review_game_index is not None
-            else 1
+            else '?'
         )
         window['_gamestatus_'].Update(
             f'Mode     Review, game {game_number}/{len(self.review_games)}')
@@ -2751,7 +2752,8 @@ class EasyChessGui:
                 continue
 
             if button == 'Load PGN::review_load_pgn_k':
-                selected_game = self.select_review_game(self.review_pgn_file)
+                selected_game = self.select_review_game(
+                    self.review_pgn_file, self.review_games)
                 if selected_game is None:
                     continue
 
@@ -2794,10 +2796,9 @@ class EasyChessGui:
                 self.review_move_index = len(self.review_boards) - 1
             elif button == 'review_move_list_k':
                 try:
-                    selected_move = value['review_move_list_k'][0]
-                    self.review_move_index = self.review_move_labels.index(
-                        selected_move)
-                except (IndexError, ValueError):
+                    selected_index = review_window['review_move_list_k'].Widget.curselection()[0]
+                    self.review_move_index = selected_index
+                except (IndexError, AttributeError):
                     self.update_review_window(review_window)
                     continue
 
