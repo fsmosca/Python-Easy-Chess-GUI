@@ -1,5 +1,5 @@
 # Python Easy Chess GUI
-A Chess GUI based from Python using PySimpleGUI and Python-Chess modules. Users can also load a chess engine and play with it. This program is based on a [demo chess against ai](https://github.com/PySimpleGUI/PySimpleGUI/tree/master/Chess) from [PySimpleGUI](https://github.com/PySimpleGUI/PySimpleGUI).
+A Chess GUI based from Python using FreeSimpleGUI and Python-Chess modules. Users can also load a chess engine and play with it. This program is based on a [demo chess against ai](https://github.com/PySimpleGUI/PySimpleGUI/tree/master/Chess) from [PySimpleGUI](https://github.com/PySimpleGUI/PySimpleGUI).
 
 ![](https://i.imgur.com/DT0lOO2.png)
 
@@ -15,7 +15,7 @@ Then add the folders for the exe to work.
 If you want to run from the python source the following are required or see the installation section below.
 * Python 3.7 and up
 * Python-chess v0.28.0 and up
-* PySimpleGUI 4.4.1 and up
+* FreeSimpleGUI 5.0.0 and up
 * Pyperclip
 * Download this repo
 
@@ -48,9 +48,9 @@ https://www.python.org/downloads/
 * Python-Chess<br>
 https://github.com/niklasf/python-chess<br>
 pip install python-chess
-* PySimpleGUI<br>
-https://github.com/PySimpleGUI/PySimpleGUI<br>
-pip install pysimplegui
+* FreeSimpleGUI<br>
+https://github.com/spyoungtech/FreeSimpleGUI<br>
+pip install FreeSimpleGUI
 * Pyperclip<br>
 https://github.com/asweigart/pyperclip<br>
 pip install pyperclip
@@ -123,8 +123,8 @@ This is only accessible in Neutral mode. After the uci engine is installed, you 
 * Engine->Manage->Delete
 
 ### E. Credits
-* PySimpleGUI<br>
-https://github.com/PySimpleGUI/PySimpleGUI
+* FreeSimpleGUI<br>
+https://github.com/spyoungtech/FreeSimpleGUI
 * Python-Chess<br>
 https://github.com/niklasf/python-chess
 * Pyperclip<br>

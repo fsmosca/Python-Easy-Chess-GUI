@@ -35,7 +35,7 @@ col is the same as in PySimpleGUI
 
 """
 
-import PySimpleGUI as sg
+import FreeSimpleGUI as sg
 import os
 import sys
 import subprocess
