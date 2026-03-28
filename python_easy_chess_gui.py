@@ -747,6 +747,10 @@ class EasyChessGui:
         self.is_save_time_left = False
         self.is_save_user_comment = True
         self.is_time_forfeit_enabled = True
+        self.reset_review_state()
+
+    def reset_review_state(self):
+        """Reset review mode state."""
         self.review_pgn_file = None
         self.review_games = []
         self.review_game = None
@@ -2565,9 +2569,9 @@ class EasyChessGui:
 
                 try:
                     selected_games = self.load_pgn_games(selected_pgn)
-                except (FileNotFoundError, OSError, UnicodeError):
+                except (FileNotFoundError, OSError, UnicodeError) as exc:
                     logging.exception(
-                        f'Failed to load pgn games from {selected_pgn}.')
+                        f'Failed to load pgn games from {selected_pgn}: {exc}')
                     w['status_k'].Update('Status: Failed to read PGN file.')
                     selected_games = []
                     w['game_k'].Update([])
@@ -2791,26 +2795,16 @@ class EasyChessGui:
             elif button == 'review_move_list_k':
                 try:
                     selected_move = value['review_move_list_k'][0]
-                except IndexError:
-                    self.update_review_window(review_window)
-                    continue
-                try:
                     self.review_move_index = self.review_move_labels.index(
                         selected_move)
-                except ValueError:
+                except (IndexError, ValueError):
                     self.update_review_window(review_window)
                     continue
 
             self.update_review_window(review_window)
 
         review_window.Close()
-        self.review_game = None
-        self.review_game_index = None
-        self.review_move_index = 0
-        self.review_move_labels = []
-        self.review_boards = []
-        self.review_games = []
-        self.review_pgn_file = None
+        self.reset_review_state()
         self.is_user_white = saved_orientation
         window.UnHide()
 
