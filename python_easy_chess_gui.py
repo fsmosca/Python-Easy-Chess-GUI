@@ -2719,6 +2719,7 @@ class EasyChessGui:
             layout,
             default_button_element_size=(12, 1),
             auto_size_buttons=False,
+            finalize=True,
             location=location,
             icon=ico_path[platform]['pecg']
         )
