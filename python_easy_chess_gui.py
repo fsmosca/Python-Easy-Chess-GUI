@@ -374,7 +374,8 @@ class RunEngine(threading.Thread):
     def __init__(self, eng_queue, engine_config_file, engine_path_and_file,
                  engine_id_name, max_depth=MAX_DEPTH,
                  base_ms=300000, inc_ms=1000, tc_type='fischer',
-                 period_moves=0, is_stream_search_info=True):
+                 period_moves=0, is_stream_search_info=True,
+                 existing_engine=None):
         """
         Run engine as opponent or as adviser.
 
@@ -383,6 +384,8 @@ class RunEngine(threading.Thread):
         :param engine_path_and_file:
         :param engine_id_name:
         :param max_depth:
+        :param existing_engine: An existing chess.engine.SimpleEngine instance
+            to reuse instead of spawning a new process.
         """
         threading.Thread.__init__(self)
         self._kill = threading.Event()
@@ -398,7 +401,7 @@ class RunEngine(threading.Thread):
         self.nps = 0
         self.max_depth = max_depth
         self.eng_queue = eng_queue
-        self.engine = None
+        self.engine = existing_engine
         self.board = None
         self.analysis = is_stream_search_info
         self.is_nomove_number_in_variation = True
@@ -468,32 +471,34 @@ class RunEngine(threading.Thread):
          
         If there is error we still send bestmove None.
         """
-        folder = Path(self.engine_path_and_file)
-        folder = folder.parents[0]
+        # Reuse existing engine if provided
+        if self.engine is None:
+            folder = Path(self.engine_path_and_file)
+            folder = folder.parents[0]
 
-        try:
-            if sys_os == 'Windows':
-                self.engine = chess.engine.SimpleEngine.popen_uci(
-                    self.engine_path_and_file, cwd=folder,
-                    creationflags=subprocess.CREATE_NO_WINDOW)
-            else:
-                self.engine = chess.engine.SimpleEngine.popen_uci(
-                    self.engine_path_and_file, cwd=folder)
-        except chess.engine.EngineTerminatedError:
-            logging.warning('Failed to start {}.'.format(self.engine_path_and_file))
-            self.eng_queue.put('bestmove {}'.format(self.bm))
-            return
-        except Exception:
-            logging.exception('Failed to start {}.'.format(
-                self.engine_path_and_file))
-            self.eng_queue.put('bestmove {}'.format(self.bm))
-            return
+            try:
+                if sys_os == 'Windows':
+                    self.engine = chess.engine.SimpleEngine.popen_uci(
+                        self.engine_path_and_file, cwd=folder,
+                        creationflags=subprocess.CREATE_NO_WINDOW)
+                else:
+                    self.engine = chess.engine.SimpleEngine.popen_uci(
+                        self.engine_path_and_file, cwd=folder)
+            except chess.engine.EngineTerminatedError:
+                logging.warning('Failed to start {}.'.format(self.engine_path_and_file))
+                self.eng_queue.put('bestmove {}'.format(self.bm))
+                return
+            except Exception:
+                logging.exception('Failed to start {}.'.format(
+                    self.engine_path_and_file))
+                self.eng_queue.put('bestmove {}'.format(self.bm))
+                return
 
-        # Set engine option values
-        try:
-            self.configure_engine()
-        except Exception:
-            logging.exception('Failed to configure engine.')
+            # Set engine option values
+            try:
+                self.configure_engine()
+            except Exception:
+                logging.exception('Failed to configure engine.')
 
         # Set search limits
         if self.tc_type == 'delay':
@@ -629,14 +634,25 @@ class RunEngine(threading.Thread):
         logging.info(f'bestmove {self.bm}')
 
     def quit_engine(self):
-        """Quit engine."""
+        """Quit engine.
+
+        Safe to call multiple times; subsequent calls are no-ops.
+        """
+        if self.engine is None:
+            return
         logging.info('quit engine')
         try:
             self.engine.quit()
-        except AttributeError:
-            logging.info('AttributeError, self.engine is already None')
         except Exception:
             logging.exception('Failed to quit engine.')
+        self.engine = None
+
+    def get_engine(self):
+        """Return the engine instance without quitting it.
+
+        This allows the engine process to be reused across moves.
+        """
+        return self.engine
 
     def short_variation_san(self):
         """Returns variation in san but without move numbers."""
@@ -1695,6 +1711,9 @@ class EasyChessGui:
         is_search_stop_for_resign = False
         is_search_stop_for_user_wins = False
         is_search_stop_for_user_draws = False
+
+        # Engine instance that persists across moves
+        persistent_engine = None
         is_hide_book1 = True
         is_hide_book2 = True
         is_hide_search_info = True
@@ -2179,7 +2198,8 @@ class EasyChessGui:
                         self.queue, self.engine_config_file, self.opp_path_and_file,
                         self.opp_id_name, self.max_depth, engine_timer.base,
                         engine_timer.inc, tc_type=engine_timer.tc_type,
-                        period_moves=board.fullmove_number
+                        period_moves=board.fullmove_number,
+                        existing_engine=persistent_engine
                     )
                     search.get_board(board)
                     search.daemon = True
@@ -2287,7 +2307,8 @@ class EasyChessGui:
                             break
 
                     search.join()
-                    search.quit_engine()
+                    # Keep engine alive for reuse; retrieve instance
+                    persistent_engine = search.get_engine()
                     is_book_from_gui = False
 
                 # If engine failed to send a legal move
@@ -2371,6 +2392,17 @@ class EasyChessGui:
 
         # Auto-save game
         logging.info('Saving game automatically')
+
+        # Quit the persistent engine now that the game is over or
+        # the user is exiting play mode (e.g. neutral, new game, resign).
+        if persistent_engine is not None:
+            logging.info('Quitting persistent engine at end of game')
+            try:
+                persistent_engine.quit()
+            except Exception:
+                logging.exception('Failed to quit persistent engine.')
+            finally:
+                persistent_engine = None
         if is_user_resigns:
             self.game.headers['Result'] = '0-1' if self.is_user_white else '1-0'
             self.game.headers['Termination'] = '{} resigns'.format(
