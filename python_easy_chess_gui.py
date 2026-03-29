@@ -498,6 +498,7 @@ class RunEngine(threading.Thread):
                         if option_name == 'ownbook':
                             self.is_ownbook = True
 
+                        # Analysis-managed options are applied at runtime.
                         if self.analysis and option_name in managed_uci_options:
                             continue
 
