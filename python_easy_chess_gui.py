@@ -3316,17 +3316,19 @@ class EasyChessGui:
                           size=(52, REVIEW_ANALYSIS_BOX_HEIGHT),
                           font=('Consolas', 10), key='review_analysis_k',
                           disabled=True, wrap_lines=False)],
-            [sg.Button('First', size=(10, 1)),
-             sg.Button('Previous', size=(10, 1)),
-             sg.Button('Next', size=(10, 1)),
-             sg.Button('Last', size=(10, 1))],
             [sg.Button('Start Analysis', key='review_start_analysis_k',
                        tooltip='Start or restart engine analysis for the current position.'),
              sg.Button('Stop Analysis', key='review_stop_analysis_k',
                        tooltip='Stop engine analysis updates in Review mode.')]
         ]
 
-        board_column = [[sg.Column(board_layout)]]
+        board_column = [
+            [sg.Column(board_layout)],
+            [sg.Button('First', size=(10, 1), pad=((10, 5), None)),
+             sg.Button('Previous', size=(10, 1)),
+             sg.Button('Next', size=(10, 1)),
+             sg.Button('Last', size=(10, 1))]
+        ]
 
         layout = [
             [sg.Menu(menu_def_review, tearoff=False)],
