@@ -779,6 +779,11 @@ class EasyChessGui:
         self.fen = None
         self.psg_board = None
         self.menu_elem = None
+
+        # Drag-and-drop state
+        self._drag_source = None
+        self._widget_to_square = {}
+        self._drag_window = None
         self.engine_id_name_list = []
         self.engine_file_list = []
         self.username = 'Human'
@@ -896,6 +901,9 @@ class EasyChessGui:
             button, value = w.Read(timeout=50)
             self.update_labels_and_game_tags(w, human=self.username)
             break
+
+        # Re-bind drag-and-drop on the new window's board squares
+        self.setup_board_drag_drop(w)
 
         window.Close()
         return w
@@ -1595,6 +1603,58 @@ class EasyChessGui:
                 elem.Update(button_color=('white', color),
                             image_filename=piece_image, )
 
+    def setup_board_drag_drop(self, window):
+        """Bind drag-and-drop events to board square buttons.
+
+        After window finalization, this binds mouse press/release events
+        to each board square so that pieces can be moved by dragging.
+        """
+        self._widget_to_square = {}
+        self._drag_window = window
+        for i in range(8):
+            for j in range(8):
+                elem = window.find_element(key=(i, j))
+                widget = elem.Widget
+                self._widget_to_square[widget] = (i, j)
+                widget.bind('<ButtonPress-1>',
+                            self._on_drag_press, add='+')
+                widget.bind('<ButtonRelease-1>',
+                            self._on_drag_release, add='+')
+
+    def _on_drag_press(self, event):
+        """Record the source square when mouse is pressed on a board square."""
+        self._drag_source = self._widget_to_square.get(event.widget)
+
+    def _on_drag_release(self, event):
+        """Handle mouse release for drag-and-drop moves.
+
+        Uses winfo_containing to find which board square the cursor is
+        over when the mouse button is released. If the target is a
+        different square from the source, injects a drag move event
+        into the FreeSimpleGUI event queue.
+        """
+        if self._drag_source is None:
+            return
+        source = self._drag_source
+        self._drag_source = None
+
+        # Find the widget under the cursor at release position
+        target_widget = event.widget.winfo_containing(
+            event.x_root, event.y_root)
+
+        # Walk up the widget hierarchy to find a mapped board square
+        target_square = None
+        w = target_widget
+        while w is not None:
+            if w in self._widget_to_square:
+                target_square = self._widget_to_square[w]
+                break
+            w = getattr(w, 'master', None)
+
+        if target_square is not None and target_square != source:
+            self._drag_window.write_event_value(
+                '__drag_move__', (source, target_square))
+
     def render_square(self, image, key, location):
         """ Returns an RButton (Read Button) with image image """
         if (location[0] + location[1]) % 2:
@@ -2147,6 +2207,36 @@ class EasyChessGui:
 
                         self.game.headers['FEN'] = self.fen
                         break
+
+                    # Mode: Play, stm: User, handle drag-and-drop move
+                    if button == '__drag_move__':
+                        drag_from, drag_to = value['__drag_move__']
+                        d_fr_row, d_fr_col = drag_from
+                        d_piece = self.psg_board[d_fr_row][d_fr_col]
+                        d_moved_piece = board.piece_type_at(
+                            chess.square(d_fr_col, 7 - d_fr_row))
+
+                        if d_piece != BLANK and d_moved_piece is not None:
+                            # If a click-based move was in progress, restore
+                            # the color of the previously selected square
+                            if move_state == 1:
+                                prev_color = self.sq_dark_color \
+                                    if (move_from[0] + move_from[1]) % 2 \
+                                    else self.sq_light_color
+                                window.find_element(key=move_from).Update(
+                                    button_color=('white', prev_color))
+
+                            # Set up state as if source square was clicked
+                            move_from = drag_from
+                            fr_row, fr_col = d_fr_row, d_fr_col
+                            piece = d_piece
+                            moved_piece = d_moved_piece
+                            self.change_square_color(window, fr_row, fr_col)
+                            move_state = 1
+
+                            # Re-assign button to destination so existing
+                            # move_state==1 code below handles execution
+                            button = drag_to
 
                     # Mode: Play, stm: User, user starts moving
                     if type(button) is tuple:
@@ -3317,6 +3407,9 @@ class EasyChessGui:
             button, value = window.Read(timeout=50)
             self.update_labels_and_game_tags(window, human=self.username)
             break
+
+        # Set up drag-and-drop bindings for board squares
+        self.setup_board_drag_drop(window)
 
         # Mode: Neutral, main loop starts here
         while True:
