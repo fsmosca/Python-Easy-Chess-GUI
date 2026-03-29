@@ -2092,8 +2092,18 @@ class EasyChessGui:
                             try:
                                 msg = self.queue.get_nowait()
                                 if 'info_all' in msg:
-                                    # Remove the trailing info_all tag
-                                    adviser_line = ' '.join(msg.split()[0:-1])
+                                    # Extract PV moves: format is
+                                    # "{score} | {depth} | {time}s | {moves} info_all"
+                                    parts = msg.split('|')
+                                    if len(parts) >= 4:
+                                        pv_part = parts[-1].strip()
+                                        # Remove trailing info_all tag
+                                        pv_moves = pv_part.replace('info_all', '').strip()
+                                    else:
+                                        pv_moves = msg.replace('info_all', '').strip()
+                                    # Limit to 5 moves
+                                    move_list = pv_moves.split()
+                                    adviser_line = ' '.join(move_list[:5])
                                     window.Element('advise_info_k').Update(adviser_line)
                             except queue.Empty:
                                 continue
@@ -2104,7 +2114,7 @@ class EasyChessGui:
 
                             if 'bestmove' in msg:
                                 if adviser_line:
-                                    adviser_line += ' - ' + self.adviser_id_name
+                                    adviser_line += ' ... ' + self.adviser_id_name
                                 else:
                                     bestmove_parts = msg.split(maxsplit=1)
                                     if len(bestmove_parts) > 1:
@@ -2112,7 +2122,7 @@ class EasyChessGui:
                                     else:
                                         bestmove = '(none)'
                                     adviser_line = \
-                                        f'bestmove {bestmove} - {self.adviser_id_name}'
+                                        f'{bestmove} ... {self.adviser_id_name}'
                                 window.Element('advise_info_k').Update(adviser_line)
                                 break
 
