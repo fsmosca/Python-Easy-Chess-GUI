@@ -39,6 +39,10 @@ Configure engine via Engine->Manage->Edit, select engine and press modify.
 #### 4. Need what engine adviser will think about the position? Right-click on Adviser and press start
 ![](https://i.imgur.com/Jziws5W.png)
 
+#### 5. Replay game with engine analysis in Review Mode
+
+<img width="1352" height="868" alt="image" src="https://github.com/user-attachments/assets/212351b8-f62d-4782-a287-cff63193b4d7" />
+
 ### C. Installation
 1. If you want to run from the source code
 * Python Easy Chess GUI<br>
