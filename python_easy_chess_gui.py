@@ -556,10 +556,13 @@ class RunEngine(threading.Thread):
         except Exception:
             logging.exception('Failed to configure runtime analysis options.')
 
-        # Set search limits
+        # Set search limits.
+        # For infinite analysis pass limit=None so that python-chess sends
+        # "go infinite" to the engine (Limit() is truthy and would produce
+        # a bare "go" without the infinite token).
         if self.tc_type == 'infinite':
-            limit = chess.engine.Limit(
-                depth=self.max_depth if self.max_depth != MAX_DEPTH else None)
+            limit = (chess.engine.Limit(depth=self.max_depth)
+                     if self.max_depth != MAX_DEPTH else None)
         elif self.tc_type == 'delay':
             limit = chess.engine.Limit(
                 depth=self.max_depth if self.max_depth != MAX_DEPTH else None,
@@ -701,7 +704,9 @@ class RunEngine(threading.Thread):
         # If bm is None, we will use engine.play()
         # Skip this fallback when the search was explicitly interrupted
         # to avoid blocking the thread with an unconstrained engine call.
-        if self.bm is None and not self._kill.is_set():
+        # Also skip when limit is None (infinite analysis) since
+        # engine.play() requires a concrete Limit object.
+        if self.bm is None and not self._kill.is_set() and limit is not None:
             logging.info('bm is none, we will try engine,play().')
             try:
                 result = self.engine.play(self.board, limit)
