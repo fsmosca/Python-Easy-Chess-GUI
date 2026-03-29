@@ -2103,11 +2103,13 @@ class EasyChessGui:
 
                             if 'bestmove' in msg:
                                 if adviser_line:
+                                    # Shorten the displayed line to 3 ply moves.
                                     adviser_line = ' '.join(
                                         adviser_line.split()[0:3])
                                 else:
-                                    bestmove = msg.split(maxsplit=1)[1] \
-                                        if len(msg.split(maxsplit=1)) > 1 else 'None'
+                                    bestmove_parts = msg.split(maxsplit=1)
+                                    bestmove = bestmove_parts[1] \
+                                        if len(bestmove_parts) > 1 else 'None'
                                     adviser_line = f'bestmove {bestmove}'
                                 adviser_line += ' - ' + self.adviser_id_name
                                 window.Element('advise_info_k').Update(adviser_line)
