@@ -2091,8 +2091,8 @@ class EasyChessGui:
                                 is_search_stop_for_exit = True
                             try:
                                 msg = self.queue.get_nowait()
-                                if 'pv' in msg:
-                                    # Reformat msg, remove the word pv at the end
+                                if 'info_all' in msg:
+                                    # Remove the trailing info_all tag
                                     adviser_line = ' '.join(msg.split()[0:-1])
                                     window.Element('advise_info_k').Update(adviser_line)
                             except queue.Empty:
@@ -2104,17 +2104,15 @@ class EasyChessGui:
 
                             if 'bestmove' in msg:
                                 if adviser_line:
-                                    # Shorten the displayed line to 3 ply moves.
-                                    adviser_line = ' '.join(
-                                        adviser_line.split()[0:3])
+                                    adviser_line += ' - ' + self.adviser_id_name
                                 else:
                                     bestmove_parts = msg.split(maxsplit=1)
                                     if len(bestmove_parts) > 1:
                                         bestmove = bestmove_parts[1]
                                     else:
                                         bestmove = '(none)'
-                                    adviser_line = f'bestmove {bestmove}'
-                                adviser_line += ' - ' + self.adviser_id_name
+                                    adviser_line = \
+                                        f'bestmove {bestmove} - {self.adviser_id_name}'
                                 window.Element('advise_info_k').Update(adviser_line)
                                 break
 
