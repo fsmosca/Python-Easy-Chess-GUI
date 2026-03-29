@@ -2934,6 +2934,7 @@ class EasyChessGui:
     def poll_review_analysis(self, window):
         """Consume engine messages for Review mode analysis."""
         updated = False
+        is_debouncing = bool(self.review_nav_last_time)
         while True:
             try:
                 msg = self.review_queue.get_nowait()
@@ -2945,6 +2946,10 @@ class EasyChessGui:
 
             msg_str = str(msg)
             if 'multipv_info' in msg_str:
+                # Skip stale analysis info from the old position while
+                # waiting for the debounce to restart analysis.
+                if is_debouncing:
+                    continue
                 try:
                     line_no, info_line = msg_str.split(' | ', 1)
                     line_number = int(line_no.strip())
@@ -2963,7 +2968,7 @@ class EasyChessGui:
                     self.review_analysis_engine = \
                         self.review_analysis_search.get_engine()
                     self.review_analysis_search = None
-                if self.review_analysis_enabled:
+                if self.review_analysis_enabled and not is_debouncing:
                     self.review_analysis_status = \
                         'Analysis ready - {}'.format(self.analysis_id_name)
                     updated = True
@@ -3113,10 +3118,10 @@ class EasyChessGui:
             # poll_review_analysis() called earlier in the loop.
             if button == sg.TIMEOUT_KEY:
                 # Restart analysis after debounce delay following navigation.
-                if (self.review_nav_last_time
+                nav_time = self.review_nav_last_time
+                if (nav_time
                         and self.review_analysis_enabled
-                        and self.review_analysis_search is None
-                        and time.time() - self.review_nav_last_time
+                        and time.time() - nav_time
                             >= REVIEW_NAV_DEBOUNCE_SEC):
                     self.review_nav_last_time = 0
                     self.start_review_analysis(review_window)
@@ -3213,7 +3218,11 @@ class EasyChessGui:
             if position_changed:
                 self.update_review_window(review_window)
                 if self.review_analysis_enabled:
-                    self.stop_review_analysis()
+                    # Signal the analysis thread to stop without blocking.
+                    # The actual join and restart happen in the debounce
+                    # handler after the user stops pressing buttons.
+                    if self.review_analysis_search is not None:
+                        self.review_analysis_search.stop()
                     self.review_nav_last_time = time.time()
                     self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
                     self.review_analysis_status = 'Waiting...'
