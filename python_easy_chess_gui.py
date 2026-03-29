@@ -2900,6 +2900,18 @@ class EasyChessGui:
             set_to_index=[self.review_move_index],
             scroll_to_index=self.review_move_index)
 
+        # Update book moves for the current position.
+        board = self.review_boards[self.review_move_index]
+        book_text = ''
+        for book_file in [self.computer_book_file, self.human_book_file]:
+            if os.path.isfile(book_file):
+                ref_book = GuiBook(book_file, board, self.is_random_book)
+                all_moves, is_found = ref_book.get_all_moves()
+                if is_found:
+                    book_text = all_moves
+                    break
+        window['review_book_k'].Update(book_text if book_text else 'no book moves')
+
         self.set_board_from_board_state(
             window, self.review_boards[self.review_move_index])
         self.update_review_analysis_panel(window)
@@ -2920,10 +2932,15 @@ class EasyChessGui:
             [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
                           font=('Consolas', 10), key='review_header_k',
                           disabled=True)],
-            [sg.Text('Move list', size=(16, 1), font=('Consolas', 10))],
-            [sg.Listbox(values=['Start position'], size=(52, REVIEW_MOVE_LIST_HEIGHT),
+            [sg.Text('Move list', size=(26, 1), font=('Consolas', 10)),
+             sg.Text('Book moves', size=(24, 1), font=('Consolas', 10))],
+            [sg.Listbox(values=['Start position'], size=(26, REVIEW_MOVE_LIST_HEIGHT),
                         font=('Consolas', 10), key='review_move_list_k',
-                        enable_events=True, expand_y=True)],
+                        enable_events=True, expand_y=True),
+             sg.Multiline('', do_not_clear=True, autoscroll=False,
+                          size=(24, REVIEW_MOVE_LIST_HEIGHT),
+                          font=('Consolas', 10), key='review_book_k',
+                          disabled=True, expand_y=True)],
             [sg.Text('Position 0/0', size=(20, 1), font=('Consolas', 10),
                      key='review_nav_k', relief='sunken')],
             [sg.Text('Analysis stopped', size=(52, 1), font=('Consolas', 10),
