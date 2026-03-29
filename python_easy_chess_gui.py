@@ -2109,7 +2109,7 @@ class EasyChessGui:
                                 else:
                                     bestmove_parts = msg.split(maxsplit=1)
                                     bestmove = bestmove_parts[1] \
-                                        if len(bestmove_parts) > 1 else 'None'
+                                        if len(bestmove_parts) > 1 else '(none)'
                                     adviser_line = f'bestmove {bestmove}'
                                 adviser_line += ' - ' + self.adviser_id_name
                                 window.Element('advise_info_k').Update(adviser_line)
