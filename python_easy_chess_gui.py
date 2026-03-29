@@ -70,6 +70,7 @@ BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
 REVIEW_ANALYSIS_PV_MOVES = 7
+REVIEW_NAV_DEBOUNCE_SEC = 0.3
 REVIEW_MOVE_LIST_HEIGHT = 11
 REVIEW_ANALYSIS_BOX_HEIGHT = 4
 
@@ -555,10 +556,13 @@ class RunEngine(threading.Thread):
         except Exception:
             logging.exception('Failed to configure runtime analysis options.')
 
-        # Set search limits
+        # Set search limits.
+        # For infinite analysis pass limit=None so that python-chess sends
+        # "go infinite" to the engine (Limit() is truthy and would produce
+        # a bare "go" without the infinite token).
         if self.tc_type == 'infinite':
-            limit = chess.engine.Limit(
-                depth=self.max_depth if self.max_depth != MAX_DEPTH else None)
+            limit = (chess.engine.Limit(depth=self.max_depth)
+                     if self.max_depth != MAX_DEPTH else None)
         elif self.tc_type == 'delay':
             limit = chess.engine.Limit(
                 depth=self.max_depth if self.max_depth != MAX_DEPTH else None,
@@ -690,13 +694,19 @@ class RunEngine(threading.Thread):
         # Apply engine move delay if movetime is small
         if self.is_move_delay:
             while True:
-                if time.perf_counter() - start_time >= self.move_delay_sec:
+                if (self._kill.is_set()
+                        or time.perf_counter() - start_time
+                        >= self.move_delay_sec):
                     break
                 logging.info('Delay sending of best move {}'.format(self.bm))
                 time.sleep(1.0)
 
         # If bm is None, we will use engine.play()
-        if self.bm is None:
+        # Skip this fallback when the search was explicitly interrupted
+        # to avoid blocking the thread with an unconstrained engine call.
+        # Also skip when limit is None (infinite analysis) since
+        # engine.play() requires a concrete Limit object.
+        if self.bm is None and not self._kill.is_set() and limit is not None:
             logging.info('bm is none, we will try engine,play().')
             try:
                 result = self.engine.play(self.board, limit)
@@ -831,6 +841,7 @@ class EasyChessGui:
         self.review_analysis_status = 'Analysis stopped'
         self.review_analysis_search = None
         self.review_analysis_engine = None
+        self.review_nav_last_time = 0
 
     def update_game(self, mc: int, user_move: str, time_left: int, user_comment: str):
         """Saves moves in the game.
@@ -2932,6 +2943,7 @@ class EasyChessGui:
     def poll_review_analysis(self, window):
         """Consume engine messages for Review mode analysis."""
         updated = False
+        is_debouncing = bool(self.review_nav_last_time)
         while True:
             try:
                 msg = self.review_queue.get_nowait()
@@ -2943,6 +2955,10 @@ class EasyChessGui:
 
             msg_str = str(msg)
             if 'multipv_info' in msg_str:
+                # Skip stale analysis info from the old position while
+                # waiting for the debounce to restart analysis.
+                if is_debouncing:
+                    continue
                 try:
                     line_no, info_line = msg_str.split(' | ', 1)
                     line_number = int(line_no.strip())
@@ -2961,7 +2977,7 @@ class EasyChessGui:
                     self.review_analysis_engine = \
                         self.review_analysis_search.get_engine()
                     self.review_analysis_search = None
-                if self.review_analysis_enabled:
+                if self.review_analysis_enabled and not is_debouncing:
                     self.review_analysis_status = \
                         'Analysis ready - {}'.format(self.analysis_id_name)
                     updated = True
@@ -3110,6 +3126,14 @@ class EasyChessGui:
             # Skip timeout events as analysis updates are processed by
             # poll_review_analysis() called earlier in the loop.
             if button == sg.TIMEOUT_KEY:
+                # Restart analysis after debounce delay following navigation.
+                nav_time = self.review_nav_last_time
+                if (nav_time
+                        and self.review_analysis_enabled
+                        and time.time() - nav_time
+                            >= REVIEW_NAV_DEBOUNCE_SEC):
+                    self.review_nav_last_time = 0
+                    self.start_review_analysis(review_window)
                 continue
 
             if button is None:
@@ -3202,7 +3226,18 @@ class EasyChessGui:
 
             if position_changed:
                 self.update_review_window(review_window)
-                self.refresh_review_analysis(review_window)
+                if self.review_analysis_enabled:
+                    # Signal the analysis thread to stop without blocking.
+                    # The actual join and restart happen in the debounce
+                    # handler after the user stops pressing buttons.
+                    if self.review_analysis_search is not None:
+                        self.review_analysis_search.stop()
+                    self.review_nav_last_time = time.time()
+                    self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+                    self.review_analysis_status = 'Waiting...'
+                    self.update_review_analysis_panel(review_window)
+                else:
+                    self.refresh_review_analysis(review_window)
 
         self.close_review_analysis()
         review_window.Close()
