@@ -420,6 +420,8 @@ class RunEngine(threading.Thread):
         """
         threading.Thread.__init__(self)
         self._kill = threading.Event()
+        self._analysis_ref = None  # Reference to running analysis context
+        self._analysis_lock = threading.Lock()
         self.engine_config_file = engine_config_file
         self.engine_path_and_file = engine_path_and_file
         self.engine_id_name = engine_id_name
@@ -448,8 +450,19 @@ class RunEngine(threading.Thread):
             self.multipv = 1
 
     def stop(self):
-        """Interrupt engine search."""
+        """Interrupt engine search.
+
+        Sets the kill flag and, if an analysis is in progress, sends
+        the UCI ``stop`` command to the engine so that the iterator
+        unblocks immediately instead of waiting for the next info line.
+        """
         self._kill.set()
+        with self._analysis_lock:
+            if self._analysis_ref is not None:
+                try:
+                    self._analysis_ref.stop()
+                except Exception:
+                    logging.debug('Analysis ref stop failed (already finished).')
 
     def get_board(self, board):
         """Get the current board position."""
@@ -593,72 +606,79 @@ class RunEngine(threading.Thread):
             is_time_check = False
 
             with self.engine.analysis(self.board, limit, multipv=self.multipv) as analysis:
-                for info in analysis:
+                with self._analysis_lock:
+                    self._analysis_ref = analysis
+                # Check kill flag after storing the reference in case
+                # stop() was called between thread start and here.
+                if not self._kill.is_set():
+                    for info in analysis:
 
-                    if self._kill.wait(0.1):
-                        break
-
-                    try:
-                        line_number = int(info.get('multipv', 1))
-                        depth = int(info['depth']) if 'depth' in info else self.depth
-                        score = self.score
-                        if 'score' in info:
-                            score = int(
-                                info['score'].relative.score(mate_score=32000)
-                            ) / 100
-                        elapsed = info['time'] if 'time' in info else \
-                            time.perf_counter() - start_time
-                        pv = None
-
-                        if 'pv' in info and not ('upperbound' in info or
-                                                 'lowerbound' in info):
-                            self.pv = info['pv'][0:self.pv_length]
-
-                            if self.is_nomove_number_in_variation:
-                                pv = self.short_variation_san()
-                            else:
-                                pv = self.board.variation_san(self.pv)
-
-                            if line_number == 1:
-                                self.bm = info['pv'][0]
-
-                        if line_number == 1 and depth is not None:
-                            self.depth = depth
-                        if line_number == 1 and score is not None:
-                            self.score = score
-                        if line_number == 1:
-                            self.time = elapsed
-                            if pv is not None:
-                                self.pv = pv
-
-                        if score is not None and pv is not None and depth is not None:
-                            if self.multipv > 1:
-                                info_to_send = \
-                                    '{} | {:+5.2f} | {} | {:0.1f}s | {} multipv_info'.format(
-                                        line_number, score, depth, elapsed, pv)
-                            else:
-                                info_to_send = \
-                                    '{:+5.2f} | {} | {:0.1f}s | {} info_all'.format(
-                                        score, depth, elapsed, pv)
-                            self.eng_queue.put('{}'.format(info_to_send))
-
-                        # Send stop if movetime is exceeded
-                        if not is_time_check \
-                                and self.tc_type not in ('fischer', 'delay', 'infinite') \
-                                and time.perf_counter() - start_time >= \
-                                self.base_ms/1000:
-                            logging.info('Max time limit is reached.')
-                            is_time_check = True
+                        if self._kill.is_set():
                             break
 
-                        # Send stop if max depth is exceeded
-                        if 'depth' in info:
-                            if int(info['depth']) >= self.max_depth \
-                                    and self.max_depth != MAX_DEPTH:
-                                logging.info('Max depth limit is reached.')
+                        try:
+                            line_number = int(info.get('multipv', 1))
+                            depth = int(info['depth']) if 'depth' in info else self.depth
+                            score = self.score
+                            if 'score' in info:
+                                score = int(
+                                    info['score'].relative.score(mate_score=32000)
+                                ) / 100
+                            elapsed = info['time'] if 'time' in info else \
+                                time.perf_counter() - start_time
+                            pv = None
+
+                            if 'pv' in info and not ('upperbound' in info or
+                                                     'lowerbound' in info):
+                                self.pv = info['pv'][0:self.pv_length]
+
+                                if self.is_nomove_number_in_variation:
+                                    pv = self.short_variation_san()
+                                else:
+                                    pv = self.board.variation_san(self.pv)
+
+                                if line_number == 1:
+                                    self.bm = info['pv'][0]
+
+                            if line_number == 1 and depth is not None:
+                                self.depth = depth
+                            if line_number == 1 and score is not None:
+                                self.score = score
+                            if line_number == 1:
+                                self.time = elapsed
+                                if pv is not None:
+                                    self.pv = pv
+
+                            if score is not None and pv is not None and depth is not None:
+                                if self.multipv > 1:
+                                    info_to_send = \
+                                        '{} | {:+5.2f} | {} | {:0.1f}s | {} multipv_info'.format(
+                                            line_number, score, depth, elapsed, pv)
+                                else:
+                                    info_to_send = \
+                                        '{:+5.2f} | {} | {:0.1f}s | {} info_all'.format(
+                                            score, depth, elapsed, pv)
+                                self.eng_queue.put('{}'.format(info_to_send))
+
+                            # Send stop if movetime is exceeded
+                            if not is_time_check \
+                                    and self.tc_type not in ('fischer', 'delay', 'infinite') \
+                                    and time.perf_counter() - start_time >= \
+                                    self.base_ms/1000:
+                                logging.info('Max time limit is reached.')
+                                is_time_check = True
                                 break
-                    except Exception:
-                        logging.exception('Failed to parse search info.')
+
+                            # Send stop if max depth is exceeded
+                            if 'depth' in info:
+                                if int(info['depth']) >= self.max_depth \
+                                        and self.max_depth != MAX_DEPTH:
+                                    logging.info('Max depth limit is reached.')
+                                    break
+                        except Exception:
+                            logging.exception('Failed to parse search info.')
+                with self._analysis_lock:
+                    self._analysis_ref = None
         else:
             result = self.engine.play(self.board, limit, info=chess.engine.INFO_ALL)
             logging.info('result: {}'.format(result))
@@ -852,11 +872,13 @@ class EasyChessGui:
         self.review_analysis_status = 'Analysis stopped'
         self.review_analysis_search = None
         self.review_analysis_engine = None
+        self._stale_analysis_search = None
         self.review_threat_enabled = False
         self.review_threat_status = 'Threat stopped'
         self.review_threat_line = ''
         self.review_threat_search = None
         self.review_threat_engine = None
+        self._stale_threat_search = None
         self.review_nav_last_time = 0
 
     def update_game(self, mc: int, user_move: str, time_left: int, user_comment: str):
@@ -2890,18 +2912,50 @@ class EasyChessGui:
         limited_pv = ' '.join(pv_moves[:REVIEW_ANALYSIS_PV_MOVES])
         return '{} | {}'.format(prefix, limited_pv)
 
+    def _collect_stale_search(self, search, attr_engine):
+        """Attempt to join a previously-stopped search thread.
+
+        If the thread has finished, recover the engine instance for reuse.
+        Returns True if the thread is done, False if still running.
+        """
+        if search is None:
+            return True
+        search.join(timeout=0)
+        if not search.is_alive():
+            engine = search.get_engine()
+            if engine is not None:
+                setattr(self, attr_engine, engine)
+            return True
+        return False
+
     def stop_review_analysis(self):
-        """Stop the current Review mode analysis search."""
+        """Stop the current Review mode analysis search.
+
+        Signals the engine thread to stop without blocking the GUI.
+        The thread is parked as ``_stale_analysis_search`` so that
+        ``poll_review_analysis`` can collect it later.  This keeps the
+        button click fully non-blocking — no ``join()`` on the GUI
+        thread — eliminating the "long press" feel.
+        """
         if self.review_analysis_search is not None:
             self.review_analysis_search.stop()
-            self.review_analysis_search.join()
-            self.review_analysis_engine = self.review_analysis_search.get_engine()
+            # Park the thread for asynchronous cleanup instead of
+            # blocking the GUI with join().
+            self._stale_analysis_search = self.review_analysis_search
             self.review_analysis_search = None
         self.clear_queue(self.review_queue)
 
     def close_review_analysis(self):
         """Stop Review analysis and close its engine process."""
         self.stop_review_analysis()
+        # Also clean up any stale search thread.
+        if self._stale_analysis_search is not None:
+            self._stale_analysis_search.join(timeout=2.0)
+            if not self._stale_analysis_search.is_alive():
+                eng = self._stale_analysis_search.get_engine()
+                if eng is not None and self.review_analysis_engine is None:
+                    self.review_analysis_engine = eng
+            self._stale_analysis_search = None
         if self.review_analysis_engine is not None:
             try:
                 self.review_analysis_engine.quit()
@@ -2958,6 +3012,11 @@ class EasyChessGui:
 
     def poll_review_analysis(self, window):
         """Consume engine messages for Review mode analysis."""
+        # Try to collect any stale analysis thread from a previous stop.
+        if self._collect_stale_search(
+                self._stale_analysis_search, 'review_analysis_engine'):
+            self._stale_analysis_search = None
+
         updated = False
         is_debouncing = bool(self.review_nav_last_time)
         while True:
@@ -2989,10 +3048,11 @@ class EasyChessGui:
                     logging.exception('Failed to parse Review mode analysis info.')
             elif 'bestmove' in msg_str:
                 if self.review_analysis_search is not None:
-                    self.review_analysis_search.join()
-                    self.review_analysis_engine = \
-                        self.review_analysis_search.get_engine()
-                    self.review_analysis_search = None
+                    self.review_analysis_search.join(timeout=0.1)
+                    if not self.review_analysis_search.is_alive():
+                        self.review_analysis_engine = \
+                            self.review_analysis_search.get_engine()
+                        self.review_analysis_search = None
                 if self.review_analysis_enabled and not is_debouncing:
                     self.review_analysis_status = \
                         'Analysis ready - {}'.format(self.analysis_id_name)
@@ -3020,17 +3080,27 @@ class EasyChessGui:
         return '{} | {}'.format(prefix, limited_pv)
 
     def stop_review_threat(self):
-        """Stop the current Review mode threat analysis search."""
+        """Stop the current Review mode threat analysis search.
+
+        Non-blocking, similar to ``stop_review_analysis``.
+        """
         if self.review_threat_search is not None:
             self.review_threat_search.stop()
-            self.review_threat_search.join()
-            self.review_threat_engine = self.review_threat_search.get_engine()
+            self._stale_threat_search = self.review_threat_search
             self.review_threat_search = None
         self.clear_queue(self.threat_queue)
 
     def close_review_threat(self):
         """Stop threat analysis and close its engine process."""
         self.stop_review_threat()
+        # Also clean up any stale search thread.
+        if self._stale_threat_search is not None:
+            self._stale_threat_search.join(timeout=2.0)
+            if not self._stale_threat_search.is_alive():
+                eng = self._stale_threat_search.get_engine()
+                if eng is not None and self.review_threat_engine is None:
+                    self.review_threat_engine = eng
+            self._stale_threat_search = None
         if self.review_threat_engine is not None:
             try:
                 self.review_threat_engine.quit()
@@ -3116,6 +3186,11 @@ class EasyChessGui:
 
     def poll_review_threat(self, window):
         """Consume engine messages for Review mode threat analysis."""
+        # Try to collect any stale threat thread from a previous stop.
+        if self._collect_stale_search(
+                self._stale_threat_search, 'review_threat_engine'):
+            self._stale_threat_search = None
+
         updated = False
         is_debouncing = bool(self.review_nav_last_time)
         while True:
@@ -3136,10 +3211,11 @@ class EasyChessGui:
                 updated = True
             elif 'bestmove' in msg_str:
                 if self.review_threat_search is not None:
-                    self.review_threat_search.join()
-                    self.review_threat_engine = \
-                        self.review_threat_search.get_engine()
-                    self.review_threat_search = None
+                    self.review_threat_search.join(timeout=0.1)
+                    if not self.review_threat_search.is_alive():
+                        self.review_threat_engine = \
+                            self.review_threat_search.get_engine()
+                        self.review_threat_search = None
                 if self.review_threat_enabled and not is_debouncing:
                     self.review_threat_status = \
                         'Threat ready - {}'.format(self.threat_id_name)
