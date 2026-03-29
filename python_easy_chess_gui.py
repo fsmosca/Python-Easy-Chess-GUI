@@ -2953,7 +2953,7 @@ class EasyChessGui:
             [sg.Multiline('', do_not_clear=True, autoscroll=False,
                           size=(52, REVIEW_ANALYSIS_BOX_HEIGHT),
                           font=('Consolas', 10), key='review_analysis_k',
-                          disabled=True)]
+                          disabled=True, wrap_lines=False)]
         ]
 
         board_column = [[sg.Column(board_layout)]]
