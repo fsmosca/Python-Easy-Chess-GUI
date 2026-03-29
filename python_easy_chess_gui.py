@@ -489,12 +489,17 @@ class RunEngine(threading.Thread):
         """
         with open(self.engine_config_file, 'r') as json_file:
             data = json.load(json_file)
+            managed_uci_options = {name.lower() for name in MANAGED_UCI_OPTIONS}
             for p in data:
                 if p['name'] == self.engine_id_name:
                     for n in p['options']:
+                        option_name = n['name'].lower()
 
-                        if n['name'].lower() == 'ownbook':
+                        if option_name == 'ownbook':
                             self.is_ownbook = True
+
+                        if self.analysis and option_name in managed_uci_options:
+                            continue
 
                         # Ignore button type for a moment.
                         if n['type'] == 'button':
