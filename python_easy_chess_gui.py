@@ -2099,7 +2099,7 @@ class EasyChessGui:
                                 continue
                             except Exception:
                                 logging.exception(
-                                    'Unexpected error reading adviser queue.')
+                                    'Unexpected error reading adviser queue')
                                 continue
 
                             if 'bestmove' in msg:
