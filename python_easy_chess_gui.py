@@ -489,12 +489,18 @@ class RunEngine(threading.Thread):
         """
         with open(self.engine_config_file, 'r') as json_file:
             data = json.load(json_file)
+            managed_uci_options = {name.lower() for name in MANAGED_UCI_OPTIONS}
             for p in data:
                 if p['name'] == self.engine_id_name:
                     for n in p['options']:
+                        option_name = n['name'].lower()
 
-                        if n['name'].lower() == 'ownbook':
+                        if option_name == 'ownbook':
                             self.is_ownbook = True
+
+                        # Analysis-managed options are applied at runtime.
+                        if self.analysis and option_name in managed_uci_options:
+                            continue
 
                         # Ignore button type for a moment.
                         if n['type'] == 'button':
@@ -2071,6 +2077,7 @@ class EasyChessGui:
                         search.get_board(board)
                         search.daemon = True
                         search.start()
+                        adviser_line = None
 
                         while True:
                             button, value = window.Read(timeout=10)
@@ -2084,29 +2091,39 @@ class EasyChessGui:
                                 is_search_stop_for_exit = True
                             try:
                                 msg = self.queue.get_nowait()
-                                if 'pv' in msg:
-                                    # Reformat msg, remove the word pv at the end
-                                    msg_line = ' '.join(msg.split()[0:-1])
-                                    window.Element('advise_info_k').Update(msg_line)
+                                if 'info_all' in msg:
+                                    # Extract PV moves: format is
+                                    # "{score} | {depth} | {time}s | {moves} info_all"
+                                    parts = msg.split('|')
+                                    if len(parts) >= 4:
+                                        pv_part = parts[-1].strip()
+                                        # Remove trailing info_all tag
+                                        pv_moves = pv_part.replace('info_all', '').strip()
+                                    else:
+                                        pv_moves = msg.replace('info_all', '').strip()
+                                    # Limit to 5 moves
+                                    move_list = pv_moves.split()
+                                    adviser_line = ' '.join(move_list[:5])
+                                    window.Element('advise_info_k').Update(adviser_line)
+                            except queue.Empty:
+                                continue
                             except Exception:
+                                logging.exception(
+                                    'Unexpected error reading adviser queue')
                                 continue
 
                             if 'bestmove' in msg:
-                                # bestmove can be None so we do try/except
-                                try:
-                                    # Shorten msg line to 3 ply moves
-                                    msg_line = ' '.join(msg_line.split()[0:3])
-                                    msg_line += ' - ' + self.adviser_id_name
-                                    window.Element('advise_info_k').Update(msg_line)
-                                except Exception:
-                                    logging.exception('Adviser engine error')
-                                    sg.popup(
-                                        f'Adviser engine {self.adviser_id_name} error.\n \
-                                        It is better to change this engine.\n \
-                                        Change to Neutral mode first.',
-                                        icon=ico_path[platform]['pecg'],
-                                        title=BOX_TITLE
-                                    )
+                                if adviser_line:
+                                    adviser_line += ' ... ' + self.adviser_id_name
+                                else:
+                                    bestmove_parts = msg.split(maxsplit=1)
+                                    if len(bestmove_parts) > 1:
+                                        bestmove = bestmove_parts[1]
+                                    else:
+                                        bestmove = '(none)'
+                                    adviser_line = \
+                                        f'{bestmove} ... {self.adviser_id_name}'
+                                window.Element('advise_info_k').Update(adviser_line)
                                 break
 
                         search.join()
