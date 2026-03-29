@@ -70,6 +70,7 @@ BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
 REVIEW_ANALYSIS_PV_MOVES = 7
+REVIEW_NAV_DEBOUNCE_SEC = 0.3
 REVIEW_MOVE_LIST_HEIGHT = 11
 REVIEW_ANALYSIS_BOX_HEIGHT = 4
 
@@ -831,6 +832,7 @@ class EasyChessGui:
         self.review_analysis_status = 'Analysis stopped'
         self.review_analysis_search = None
         self.review_analysis_engine = None
+        self.review_nav_last_time = 0
 
     def update_game(self, mc: int, user_move: str, time_left: int, user_comment: str):
         """Saves moves in the game.
@@ -3110,6 +3112,14 @@ class EasyChessGui:
             # Skip timeout events as analysis updates are processed by
             # poll_review_analysis() called earlier in the loop.
             if button == sg.TIMEOUT_KEY:
+                # Restart analysis after debounce delay following navigation.
+                if (self.review_nav_last_time
+                        and self.review_analysis_enabled
+                        and self.review_analysis_search is None
+                        and time.time() - self.review_nav_last_time
+                            >= REVIEW_NAV_DEBOUNCE_SEC):
+                    self.review_nav_last_time = 0
+                    self.start_review_analysis(review_window)
                 continue
 
             if button is None:
@@ -3202,7 +3212,14 @@ class EasyChessGui:
 
             if position_changed:
                 self.update_review_window(review_window)
-                self.refresh_review_analysis(review_window)
+                if self.review_analysis_enabled:
+                    self.stop_review_analysis()
+                    self.review_nav_last_time = time.time()
+                    self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+                    self.review_analysis_status = 'Waiting...'
+                    self.update_review_analysis_panel(review_window)
+                else:
+                    self.refresh_review_analysis(review_window)
 
         self.close_review_analysis()
         review_window.Close()
