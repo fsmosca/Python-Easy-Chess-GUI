@@ -691,13 +691,17 @@ class RunEngine(threading.Thread):
         # Apply engine move delay if movetime is small
         if self.is_move_delay:
             while True:
-                if time.perf_counter() - start_time >= self.move_delay_sec:
+                if (self._kill.is_set()
+                        or time.perf_counter() - start_time
+                        >= self.move_delay_sec):
                     break
                 logging.info('Delay sending of best move {}'.format(self.bm))
                 time.sleep(1.0)
 
         # If bm is None, we will use engine.play()
-        if self.bm is None:
+        # Skip this fallback when the search was explicitly interrupted
+        # to avoid blocking the thread with an unconstrained engine call.
+        if self.bm is None and not self._kill.is_set():
             logging.info('bm is none, we will try engine,play().')
             try:
                 result = self.engine.play(self.board, limit)
