@@ -556,7 +556,10 @@ class RunEngine(threading.Thread):
             logging.exception('Failed to configure runtime analysis options.')
 
         # Set search limits
-        if self.tc_type == 'delay':
+        if self.tc_type == 'infinite':
+            limit = chess.engine.Limit(
+                depth=self.max_depth if self.max_depth != MAX_DEPTH else None)
+        elif self.tc_type == 'delay':
             limit = chess.engine.Limit(
                 depth=self.max_depth if self.max_depth != MAX_DEPTH else None,
                 white_clock=self.base_ms/1000,
@@ -629,9 +632,9 @@ class RunEngine(threading.Thread):
                             self.eng_queue.put('{}'.format(info_to_send))
 
                         # Send stop if movetime is exceeded
-                        if not is_time_check and self.tc_type != 'fischer' \
-                                and self.tc_type != 'delay' and \
-                                time.perf_counter() - start_time >= \
+                        if not is_time_check \
+                                and self.tc_type not in ('fischer', 'delay', 'infinite') \
+                                and time.perf_counter() - start_time >= \
                                 self.base_ms/1000:
                             logging.info('Max time limit is reached.')
                             is_time_check = True
@@ -2807,7 +2810,7 @@ class EasyChessGui:
             self.review_queue, self.engine_config_file,
             self.analysis_path_and_file, self.analysis_id_name,
             self.max_depth, self.engine_base_time_ms, self.engine_inc_time_ms,
-            tc_type=self.engine_tc_type,
+            tc_type='infinite',
             period_moves=0,
             is_stream_search_info=True,
             existing_engine=self.review_analysis_engine,
