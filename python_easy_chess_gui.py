@@ -71,8 +71,10 @@ REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
 REVIEW_ANALYSIS_PV_MOVES = 7
 REVIEW_NAV_DEBOUNCE_SEC = 0.3
-REVIEW_MOVE_LIST_HEIGHT = 11
+REVIEW_MOVE_LIST_HEIGHT = 8   # reduced from 11 to make room for the threat panel
 REVIEW_ANALYSIS_BOX_HEIGHT = 4
+REVIEW_THREAT_BOX_HEIGHT = 2
+REVIEW_THREAT_PV_PLIES = 5
 
 
 platform = sys.platform
@@ -165,6 +167,11 @@ the Adviser label and press show.
 To review with engine analysis, select the analysis engine with
 Engine->Set Engine Analysis, then press Start Analysis in Review mode.
 
+To see what the opponent threatens from a given position, select the
+threat engine with Engine->Set Engine Threat, then press the Threat
+button in Review mode. The engine analyses what the opponent would play
+if the side to move were to pass (null move). The display is suppressed
+when the side to move is in check.
 (B) To play a game
 You should be in Play mode.
 1. Mode->Play
@@ -256,7 +263,7 @@ menu_def_neutral = [
                                       'Gray::board_color_k'],
                     'Theme', GUI_THEME]],
         ['&Engine', ['Set Engine Adviser', 'Set Engine Analysis',
-                     'Set Engine Opponent', 'Set Depth',
+                     'Set Engine Threat', 'Set Engine Opponent', 'Set Depth',
                      'Manage', ['Install', 'Edit', 'Delete']]],
         ['&Time', ['User::tc_k', 'Engine::tc_k']],
         ['&Book', ['Set Book::book_set_k']],
@@ -824,7 +831,11 @@ class EasyChessGui:
         self.analysis_file = None
         self.analysis_path_and_file = None
         self.analysis_id_name = None
+        self.threat_file = None
+        self.threat_path_and_file = None
+        self.threat_id_name = None
         self.review_queue = queue.Queue()
+        self.threat_queue = queue.Queue()
         self.reset_review_state()
 
     def reset_review_state(self):
@@ -841,6 +852,11 @@ class EasyChessGui:
         self.review_analysis_status = 'Analysis stopped'
         self.review_analysis_search = None
         self.review_analysis_engine = None
+        self.review_threat_enabled = False
+        self.review_threat_status = 'Threat stopped'
+        self.review_threat_line = ''
+        self.review_threat_search = None
+        self.review_threat_engine = None
         self.review_nav_last_time = 0
 
     def update_game(self, mc: int, user_move: str, time_left: int, user_comment: str):
@@ -2985,6 +3001,152 @@ class EasyChessGui:
         if updated:
             self.update_review_analysis_panel(window)
 
+    def update_review_threat_panel(self, window):
+        """Refresh Review mode threat analysis widgets."""
+        window['review_threat_status_k'].Update(self.review_threat_status)
+        window['review_threat_k'].Update(
+            self.review_threat_line if self.review_threat_line else ' ')
+
+    def shorten_threat_line(self, info_line):
+        """Limit the threat PV display to REVIEW_THREAT_PV_PLIES moves."""
+        try:
+            prefix, pv_text = info_line.rsplit(' | ', 1)
+        except ValueError:
+            return info_line
+
+        pv_moves = pv_text.split()
+        limited_pv = ' '.join(pv_moves[:REVIEW_THREAT_PV_PLIES])
+        return '{} | {}'.format(prefix, limited_pv)
+
+    def stop_review_threat(self):
+        """Stop the current Review mode threat analysis search."""
+        if self.review_threat_search is not None:
+            self.review_threat_search.stop()
+            self.review_threat_search.join()
+            self.review_threat_engine = self.review_threat_search.get_engine()
+            self.review_threat_search = None
+        self.clear_queue(self.threat_queue)
+
+    def close_review_threat(self):
+        """Stop threat analysis and close its engine process."""
+        self.stop_review_threat()
+        if self.review_threat_engine is not None:
+            try:
+                self.review_threat_engine.quit()
+            except Exception:
+                logging.exception('Failed to quit threat engine.')
+            finally:
+                self.review_threat_engine = None
+
+    def create_null_move_board(self, board):
+        """Return a board with the side to move flipped (simulating a pass).
+
+        En passant is cleared because it is only valid for a single ply; once
+        the current side passes, the en passant window expires before the
+        opponent can use it.
+        """
+        fen_parts = board.fen().split(' ')
+        fen_parts[1] = 'b' if fen_parts[1] == 'w' else 'w'
+        fen_parts[3] = '-'  # en passant expires after one ply
+        return chess.Board(' '.join(fen_parts))
+
+    def start_review_threat(self, window):
+        """Start threat analysis for the current Review mode position.
+
+        The engine analyses the position after a null move (side to move
+        passes), revealing what the opponent threatens.  If the side to move
+        is in check the feature is unavailable for that position.
+        """
+        if self.review_game is None or not self.review_boards:
+            return
+
+        board = self.review_boards[self.review_move_index]
+
+        # Cannot use null move when the side to move is in check.
+        if board.is_check():
+            self.review_threat_status = 'Check - threat N/A'
+            self.review_threat_line = ''
+            self.update_review_threat_panel(window)
+            return
+
+        if self.threat_path_and_file is None or self.threat_id_name is None:
+            self.review_threat_enabled = False
+            self.review_threat_status = 'No threat engine selected'
+            self.review_threat_line = ''
+            self.update_review_threat_panel(window)
+            return
+
+        self.stop_review_threat()
+        self.review_threat_enabled = True
+        self.review_threat_line = ''
+        self.review_threat_status = 'Threat: {} pos {}'.format(
+            self.threat_id_name, self.review_move_index)
+        self.update_review_threat_panel(window)
+
+        # Build a null-move board: flip the side to move so the engine sees
+        # the position as if the current side passed their turn.
+        threat_board = self.create_null_move_board(board)
+
+        search = RunEngine(
+            self.threat_queue, self.engine_config_file,
+            self.threat_path_and_file, self.threat_id_name,
+            self.max_depth, self.engine_base_time_ms, self.engine_inc_time_ms,
+            tc_type='infinite',
+            period_moves=0,
+            is_stream_search_info=True,
+            existing_engine=self.review_threat_engine,
+            multipv=1
+        )
+        search.get_board(threat_board)
+        search.is_move_delay = False
+        search.daemon = True
+        search.start()
+        self.review_threat_search = search
+        self.review_threat_engine = None
+
+    def refresh_review_threat(self, window):
+        """Restart threat analysis after the Review mode position changes."""
+        if not self.review_threat_enabled:
+            self.review_threat_line = ''
+            self.review_threat_status = 'Threat stopped'
+            self.update_review_threat_panel(window)
+            return
+        self.start_review_threat(window)
+
+    def poll_review_threat(self, window):
+        """Consume engine messages for Review mode threat analysis."""
+        updated = False
+        is_debouncing = bool(self.review_nav_last_time)
+        while True:
+            try:
+                msg = self.threat_queue.get_nowait()
+            except queue.Empty:
+                break
+            except Exception:
+                logging.exception('Failed to read threat analysis queue.')
+                break
+
+            msg_str = str(msg)
+            if 'info_all' in msg_str:
+                if is_debouncing:
+                    continue
+                info_line = msg_str.rsplit(' info_all', 1)[0]
+                self.review_threat_line = self.shorten_threat_line(info_line)
+                updated = True
+            elif 'bestmove' in msg_str:
+                if self.review_threat_search is not None:
+                    self.review_threat_search.join()
+                    self.review_threat_engine = \
+                        self.review_threat_search.get_engine()
+                    self.review_threat_search = None
+                if self.review_threat_enabled and not is_debouncing:
+                    self.review_threat_status = \
+                        'Threat ready - {}'.format(self.threat_id_name)
+                    updated = True
+
+        if updated:
+            self.update_review_threat_panel(window)
+
     def update_review_window(self, window):
         """Refresh review widgets based on current review state."""
         if self.review_game is None or not self.review_boards:
@@ -3031,6 +3193,7 @@ class EasyChessGui:
         self.set_board_from_board_state(
             window, self.review_boards[self.review_move_index])
         self.update_review_analysis_panel(window)
+        self.update_review_threat_panel(window)
 
     def build_review_layout(self, is_user_white=True):
         """Create review mode layout with navigation controls."""
@@ -3061,6 +3224,15 @@ class EasyChessGui:
                           disabled=True, expand_y=True)],
             [sg.Text('Position 0/0', size=(20, 1), font=('Consolas', 10),
                      key='review_nav_k', relief='sunken')],
+            [sg.Text('Threat stopped', size=(40, 1), font=('Consolas', 10),
+                     key='review_threat_status_k', relief='sunken'),
+             sg.Button('Threat', key='review_toggle_threat_k', size=(10, 1),
+                       tooltip='Toggle threat analysis: engine analyses what the '
+                               'opponent threatens if the side to move were to pass.')],
+            [sg.Multiline('', do_not_clear=True, autoscroll=False,
+                          size=(52, REVIEW_THREAT_BOX_HEIGHT),
+                          font=('Consolas', 10), key='review_threat_k',
+                          disabled=True, wrap_lines=False)],
             [sg.Text('Analysis stopped', size=(52, 1), font=('Consolas', 10),
                      key='review_analysis_status_k', relief='sunken')],
             [sg.Multiline('', do_not_clear=True, autoscroll=False,
@@ -3122,22 +3294,25 @@ class EasyChessGui:
         while True:
             button, value = review_window.Read(timeout=50)
             self.poll_review_analysis(review_window)
+            self.poll_review_threat(review_window)
 
             # Skip timeout events as analysis updates are processed by
-            # poll_review_analysis() called earlier in the loop.
+            # poll_review_analysis() and poll_review_threat() called earlier.
             if button == sg.TIMEOUT_KEY:
-                # Restart analysis after debounce delay following navigation.
+                # Restart analysis/threat after debounce delay following navigation.
                 nav_time = self.review_nav_last_time
                 if (nav_time
-                        and self.review_analysis_enabled
-                        and time.time() - nav_time
-                            >= REVIEW_NAV_DEBOUNCE_SEC):
+                        and time.time() - nav_time >= REVIEW_NAV_DEBOUNCE_SEC):
                     self.review_nav_last_time = 0
-                    self.start_review_analysis(review_window)
+                    if self.review_analysis_enabled:
+                        self.start_review_analysis(review_window)
+                    if self.review_threat_enabled:
+                        self.start_review_threat(review_window)
                 continue
 
             if button is None:
                 self.close_review_analysis()
+                self.close_review_threat()
                 review_window.Close()
                 sys.exit(0)
 
@@ -3160,6 +3335,7 @@ class EasyChessGui:
                     selected_game['game'], selected_game['game_index'])
                 self.update_review_window(review_window)
                 self.refresh_review_analysis(review_window)
+                self.refresh_review_threat(review_window)
                 continue
 
             if button == 'Select Game::review_select_game_k':
@@ -3174,11 +3350,13 @@ class EasyChessGui:
                     selected_game['game'], selected_game['game_index'])
                 self.update_review_window(review_window)
                 self.refresh_review_analysis(review_window)
+                self.refresh_review_threat(review_window)
                 continue
 
             if button == 'Flip':
                 review_location = review_window.CurrentLocation()
                 self.stop_review_analysis()
+                self.stop_review_threat()
                 review_window.Close()
                 self.is_user_white = not self.is_user_white
                 review_window = self.create_review_window(location=review_location)
@@ -3187,6 +3365,10 @@ class EasyChessGui:
                     self.start_review_analysis(review_window)
                 else:
                     self.update_review_analysis_panel(review_window)
+                if self.review_threat_enabled:
+                    self.start_review_threat(review_window)
+                else:
+                    self.update_review_threat_panel(review_window)
                 continue
 
             if button == 'review_start_analysis_k':
@@ -3199,6 +3381,17 @@ class EasyChessGui:
                 self.review_analysis_status = 'Analysis stopped'
                 self.stop_review_analysis()
                 self.update_review_analysis_panel(review_window)
+                continue
+
+            if button == 'review_toggle_threat_k':
+                if self.review_threat_enabled:
+                    self.review_threat_enabled = False
+                    self.review_threat_line = ''
+                    self.review_threat_status = 'Threat stopped'
+                    self.stop_review_threat()
+                    self.update_review_threat_panel(review_window)
+                else:
+                    self.start_review_threat(review_window)
                 continue
 
             position_changed = False
@@ -3226,20 +3419,27 @@ class EasyChessGui:
 
             if position_changed:
                 self.update_review_window(review_window)
-                if self.review_analysis_enabled:
-                    # Signal the analysis thread to stop without blocking.
+                if self.review_analysis_enabled or self.review_threat_enabled:
+                    # Signal threads to stop without blocking.
                     # The actual join and restart happen in the debounce
                     # handler after the user stops pressing buttons.
                     if self.review_analysis_search is not None:
                         self.review_analysis_search.stop()
+                    if self.review_threat_search is not None:
+                        self.review_threat_search.stop()
                     self.review_nav_last_time = time.time()
                     self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
                     self.review_analysis_status = 'Waiting...'
+                    self.review_threat_line = ''
+                    self.review_threat_status = 'Waiting...'
                     self.update_review_analysis_panel(review_window)
+                    self.update_review_threat_panel(review_window)
                 else:
                     self.refresh_review_analysis(review_window)
+                    self.refresh_review_threat(review_window)
 
         self.close_review_analysis()
+        self.close_review_threat()
         review_window.Close()
         self.reset_review_state()
         self.is_user_white = saved_orientation
@@ -3398,6 +3598,17 @@ class EasyChessGui:
         except Exception:
             logging.exception('Error in getting analysis engine!')
 
+    def set_default_threat_engine(self):
+        """Define the default engine used by Review mode threat analysis."""
+        try:
+            self.threat_id_name = self.engine_id_name_list[0]
+            self.threat_file, self.threat_path_and_file = \
+                self.get_engine_file(self.threat_id_name)
+        except IndexError as e:
+            logging.warning(e)
+        except Exception:
+            logging.exception('Error in getting threat engine!')
+
     def get_default_engine_opponent(self):
         engine_id_name = None
         try:
@@ -3441,6 +3652,9 @@ class EasyChessGui:
 
         # Define default analysis engine for Review mode.
         self.set_default_analysis_engine()
+
+        # Define default threat engine for Review mode.
+        self.set_default_threat_engine()
 
         self.init_game()
 
@@ -4276,6 +4490,47 @@ class EasyChessGui:
                             logging.info('User presses OK but did not select an engine.')
                         except Exception:
                             logging.exception('Failed to set analysis engine.')
+                        break
+
+                window.UnHide()
+                w.Close()
+                continue
+
+            # Mode: Neutral, Set threat engine for Review mode
+            if button == 'Set Engine Threat':
+                current_threat_engine_file = self.threat_file
+                current_threat_path_and_file = self.threat_path_and_file
+
+                layout = [
+                        [sg.T('Current Threat Engine: {}'.format(
+                            self.threat_id_name), size=(44, 1))],
+                        [sg.Listbox(values=self.engine_id_name_list, size=(48, 10),
+                                    key='threat_id_name_k')],
+                        [sg.OK(), sg.Cancel()]
+                ]
+
+                w = sg.Window(BOX_TITLE + '/Select Threat Engine', layout,
+                              icon=ico_path[platform]['adviser'])
+                window.Hide()
+
+                while True:
+                    e, v = w.Read(timeout=10)
+
+                    if e is None or e == 'Cancel':
+                        self.threat_file = current_threat_engine_file
+                        self.threat_path_and_file = current_threat_path_and_file
+                        break
+
+                    if e == 'OK':
+                        try:
+                            threat_eng_id_name = self.threat_id_name = \
+                                v['threat_id_name_k'][0]
+                            self.threat_file, self.threat_path_and_file = \
+                                self.get_engine_file(threat_eng_id_name)
+                        except IndexError:
+                            logging.info('User presses OK but did not select an engine.')
+                        except Exception:
+                            logging.exception('Failed to set threat engine.')
                         break
 
                 window.UnHide()
