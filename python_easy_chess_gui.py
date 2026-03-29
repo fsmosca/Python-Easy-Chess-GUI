@@ -2959,7 +2959,7 @@ class EasyChessGui:
             [sg.Menu(menu_def_review, tearoff=False)],
             [sg.Column(board_column, vertical_alignment='top'),
              sg.Column(board_controls, vertical_alignment='top', expand_y=True)],
-            [sg.Button('First', size=(10, 1)),
+            [sg.Button('First', size=(10, 1), pad=((10, 5), None)),
              sg.Button('Previous', size=(10, 1)),
              sg.Button('Next', size=(10, 1)),
              sg.Button('Last', size=(10, 1)),
