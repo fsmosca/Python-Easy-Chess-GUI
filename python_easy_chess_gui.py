@@ -2077,6 +2077,7 @@ class EasyChessGui:
                         search.get_board(board)
                         search.daemon = True
                         search.start()
+                        adviser_line = None
 
                         while True:
                             button, value = window.Read(timeout=10)
@@ -2092,27 +2093,24 @@ class EasyChessGui:
                                 msg = self.queue.get_nowait()
                                 if 'pv' in msg:
                                     # Reformat msg, remove the word pv at the end
-                                    msg_line = ' '.join(msg.split()[0:-1])
-                                    window.Element('advise_info_k').Update(msg_line)
+                                    adviser_line = ' '.join(msg.split()[0:-1])
+                                    window.Element('advise_info_k').Update(adviser_line)
+                            except queue.Empty:
+                                continue
                             except Exception:
+                                logging.exception('Failed to read adviser queue.')
                                 continue
 
                             if 'bestmove' in msg:
-                                # bestmove can be None so we do try/except
-                                try:
-                                    # Shorten msg line to 3 ply moves
-                                    msg_line = ' '.join(msg_line.split()[0:3])
-                                    msg_line += ' - ' + self.adviser_id_name
-                                    window.Element('advise_info_k').Update(msg_line)
-                                except Exception:
-                                    logging.exception('Adviser engine error')
-                                    sg.popup(
-                                        f'Adviser engine {self.adviser_id_name} error.\n \
-                                        It is better to change this engine.\n \
-                                        Change to Neutral mode first.',
-                                        icon=ico_path[platform]['pecg'],
-                                        title=BOX_TITLE
-                                    )
+                                if adviser_line:
+                                    adviser_line = ' '.join(
+                                        adviser_line.split()[0:3])
+                                else:
+                                    bestmove = msg.split(maxsplit=1)[1] \
+                                        if len(msg.split(maxsplit=1)) > 1 else 'None'
+                                    adviser_line = f'bestmove {bestmove}'
+                                adviser_line += ' - ' + self.adviser_id_name
+                                window.Element('advise_info_k').Update(adviser_line)
                                 break
 
                         search.join()
