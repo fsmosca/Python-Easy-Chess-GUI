@@ -72,7 +72,7 @@ REVIEW_ANALYSIS_MULTIPV_LINES = 3
 REVIEW_ANALYSIS_PV_MOVES = 7
 REVIEW_NAV_DEBOUNCE_SEC = 0.3
 REVIEW_MOVE_LIST_HEIGHT = 8   # reduced from 11 to make room for the threat panel
-REVIEW_ANALYSIS_BOX_HEIGHT = 4
+REVIEW_ANALYSIS_BOX_HEIGHT = 3
 REVIEW_THREAT_BOX_HEIGHT = 2
 REVIEW_THREAT_PV_PLIES = 5
 
@@ -3315,24 +3315,25 @@ class EasyChessGui:
             [sg.Multiline('', do_not_clear=True, autoscroll=False,
                           size=(52, REVIEW_ANALYSIS_BOX_HEIGHT),
                           font=('Consolas', 10), key='review_analysis_k',
-                          disabled=True, wrap_lines=False)]
+                          disabled=True, wrap_lines=False)],
+            [sg.Button('Start Analysis', key='review_start_analysis_k',
+                       tooltip='Start or restart engine analysis for the current position.'),
+             sg.Button('Stop Analysis', key='review_stop_analysis_k',
+                       tooltip='Stop engine analysis updates in Review mode.')]
         ]
 
-        board_column = [[sg.Column(board_layout)]]
+        board_column = [
+            [sg.Column(board_layout)],
+            [sg.Button('First', size=(10, 1), pad=((10, 5), None)),
+             sg.Button('Previous', size=(10, 1)),
+             sg.Button('Next', size=(10, 1)),
+             sg.Button('Last', size=(10, 1))]
+        ]
 
         layout = [
             [sg.Menu(menu_def_review, tearoff=False)],
             [sg.Column(board_column, vertical_alignment='top'),
-             sg.Column(board_controls, vertical_alignment='top', expand_y=True)],
-            [sg.Button('First', size=(10, 1), pad=((10, 5), None)),
-             sg.Button('Previous', size=(10, 1)),
-             sg.Button('Next', size=(10, 1)),
-             sg.Button('Last', size=(10, 1)),
-             sg.Text('', size=(12, 1)),
-             sg.Button('Start Analysis', key='review_start_analysis_k',
-                       tooltip='Start or restart engine analysis for the current position.'),
-             sg.Button('Stop Analysis', key='review_stop_analysis_k',
-                       tooltip='Stop engine analysis updates in Review mode.')]
+             sg.Column(board_controls, vertical_alignment='top', expand_y=True)]
         ]
 
         return layout
