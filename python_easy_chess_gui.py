@@ -610,76 +610,73 @@ class RunEngine(threading.Thread):
                     self._analysis_ref = analysis
                 # Check kill flag after storing the reference in case
                 # stop() was called between thread start and here.
-                if self._kill.is_set():
-                    # analysis.__exit__ will send 'stop' automatically
-                    pass
-                else:
-                  for info in analysis:
+                if not self._kill.is_set():
+                    for info in analysis:
 
-                    if self._kill.is_set():
-                        break
-
-                    try:
-                        line_number = int(info.get('multipv', 1))
-                        depth = int(info['depth']) if 'depth' in info else self.depth
-                        score = self.score
-                        if 'score' in info:
-                            score = int(
-                                info['score'].relative.score(mate_score=32000)
-                            ) / 100
-                        elapsed = info['time'] if 'time' in info else \
-                            time.perf_counter() - start_time
-                        pv = None
-
-                        if 'pv' in info and not ('upperbound' in info or
-                                                 'lowerbound' in info):
-                            self.pv = info['pv'][0:self.pv_length]
-
-                            if self.is_nomove_number_in_variation:
-                                pv = self.short_variation_san()
-                            else:
-                                pv = self.board.variation_san(self.pv)
-
-                            if line_number == 1:
-                                self.bm = info['pv'][0]
-
-                        if line_number == 1 and depth is not None:
-                            self.depth = depth
-                        if line_number == 1 and score is not None:
-                            self.score = score
-                        if line_number == 1:
-                            self.time = elapsed
-                            if pv is not None:
-                                self.pv = pv
-
-                        if score is not None and pv is not None and depth is not None:
-                            if self.multipv > 1:
-                                info_to_send = \
-                                    '{} | {:+5.2f} | {} | {:0.1f}s | {} multipv_info'.format(
-                                        line_number, score, depth, elapsed, pv)
-                            else:
-                                info_to_send = \
-                                    '{:+5.2f} | {} | {:0.1f}s | {} info_all'.format(
-                                        score, depth, elapsed, pv)
-                            self.eng_queue.put('{}'.format(info_to_send))
-
-                        # Send stop if movetime is exceeded
-                        if not is_time_check \
-                                and self.tc_type not in ('fischer', 'delay', 'infinite') \
-                                and time.perf_counter() - start_time >= \
-                                self.base_ms/1000:
-                            logging.info('Max time limit is reached.')
-                            is_time_check = True
+                        if self._kill.is_set():
                             break
 
-                        # Send stop if max depth is exceeded
-                        if 'depth' in info:
-                            if int(info['depth']) >= self.max_depth \
-                                    and self.max_depth != MAX_DEPTH:
-                                logging.info('Max depth limit is reached.')
+                        try:
+                            line_number = int(info.get('multipv', 1))
+                            depth = int(info['depth']) if 'depth' in info else self.depth
+                            score = self.score
+                            if 'score' in info:
+                                score = int(
+                                    info['score'].relative.score(mate_score=32000)
+                                ) / 100
+                            elapsed = info['time'] if 'time' in info else \
+                                time.perf_counter() - start_time
+                            pv = None
+
+                            if 'pv' in info and not ('upperbound' in info or
+                                                     'lowerbound' in info):
+                                self.pv = info['pv'][0:self.pv_length]
+
+                                if self.is_nomove_number_in_variation:
+                                    pv = self.short_variation_san()
+                                else:
+                                    pv = self.board.variation_san(self.pv)
+
+                                if line_number == 1:
+                                    self.bm = info['pv'][0]
+
+                            if line_number == 1 and depth is not None:
+                                self.depth = depth
+                            if line_number == 1 and score is not None:
+                                self.score = score
+                            if line_number == 1:
+                                self.time = elapsed
+                                if pv is not None:
+                                    self.pv = pv
+
+                            if score is not None and pv is not None and depth is not None:
+                                if self.multipv > 1:
+                                    info_to_send = \
+                                        '{} | {:+5.2f} | {} | {:0.1f}s | {} multipv_info'.format(
+                                            line_number, score, depth, elapsed, pv)
+                                else:
+                                    info_to_send = \
+                                        '{:+5.2f} | {} | {:0.1f}s | {} info_all'.format(
+                                            score, depth, elapsed, pv)
+                                self.eng_queue.put('{}'.format(info_to_send))
+
+                            # Send stop if movetime is exceeded
+                            if not is_time_check \
+                                    and self.tc_type not in ('fischer', 'delay', 'infinite') \
+                                    and time.perf_counter() - start_time >= \
+                                    self.base_ms/1000:
+                                logging.info('Max time limit is reached.')
+                                is_time_check = True
                                 break
-                    except Exception:
-                        logging.exception('Failed to parse search info.')
+
+                            # Send stop if max depth is exceeded
+                            if 'depth' in info:
+                                if int(info['depth']) >= self.max_depth \
+                                        and self.max_depth != MAX_DEPTH:
+                                    logging.info('Max depth limit is reached.')
+                                    break
+                        except Exception:
+                            logging.exception('Failed to parse search info.')
                 with self._analysis_lock:
                     self._analysis_ref = None
         else:
