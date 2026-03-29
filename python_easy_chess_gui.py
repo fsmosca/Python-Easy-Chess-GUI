@@ -1642,14 +1642,16 @@ class EasyChessGui:
         target_widget = event.widget.winfo_containing(
             event.x_root, event.y_root)
 
-        # Walk up the widget hierarchy to find a mapped board square
-        target_square = None
-        w = target_widget
-        while w is not None:
-            if w in self._widget_to_square:
-                target_square = self._widget_to_square[w]
-                break
-            w = getattr(w, 'master', None)
+        # Check directly first, then walk up the widget hierarchy
+        target_square = self._widget_to_square.get(target_widget)
+        if target_square is None:
+            w = getattr(target_widget, 'master', None) \
+                if target_widget is not None else None
+            while w is not None:
+                target_square = self._widget_to_square.get(w)
+                if target_square is not None:
+                    break
+                w = getattr(w, 'master', None)
 
         if target_square is not None and target_square != source:
             self._drag_window.write_event_value(
@@ -2237,6 +2239,11 @@ class EasyChessGui:
                             # Re-assign button to destination so existing
                             # move_state==1 code below handles execution
                             button = drag_to
+                        else:
+                            logging.debug(
+                                'Drag from empty or inconsistent square '
+                                '(%d, %d): psg_board=%s, piece_type=%s',
+                                d_fr_row, d_fr_col, d_piece, d_moved_piece)
 
                     # Mode: Play, stm: User, user starts moving
                     if type(button) is tuple:
