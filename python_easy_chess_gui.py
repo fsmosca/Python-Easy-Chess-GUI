@@ -3005,7 +3005,8 @@ class EasyChessGui:
         """Refresh Review mode threat analysis widgets."""
         window['review_threat_status_k'].Update(self.review_threat_status)
         window['review_threat_k'].Update(
-            self.review_threat_line if self.review_threat_line else ' ')
+            self.review_threat_line if self.review_threat_line else ' ',
+            text_color='red')
 
     def shorten_threat_line(self, info_line):
         """Limit the threat PV display to REVIEW_THREAT_PV_PLIES moves."""
@@ -3232,7 +3233,7 @@ class EasyChessGui:
             [sg.Multiline('', do_not_clear=True, autoscroll=False,
                           size=(52, REVIEW_THREAT_BOX_HEIGHT),
                           font=('Consolas', 10), key='review_threat_k',
-                          disabled=True, wrap_lines=False)],
+                          text_color='red', disabled=True, wrap_lines=False)],
             [sg.Text('Analysis stopped', size=(52, 1), font=('Consolas', 10),
                      key='review_analysis_status_k', relief='sunken')],
             [sg.Multiline('', do_not_clear=True, autoscroll=False,
