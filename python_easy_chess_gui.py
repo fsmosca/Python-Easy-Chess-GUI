@@ -65,9 +65,13 @@ logging.basicConfig(
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v1.19.0'
+APP_VERSION = 'v2.0.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
+REVIEW_ANALYSIS_MULTIPV_LINES = 3
+REVIEW_ANALYSIS_PV_MOVES = 7
+REVIEW_MOVE_LIST_HEIGHT = 11
+REVIEW_ANALYSIS_BOX_HEIGHT = 4
 
 
 platform = sys.platform
@@ -156,6 +160,9 @@ Engine->Set Engine Opponent.
 You can also set an engine Adviser in the Engine menu.
 During a game you can ask help from Adviser by right-clicking
 the Adviser label and press show.
+
+To review with engine analysis, select the analysis engine with
+Engine->Set Engine Analysis, then press Start Analysis in Review mode.
 
 (B) To play a game
 You should be in Play mode.
@@ -247,7 +254,8 @@ menu_def_neutral = [
                                       'Green::board_color_k',
                                       'Gray::board_color_k'],
                     'Theme', GUI_THEME]],
-        ['&Engine', ['Set Engine Adviser', 'Set Engine Opponent', 'Set Depth',
+        ['&Engine', ['Set Engine Adviser', 'Set Engine Analysis',
+                     'Set Engine Opponent', 'Set Depth',
                      'Manage', ['Install', 'Edit', 'Delete']]],
         ['&Time', ['User::tc_k', 'Engine::tc_k']],
         ['&Book', ['Set Book::book_set_k']],
@@ -390,7 +398,7 @@ class RunEngine(threading.Thread):
                  engine_id_name, max_depth=MAX_DEPTH,
                  base_ms=300000, inc_ms=1000, tc_type='fischer',
                  period_moves=0, is_stream_search_info=True,
-                 existing_engine=None):
+                 existing_engine=None, multipv=1):
         """
         Run engine as opponent or as adviser.
 
@@ -426,6 +434,10 @@ class RunEngine(threading.Thread):
         self.period_moves = period_moves
         self.is_ownbook = False
         self.is_move_delay = True
+        try:
+            self.multipv = max(1, int(multipv))
+        except (TypeError, ValueError):
+            self.multipv = 1
 
     def stop(self):
         """Interrupt engine search."""
@@ -481,6 +493,29 @@ class RunEngine(threading.Thread):
                             except Exception:
                                 logging.exception('Failed to configure engine.')
 
+    def configure_runtime_analysis_options(self):
+        """Configure transient analysis-specific engine options."""
+        if not self.analysis:
+            return
+
+        try:
+            option_names = {name.lower(): name for name in self.engine.options}
+        except Exception:
+            logging.exception('Failed to read engine options.')
+            return
+
+        if 'uci_analysemode' in option_names:
+            try:
+                self.engine.configure({option_names['uci_analysemode']: True})
+            except Exception:
+                logging.exception('Failed to enable analyse mode.')
+
+        if self.multipv > 1 and 'multipv' in option_names:
+            try:
+                self.engine.configure({option_names['multipv']: self.multipv})
+            except Exception:
+                logging.exception('Failed to set MultiPV.')
+
     def run(self):
         """Run engine to get search info and bestmove.
          
@@ -515,8 +550,16 @@ class RunEngine(threading.Thread):
             except Exception:
                 logging.exception('Failed to configure engine.')
 
+        try:
+            self.configure_runtime_analysis_options()
+        except Exception:
+            logging.exception('Failed to configure runtime analysis options.')
+
         # Set search limits
-        if self.tc_type == 'delay':
+        if self.tc_type == 'infinite':
+            limit = chess.engine.Limit(
+                depth=self.max_depth if self.max_depth != MAX_DEPTH else None)
+        elif self.tc_type == 'delay':
             limit = chess.engine.Limit(
                 depth=self.max_depth if self.max_depth != MAX_DEPTH else None,
                 white_clock=self.base_ms/1000,
@@ -538,45 +581,60 @@ class RunEngine(threading.Thread):
         if self.analysis:
             is_time_check = False
 
-            with self.engine.analysis(self.board, limit) as analysis:
+            with self.engine.analysis(self.board, limit, multipv=self.multipv) as analysis:
                 for info in analysis:
 
                     if self._kill.wait(0.1):
                         break
 
                     try:
-                        if 'depth' in info:
-                            self.depth = int(info['depth'])
-
+                        line_number = int(info.get('multipv', 1))
+                        depth = int(info['depth']) if 'depth' in info else self.depth
+                        score = self.score
                         if 'score' in info:
-                            self.score = int(info['score'].relative.score(mate_score=32000))/100
-
-                        self.time = info['time'] if 'time' in info else time.perf_counter() - start_time
+                            score = int(
+                                info['score'].relative.score(mate_score=32000)
+                            ) / 100
+                        elapsed = info['time'] if 'time' in info else \
+                            time.perf_counter() - start_time
+                        pv = None
 
                         if 'pv' in info and not ('upperbound' in info or
                                                  'lowerbound' in info):
                             self.pv = info['pv'][0:self.pv_length]
 
                             if self.is_nomove_number_in_variation:
-                                spv = self.short_variation_san()
-                                self.pv = spv
+                                pv = self.short_variation_san()
                             else:
-                                self.pv = self.board.variation_san(self.pv)
+                                pv = self.board.variation_san(self.pv)
 
-                            self.eng_queue.put('{} pv'.format(self.pv))
-                            self.bm = info['pv'][0]
+                            if line_number == 1:
+                                self.bm = info['pv'][0]
 
-                        # score, depth, time, pv
-                        if self.score is not None and \
-                                self.pv is not None and self.depth is not None:
-                            info_to_send = '{:+5.2f} | {} | {:0.1f}s | {} info_all'.format(
-                                    self.score, self.depth, self.time, self.pv)
+                        if line_number == 1 and depth is not None:
+                            self.depth = depth
+                        if line_number == 1 and score is not None:
+                            self.score = score
+                        if line_number == 1:
+                            self.time = elapsed
+                            if pv is not None:
+                                self.pv = pv
+
+                        if score is not None and pv is not None and depth is not None:
+                            if self.multipv > 1:
+                                info_to_send = \
+                                    '{} | {:+5.2f} | {} | {:0.1f}s | {} multipv_info'.format(
+                                        line_number, score, depth, elapsed, pv)
+                            else:
+                                info_to_send = \
+                                    '{:+5.2f} | {} | {:0.1f}s | {} info_all'.format(
+                                        score, depth, elapsed, pv)
                             self.eng_queue.put('{}'.format(info_to_send))
 
                         # Send stop if movetime is exceeded
-                        if not is_time_check and self.tc_type != 'fischer' \
-                                and self.tc_type != 'delay' and \
-                                time.perf_counter() - start_time >= \
+                        if not is_time_check \
+                                and self.tc_type not in ('fischer', 'delay', 'infinite') \
+                                and time.perf_counter() - start_time >= \
                                 self.base_ms/1000:
                             logging.info('Max time limit is reached.')
                             is_time_check = True
@@ -748,6 +806,10 @@ class EasyChessGui:
         self.is_save_time_left = False
         self.is_save_user_comment = True
         self.is_time_forfeit_enabled = True
+        self.analysis_file = None
+        self.analysis_path_and_file = None
+        self.analysis_id_name = None
+        self.review_queue = queue.Queue()
         self.reset_review_state()
 
     def reset_review_state(self):
@@ -759,6 +821,11 @@ class EasyChessGui:
         self.review_move_index = 0
         self.review_move_labels = []
         self.review_boards = []
+        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+        self.review_analysis_enabled = False
+        self.review_analysis_status = 'Analysis stopped'
+        self.review_analysis_search = None
+        self.review_analysis_engine = None
 
     def update_game(self, mc: int, user_move: str, time_left: int, user_comment: str):
         """Saves moves in the game.
@@ -2648,6 +2715,8 @@ class EasyChessGui:
         self.review_move_index = 0
         self.review_move_labels = ['Start position']
         self.review_boards = []
+        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+        self.review_analysis_status = 'Analysis stopped'
 
         board = game.board()
         self.review_boards.append(board.copy(stack=False))
@@ -2667,6 +2736,141 @@ class EasyChessGui:
         """Update the GUI board from a python-chess board."""
         self.fen = board.fen()
         self.fen_to_psg_board(window)
+
+    def clear_queue(self, work_queue):
+        """Remove all queued messages."""
+        while True:
+            try:
+                work_queue.get_nowait()
+            except queue.Empty:
+                break
+            except Exception:
+                break
+
+    def update_review_analysis_panel(self, window):
+        """Refresh Review mode analysis widgets."""
+        analysis_text = '\n'.join(
+            line if line else ' ' for line in self.review_analysis_lines
+        )
+        window['review_analysis_status_k'].Update(self.review_analysis_status)
+        window['review_analysis_k'].Update(analysis_text)
+
+    def shorten_review_analysis_line(self, info_line):
+        """Limit the Review mode PV display so it fits the analysis box."""
+        try:
+            prefix, pv_text = info_line.rsplit(' | ', 1)
+        except ValueError:
+            return info_line
+
+        pv_moves = pv_text.split()
+        limited_pv = ' '.join(pv_moves[:REVIEW_ANALYSIS_PV_MOVES])
+        return '{} | {}'.format(prefix, limited_pv)
+
+    def stop_review_analysis(self):
+        """Stop the current Review mode analysis search."""
+        if self.review_analysis_search is not None:
+            self.review_analysis_search.stop()
+            self.review_analysis_search.join()
+            self.review_analysis_engine = self.review_analysis_search.get_engine()
+            self.review_analysis_search = None
+        self.clear_queue(self.review_queue)
+
+    def close_review_analysis(self):
+        """Stop Review analysis and close its engine process."""
+        self.stop_review_analysis()
+        if self.review_analysis_engine is not None:
+            try:
+                self.review_analysis_engine.quit()
+            except Exception:
+                logging.exception('Failed to quit review analysis engine.')
+            finally:
+                self.review_analysis_engine = None
+
+    def start_review_analysis(self, window):
+        """Start analysis for the current Review mode position."""
+        if self.review_game is None or not self.review_boards:
+            return
+
+        if self.analysis_path_and_file is None or self.analysis_id_name is None:
+            self.review_analysis_enabled = False
+            self.review_analysis_status = 'No analysis engine selected'
+            self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+            self.update_review_analysis_panel(window)
+            return
+
+        self.stop_review_analysis()
+        self.review_analysis_enabled = True
+        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+        self.review_analysis_status = \
+            'Analysing with {} at position {}'.format(
+                self.analysis_id_name, self.review_move_index)
+        self.update_review_analysis_panel(window)
+
+        search = RunEngine(
+            self.review_queue, self.engine_config_file,
+            self.analysis_path_and_file, self.analysis_id_name,
+            self.max_depth, self.engine_base_time_ms, self.engine_inc_time_ms,
+            tc_type='infinite',
+            period_moves=0,
+            is_stream_search_info=True,
+            existing_engine=self.review_analysis_engine,
+            multipv=REVIEW_ANALYSIS_MULTIPV_LINES
+        )
+        search.get_board(self.review_boards[self.review_move_index].copy(stack=False))
+        search.is_move_delay = False
+        search.daemon = True
+        search.start()
+        self.review_analysis_search = search
+        self.review_analysis_engine = None
+
+    def refresh_review_analysis(self, window):
+        """Restart analysis after the Review mode position changes."""
+        if not self.review_analysis_enabled:
+            self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+            self.review_analysis_status = 'Analysis stopped'
+            self.update_review_analysis_panel(window)
+            return
+        self.start_review_analysis(window)
+
+    def poll_review_analysis(self, window):
+        """Consume engine messages for Review mode analysis."""
+        updated = False
+        while True:
+            try:
+                msg = self.review_queue.get_nowait()
+            except queue.Empty:
+                break
+            except Exception:
+                logging.exception('Failed to read Review mode analysis queue.')
+                break
+
+            msg_str = str(msg)
+            if 'multipv_info' in msg_str:
+                try:
+                    line_no, info_line = msg_str.split(' | ', 1)
+                    line_number = int(line_no.strip())
+                    if not 1 <= line_number <= REVIEW_ANALYSIS_MULTIPV_LINES:
+                        raise ValueError('Invalid MultiPV line number')
+                    line_index = line_number - 1
+                    info_line = info_line.rsplit(' multipv_info', 1)[0]
+                    self.review_analysis_lines[line_index] = \
+                        self.shorten_review_analysis_line(info_line)
+                    updated = True
+                except Exception:
+                    logging.exception('Failed to parse Review mode analysis info.')
+            elif 'bestmove' in msg_str:
+                if self.review_analysis_search is not None:
+                    self.review_analysis_search.join()
+                    self.review_analysis_engine = \
+                        self.review_analysis_search.get_engine()
+                    self.review_analysis_search = None
+                if self.review_analysis_enabled:
+                    self.review_analysis_status = \
+                        'Analysis ready - {}'.format(self.analysis_id_name)
+                    updated = True
+
+        if updated:
+            self.update_review_analysis_panel(window)
 
     def update_review_window(self, window):
         """Refresh review widgets based on current review state."""
@@ -2699,8 +2903,21 @@ class EasyChessGui:
             set_to_index=[self.review_move_index],
             scroll_to_index=self.review_move_index)
 
+        # Update book moves for the current position.
+        board = self.review_boards[self.review_move_index]
+        book_text = ''
+        for book_file in [self.computer_book_file, self.human_book_file]:
+            if os.path.isfile(book_file):
+                ref_book = GuiBook(book_file, board, self.is_random_book)
+                all_moves, is_found = ref_book.get_all_moves()
+                if is_found:
+                    book_text = all_moves
+                    break
+        window['review_book_k'].Update(book_text if book_text else 'no book moves')
+
         self.set_board_from_board_state(
             window, self.review_boards[self.review_move_index])
+        self.update_review_analysis_panel(window)
 
     def build_review_layout(self, is_user_white=True):
         """Create review mode layout with navigation controls."""
@@ -2718,25 +2935,42 @@ class EasyChessGui:
             [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
                           font=('Consolas', 10), key='review_header_k',
                           disabled=True)],
-            [sg.Text('Move list', size=(16, 1), font=('Consolas', 10))],
-            [sg.Listbox(values=['Start position'], size=(52, 16),
+            # Listbox scrollbar adds ~4 chars of visual width, so 18+30=48
+            # aligns with the 52-char Multiline/Text elements above and below.
+            [sg.Text('Move list', size=(18, 1), font=('Consolas', 10)),
+             sg.Text('Book moves', size=(30, 1), font=('Consolas', 10))],
+            [sg.Listbox(values=['Start position'], size=(18, REVIEW_MOVE_LIST_HEIGHT),
                         font=('Consolas', 10), key='review_move_list_k',
-                        enable_events=True)],
+                        enable_events=True, expand_y=True),
+             sg.Multiline('', do_not_clear=True, autoscroll=False,
+                          size=(30, REVIEW_MOVE_LIST_HEIGHT),
+                          font=('Consolas', 10), key='review_book_k',
+                          disabled=True, expand_y=True)],
             [sg.Text('Position 0/0', size=(20, 1), font=('Consolas', 10),
-                     key='review_nav_k', relief='sunken')]
+                     key='review_nav_k', relief='sunken')],
+            [sg.Text('Analysis stopped', size=(52, 1), font=('Consolas', 10),
+                     key='review_analysis_status_k', relief='sunken')],
+            [sg.Multiline('', do_not_clear=True, autoscroll=False,
+                          size=(52, REVIEW_ANALYSIS_BOX_HEIGHT),
+                          font=('Consolas', 10), key='review_analysis_k',
+                          disabled=True, wrap_lines=False)]
         ]
 
-        board_column = [
-            [sg.Column(board_layout)],
-            [sg.Button('First', size=(10, 1)),
-             sg.Button('Previous', size=(10, 1)),
-             sg.Button('Next', size=(10, 1)),
-             sg.Button('Last', size=(10, 1))]
-        ]
+        board_column = [[sg.Column(board_layout)]]
 
         layout = [
             [sg.Menu(menu_def_review, tearoff=False)],
-            [sg.Column(board_column), sg.Column(board_controls)]
+            [sg.Column(board_column, vertical_alignment='top'),
+             sg.Column(board_controls, vertical_alignment='top', expand_y=True)],
+            [sg.Button('First', size=(10, 1), pad=((10, 5), None)),
+             sg.Button('Previous', size=(10, 1)),
+             sg.Button('Next', size=(10, 1)),
+             sg.Button('Last', size=(10, 1)),
+             sg.Text('', size=(12, 1)),
+             sg.Button('Start Analysis', key='review_start_analysis_k',
+                       tooltip='Start or restart engine analysis for the current position.'),
+             sg.Button('Stop Analysis', key='review_stop_analysis_k',
+                       tooltip='Stop engine analysis updates in Review mode.')]
         ]
 
         return layout
@@ -2774,8 +3008,15 @@ class EasyChessGui:
 
         while True:
             button, value = review_window.Read(timeout=50)
+            self.poll_review_analysis(review_window)
+
+            # Skip timeout events as analysis updates are processed by
+            # poll_review_analysis() called earlier in the loop.
+            if button == sg.TIMEOUT_KEY:
+                continue
 
             if button is None:
+                self.close_review_analysis()
                 review_window.Close()
                 sys.exit(0)
 
@@ -2797,6 +3038,7 @@ class EasyChessGui:
                 self.prepare_review_game(
                     selected_game['game'], selected_game['game_index'])
                 self.update_review_window(review_window)
+                self.refresh_review_analysis(review_window)
                 continue
 
             if button == 'Select Game::review_select_game_k':
@@ -2810,35 +3052,62 @@ class EasyChessGui:
                 self.prepare_review_game(
                     selected_game['game'], selected_game['game_index'])
                 self.update_review_window(review_window)
+                self.refresh_review_analysis(review_window)
                 continue
 
             if button == 'Flip':
                 review_location = review_window.CurrentLocation()
+                self.stop_review_analysis()
                 review_window.Close()
                 self.is_user_white = not self.is_user_white
                 review_window = self.create_review_window(location=review_location)
                 self.update_review_window(review_window)
+                if self.review_analysis_enabled:
+                    self.start_review_analysis(review_window)
+                else:
+                    self.update_review_analysis_panel(review_window)
                 continue
 
+            if button == 'review_start_analysis_k':
+                self.start_review_analysis(review_window)
+                continue
+
+            if button == 'review_stop_analysis_k':
+                self.review_analysis_enabled = False
+                self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+                self.review_analysis_status = 'Analysis stopped'
+                self.stop_review_analysis()
+                self.update_review_analysis_panel(review_window)
+                continue
+
+            position_changed = False
             if button == 'First':
                 self.review_move_index = 0
+                position_changed = True
             elif button == 'Previous':
                 self.review_move_index = max(0, self.review_move_index - 1)
+                position_changed = True
             elif button == 'Next':
                 self.review_move_index = min(
                     len(self.review_boards) - 1, self.review_move_index + 1)
+                position_changed = True
             elif button == 'Last':
                 self.review_move_index = len(self.review_boards) - 1
+                position_changed = True
             elif button == 'review_move_list_k':
                 try:
                     selected_index = review_window['review_move_list_k'].Widget.curselection()[0]
                     self.review_move_index = selected_index
+                    position_changed = True
                 except (IndexError, AttributeError):
                     self.update_review_window(review_window)
                     continue
 
-            self.update_review_window(review_window)
+            if position_changed:
+                self.update_review_window(review_window)
+                self.refresh_review_analysis(review_window)
 
+        self.close_review_analysis()
         review_window.Close()
         self.reset_review_state()
         self.is_user_white = saved_orientation
@@ -2986,6 +3255,17 @@ class EasyChessGui:
         except Exception:
             logging.exception('Error in getting adviser engine!')
 
+    def set_default_analysis_engine(self):
+        """Define the default engine used by Review mode analysis."""
+        try:
+            self.analysis_id_name = self.engine_id_name_list[0]
+            self.analysis_file, self.analysis_path_and_file = \
+                self.get_engine_file(self.analysis_id_name)
+        except IndexError as e:
+            logging.warning(e)
+        except Exception:
+            logging.exception('Error in getting analysis engine!')
+
     def get_default_engine_opponent(self):
         engine_id_name = None
         try:
@@ -3026,6 +3306,9 @@ class EasyChessGui:
 
         # Define default adviser engine, user can change this later.
         self.set_default_adviser_engine()
+
+        # Define default analysis engine for Review mode.
+        self.set_default_analysis_engine()
 
         self.init_game()
 
@@ -3449,6 +3732,8 @@ class EasyChessGui:
                     engine_id_name = self.get_default_engine_opponent()
                 if self.adviser_id_name is None:
                     self.set_default_adviser_engine()
+                if self.analysis_id_name is None:
+                    self.set_default_analysis_engine()
 
                 self.update_labels_and_game_tags(window, human=self.username)
 
@@ -3815,6 +4100,47 @@ class EasyChessGui:
                             logging.info('User presses OK but did not select an engine')
                         except Exception:
                             logging.exception('Failed to set engine.')
+                        break
+
+                window.UnHide()
+                w.Close()
+                continue
+
+            # Mode: Neutral, Set analysis engine for Review mode
+            if button == 'Set Engine Analysis':
+                current_analysis_engine_file = self.analysis_file
+                current_analysis_path_and_file = self.analysis_path_and_file
+
+                layout = [
+                        [sg.T('Current Analysis Engine: {}'.format(
+                            self.analysis_id_name), size=(44, 1))],
+                        [sg.Listbox(values=self.engine_id_name_list, size=(48, 10),
+                                    key='analysis_id_name_k')],
+                        [sg.OK(), sg.Cancel()]
+                ]
+
+                w = sg.Window(BOX_TITLE + '/Select Analysis Engine', layout,
+                              icon=ico_path[platform]['adviser'])
+                window.Hide()
+
+                while True:
+                    e, v = w.Read(timeout=10)
+
+                    if e is None or e == 'Cancel':
+                        self.analysis_file = current_analysis_engine_file
+                        self.analysis_path_and_file = current_analysis_path_and_file
+                        break
+
+                    if e == 'OK':
+                        try:
+                            analysis_eng_id_name = self.analysis_id_name = \
+                                v['analysis_id_name_k'][0]
+                            self.analysis_file, self.analysis_path_and_file = \
+                                self.get_engine_file(analysis_eng_id_name)
+                        except IndexError:
+                            logging.info('User presses OK but did not select an engine.')
+                        except Exception:
+                            logging.exception('Failed to set analysis engine.')
                         break
 
                 window.UnHide()
