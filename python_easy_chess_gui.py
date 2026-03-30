@@ -3318,11 +3318,8 @@ class EasyChessGui:
                           disabled=True, expand_y=True)],
             [sg.Text('Position 0/0', size=(20, 1), font=('Consolas', 10),
                      key='review_nav_k', relief='sunken')],
-            [sg.Text('Threat stopped', size=(40, 1), font=('Consolas', 10),
-                     key='review_threat_status_k', relief='sunken'),
-             sg.Button('Threat', key='review_toggle_threat_k', size=(10, 1),
-                       tooltip='Toggle threat analysis: engine analyses what the '
-                               'opponent threatens if the side to move were to pass.')],
+            [sg.Text('Threat stopped', size=(52, 1), font=('Consolas', 10),
+                     key='review_threat_status_k', relief='sunken')],
             [sg.Multiline('', do_not_clear=True, autoscroll=False,
                           size=(52, REVIEW_THREAT_BOX_HEIGHT),
                           font=('Consolas', 10), key='review_threat_k',
@@ -3333,18 +3330,26 @@ class EasyChessGui:
                           size=(52, REVIEW_ANALYSIS_BOX_HEIGHT),
                           font=('Consolas', 10), key='review_analysis_k',
                           disabled=True, wrap_lines=False)],
-            [sg.Button('Start Analysis', key='review_start_analysis_k',
-                       tooltip='Start or restart engine analysis for the current position.'),
-             sg.Button('Stop Analysis', key='review_stop_analysis_k',
-                       tooltip='Stop engine analysis updates in Review mode.')]
+
         ]
+
+        nav_buttons = sg.Column(
+            [[sg.Button('First', size=(7, 1)),
+              sg.Button('Previous', size=(7, 1)),
+              sg.Button('Next', size=(7, 1)),
+              sg.Button('Last', size=(7, 1))]],
+            justification='left', pad=(0, 0))
+        toggle_buttons = sg.Column(
+            [[sg.Button('Analysis', key='review_toggle_analysis_k', size=(7, 1),
+                        tooltip='Toggle engine analysis for the current position.'),
+              sg.Button('Threat', key='review_toggle_threat_k', size=(7, 1),
+                        tooltip='Toggle threat analysis: engine analyses what the '
+                                'opponent threatens if the side to move were to pass.')]],
+            justification='right', pad=(0, 0))
 
         board_column = [
             [sg.Column(board_layout)],
-            [sg.Button('First', size=(10, 1), pad=((10, 5), None)),
-             sg.Button('Previous', size=(10, 1)),
-             sg.Button('Next', size=(10, 1)),
-             sg.Button('Last', size=(10, 1))]
+            [nav_buttons, sg.Push(), toggle_buttons]
         ]
 
         layout = [
@@ -3466,16 +3471,15 @@ class EasyChessGui:
                     self.update_review_threat_panel(review_window)
                 continue
 
-            if button == 'review_start_analysis_k':
-                self.start_review_analysis(review_window)
-                continue
-
-            if button == 'review_stop_analysis_k':
-                self.review_analysis_enabled = False
-                self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
-                self.review_analysis_status = 'Analysis stopped'
-                self.stop_review_analysis()
-                self.update_review_analysis_panel(review_window)
+            if button == 'review_toggle_analysis_k':
+                if self.review_analysis_enabled:
+                    self.review_analysis_enabled = False
+                    self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+                    self.review_analysis_status = 'Analysis stopped'
+                    self.stop_review_analysis()
+                    self.update_review_analysis_panel(review_window)
+                else:
+                    self.start_review_analysis(review_window)
                 continue
 
             if button == 'review_toggle_threat_k':
