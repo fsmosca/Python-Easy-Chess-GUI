@@ -2783,12 +2783,13 @@ class EasyChessGui:
 
         layout = [
             [sg.Text('PGN', size=(4, 1)),
-             sg.Input(default_text=pgn_file or '', size=(46, 1), key='pgn_k'),
+             sg.Input(default_text=pgn_file or '', key='pgn_k', expand_x=True),
              sg.FileBrowse()],
-            [sg.Button('Display Games', size=(58, 1))],
+            [sg.Button('Display Games', expand_x=True)],
             [sg.Text('Status: Load a PGN, select a game, then press OK.',
-                     size=(58, 1), key='status_k', relief='sunken')],
-            [sg.Listbox(selection_list, size=(74, 12), key='game_k')],
+                     key='status_k', relief='sunken', expand_x=True)],
+            [sg.Listbox(selection_list, size=(74, 12), key='game_k',
+                        expand_x=True)],
             [sg.Button('OK'), sg.Cancel()]
         ]
 
