@@ -52,6 +52,7 @@ import chess.pgn
 import chess.engine
 import chess.polyglot
 import logging
+import webbrowser
 import platform as sys_plat
 
 
@@ -154,78 +155,142 @@ white_init_promote_board = [[QUEENW, ROOKW, BISHOPW, KNIGHTW]]
 black_init_promote_board = [[QUEENB, ROOKB, BISHOPB, KNIGHTB]]
 
 
-HELP_MSG = """The GUI has 3 modes, Play, Review and Neutral. After startup
-you are in Neutral mode. You can go to Play or Review through Mode menu.
+# ---------------------------------------------------------------------------
+# Help system
+# ---------------------------------------------------------------------------
+# Brief, topic-focused help shown in small popups from the Help menu. The full
+# reference lives in the project README, opened via Help -> Online Help.
+# Each dict key doubles as the "::key" suffix of its Help menu item.
+HELP_TOPICS = {
+    'help_start': (
+        'Getting Started',
+        'Python Easy Chess GUI has 3 modes: Neutral, Play and Review.\n'
+        'You start in Neutral; switch using the Mode menu.\n\n'
+        '1. Install a UCI engine:  Engine -> Manage -> Install.\n'
+        '2. Choose your opponent:  Engine -> Set Engine Opponent.\n'
+        '3. Play:  Mode -> Play, then move on the board.\n\n'
+        'Games auto-save to pecg_auto_save_games.pgn.\n'
+        'For the full manual use Help -> Online Help.'),
+    'help_eng_install': (
+        'Install / Manage Engines',
+        'Neutral mode only. Only UCI engines are supported.\n\n'
+        'Install:    Engine -> Manage -> Install -> Add.\n'
+        'Configure:  Engine -> Manage -> Edit -> pick engine -> Modify\n'
+        '            (Hash, Threads and other options).\n'
+        'Remove:     Engine -> Manage -> Delete.'),
+    'help_eng_opponent': (
+        'Set Engine Opponent',
+        'Neutral mode:  Engine -> Set Engine Opponent.\n\n'
+        'This is the engine you play against; the list shows the engines\n'
+        'you have installed. Set its clock under Time -> Engine.'),
+    'help_eng_adviser': (
+        'Engine Adviser',
+        'Select it with  Engine -> Set Engine Adviser.\n\n'
+        'During a game (Play mode) right-click the Adviser label and press\n'
+        'Start to get a suggested move and score for the current position.'),
+    'help_eng_analysis': (
+        'Review Analysis Engine',
+        'Select it with  Engine -> Set Engine Analysis.\n\n'
+        'In Review mode press the Analysis button to evaluate the current\n'
+        'position (multiple lines). The search stops after the analysis\n'
+        'time in Settings -> Game (default 60s).'),
+    'help_eng_threat': (
+        'Review Threat Engine',
+        'Select it with  Engine -> Set Engine Threat.\n\n'
+        'In Review mode press the Threat button to see what the opponent\n'
+        'would play if the side to move passed (null move). Unavailable\n'
+        'while in check. Time limit: Settings -> Game (default 30s).'),
+    'help_eng_depth': (
+        'Search Depth',
+        'Engine -> Set Depth caps the search depth of the playing and\n'
+        'adviser engines. Leave at the default for no depth limit.\n'
+        'Review analysis/threat are limited by time, not depth.'),
+    'help_game_play': (
+        'Play a Game',
+        'Mode -> Play, then click the piece and its destination square\n'
+        '(or drag it). Engine -> Move Now forces the engine to move;\n'
+        'Game -> New starts a new game.'),
+    'help_game_black': (
+        'Play as Black',
+        'In Neutral mode:  Board -> Flip (black at the bottom), then\n'
+        'Mode -> Play and Engine -> Go so the engine moves first.\n'
+        '(If already in Play, switch to Neutral first.)'),
+    'help_game_fen': (
+        'Paste a FEN',
+        'In Play mode:  FEN -> Paste to set up a position from the\n'
+        'clipboard. If it is Black to move, use Engine -> Go.'),
+    'help_game_save': (
+        'Save Games and Repertoire',
+        'Every game auto-saves to pecg_auto_save_games.pgn.\n\n'
+        'In Play mode the Game menu also offers Save to My Games and\n'
+        'Save to White / Black Repertoire.'),
+    'help_game_time': (
+        'Time Control',
+        'Time -> User sets your clock; Time -> Engine sets the opponent\n'
+        'clock. Adjudication on flag-fall is toggled in Settings -> Game.'),
+    'help_review_open': (
+        'Open a Game to Review',
+        'Mode -> Review, choose a PGN file, select a game and press OK.\n'
+        'Use Game -> Load PGN / Select Game to change games later.'),
+    'help_review_nav': (
+        'Navigate Moves',
+        'Use the First, Previous, Next and Last buttons below the board,\n'
+        'or click a move in the move list to jump to that position.'),
+    'help_review_engine': (
+        'Analysis and Threat (Review)',
+        'Analysis button: evaluate the position with the analysis engine.\n'
+        'Threat button: show the opponent threat (null move).\n'
+        'Both stop after their time limits in Settings -> Game (analysis\n'
+        '60s, threat 30s) and restart automatically when you change move.'),
+    'help_board_flip': (
+        'Flip Board',
+        'Board -> Flip swaps the side shown at the bottom. Use it in\n'
+        'Neutral mode, or in Review mode via its Board menu.'),
+    'help_board_color': (
+        'Board Colors and Themes',
+        'Neutral mode:  Board -> Color changes the square colors and\n'
+        'Board -> Theme changes the overall GUI theme.'),
+}
 
-All games are auto-saved in pecg_auto_save_games.pgn.
-Visit Game menu in Play mode to see other options to save the game.
+# Online (detailed) help target for Help -> Online Help.
+ONLINE_HELP_URL = 'https://github.com/fsmosca/Python-Easy-Chess-GUI#readme'
 
-It has to be noted you need to setup an engine to make the GUI works.
-You can view which engines are ready for use via:
-Engine->Set Engine Opponent.
 
-(A) To setup an engine, you should be in Neutral mode.
-1. Engine->Manage->Install, press the add button.
-2. After engine setup, you can configure the engine options with:
-  a. Engine->Manage-Edit
-  b. Select the engine you want to edit and press Modify.
+# Help submenu fragments. Note: a literal '&' marks a keyboard accelerator in
+# menu labels, so plain words are used instead.
+HELP_ENGINE_MENU = ['Engine', ['Install / Manage::help_eng_install',
+                               'Set Opponent::help_eng_opponent',
+                               'Adviser::help_eng_adviser',
+                               'Analysis::help_eng_analysis',
+                               'Threat::help_eng_threat',
+                               'Search Depth::help_eng_depth']]
+HELP_GAME_MENU = ['Game', ['Play a Game::help_game_play',
+                           'Play as Black::help_game_black',
+                           'Paste FEN::help_game_fen',
+                           'Save and Repertoire::help_game_save',
+                           'Time Control::help_game_time']]
+HELP_REVIEW_MENU = ['Review', ['Open a Game::help_review_open',
+                               'Navigate Moves::help_review_nav',
+                               'Analysis and Threat::help_review_engine']]
+HELP_BOARD_MENU = ['Board', ['Flip::help_board_flip',
+                             'Colors and Themes::help_board_color']]
 
-Before playing a game, you should select an engine opponent via
-Engine->Set Engine Opponent.
 
-You can also set an engine Adviser in the Engine menu.
-During a game you can ask help from Adviser by right-clicking
-the Adviser label and press show.
+def make_help_menu(*sections):
+    """Return a fresh Help menu definition for a mode.
 
-To review with engine analysis, select the analysis engine with
-Engine->Set Engine Analysis, then press Start Analysis in Review mode.
-
-To see what the opponent threatens from a given position, select the
-threat engine with Engine->Set Engine Threat, then press the Threat
-button in Review mode. The engine analyses what the opponent would play
-if the side to move were to pass (null move). The display is suppressed
-when the side to move is in check.
-(B) To play a game
-You should be in Play mode.
-1. Mode->Play
-2. Make move on the board
-
-(C) To play as black
-You should be in Neutral mode
-1. Board->Flip
-2. Mode->Play
-3. Engine->Go
-If you are already in Play mode, go back to
-Neutral mode via Mode->Neutral
-
-(D) To flip board
-You should be in Neutral mode
-1. Board->Flip
-
-(E) To paste FEN
-You should be in Play mode
-1. Mode->Play
-2. FEN->Paste
-
-(F) To show engine search info after the move
-1. Right-click on the Opponent Search Info and press Show
-
-(G) To Show book 1 and 2
-1. Right-click on Book 1 or 2 press Show
-
-(H) To change board color
-1. You should be in Neutral mode.
-2. Board->Color.
-
-(I) To change board theme
-1. You should be in Neutral mode.
-2. Board->Theme.
-
-(J) To review a PGN game
-1. Mode->Review
-2. Load a PGN file, select a game and press OK
-3. Use First/Previous/Next/Last or click a move in the move list
-"""
+    ``sections`` are submenu fragments of the form ``['Label', [items]]``.
+    They are flattened into the parent so the label string and its item list
+    become siblings (the format FreeSimpleGUI expects: a cascade is a string
+    immediately followed by a list). A deep copy is returned so FreeSimpleGUI
+    cannot mutate the shared fragment lists across the three menu definitions.
+    """
+    items = ['Getting Started::help_start']
+    for section in sections:
+        items.extend(section)  # 'Label', [subitems] as two sibling elements
+    # 'Online Help' is disabled (leading '!') so it shows but is not clickable.
+    items.extend(['---', '!Online Help::help_online', 'About::help_about'])
+    return ['&Help', copy.deepcopy(items)]
 
 
 # Images/60
@@ -283,7 +348,8 @@ menu_def_neutral = [
         ['&User', ['Set Name::user_name_k']],
         ['Tools', ['PGN', ['Delete Player::delete_player_k']]],
         ['&Settings', ['Game::settings_game_k']],
-        ['&Help', ['GUI']],
+        make_help_menu(HELP_ENGINE_MENU, HELP_GAME_MENU,
+                       HELP_REVIEW_MENU, HELP_BOARD_MENU),
 ]
 
 # (2) Mode: Play, info: hide
@@ -298,7 +364,7 @@ menu_def_play = [
                    'User Draws::user_draws_k']],
         ['FEN', ['Paste']],
         ['&Engine', ['Go', 'Move Now']],
-        ['&Help', ['GUI']],
+        make_help_menu(HELP_GAME_MENU, HELP_ENGINE_MENU),
 ]
 
 # (3) Mode: Review
@@ -307,7 +373,7 @@ menu_def_review = [
         ['&Game', ['Load PGN::review_load_pgn_k',
                    'Select Game::review_select_game_k']],
         ['Boar&d', ['Flip']],
-        ['&Help', ['GUI']],
+        make_help_menu(HELP_REVIEW_MENU, HELP_ENGINE_MENU, HELP_BOARD_MENU),
 ]
 
 
@@ -1936,6 +2002,46 @@ class EasyChessGui:
 
         self.max_depth = min(MAX_DEPTH, max(MIN_DEPTH, user_depth))
 
+    def show_help_topic(self, menu_event):
+        """Show a brief help popup for a Help-menu selection.
+
+        ``menu_event`` is the full menu event string, e.g.
+        'Set Opponent::help_eng_opponent'. The Online Help and About items are
+        routed to their handlers; every other key shows a short popup from
+        HELP_TOPICS.
+        """
+        key = menu_event.split('::')[-1]
+        if key == 'help_online':
+            self.open_online_help()
+            return
+        if key == 'help_about':
+            self.show_about()
+            return
+        title, body = HELP_TOPICS.get(
+            key, ('Help', 'See Help -> Online Help for the full manual.'))
+        sg.popup_scrolled(body, title='Help - {}'.format(title),
+                          size=(64, 16), icon=ico_path[platform]['pecg'])
+
+    def show_about(self):
+        """Show the About dialog."""
+        msg = ('{} {}\n\n'
+               'A chess GUI built with FreeSimpleGUI and python-chess.\n'
+               'Install any UCI engine to play, analyse and review games.\n\n'
+               'Project:  {}\n'
+               'License:  see the bundled LICENSE file.').format(
+                   APP_NAME, APP_VERSION, ONLINE_HELP_URL)
+        sg.popup(msg, title='About {}'.format(APP_NAME),
+                 icon=ico_path[platform]['pecg'])
+
+    def open_online_help(self):
+        """Open the detailed online help (README) in the default browser."""
+        try:
+            webbrowser.open(ONLINE_HELP_URL, new=2)
+        except Exception:
+            logging.exception('Failed to open online help.')
+            sg.popup('Visit:\n{}'.format(ONLINE_HELP_URL),
+                     title='Online Help', icon=ico_path[platform]['pecg'])
+
     def define_timer(self, window, name='human'):
         """
         Returns Timer object for either human or engine.
@@ -2047,8 +2153,8 @@ class EasyChessGui:
                         is_exit_game = True
                         break
 
-                    if button == 'GUI':
-                        sg.popup_scrolled(HELP_MSG, title=BOX_TITLE)
+                    if isinstance(button, str) and '::help_' in button:
+                        self.show_help_topic(button)
                         continue
 
                     if button == 'Paste':
@@ -2300,8 +2406,8 @@ class EasyChessGui:
                         break
 
                     # Mode: Play, stm: User
-                    if button == 'GUI':
-                        sg.popup_scrolled(HELP_MSG, title=BOX_TITLE)
+                    if isinstance(button, str) and '::help_' in button:
+                        self.show_help_topic(button)
                         break
 
                     # Mode: Play, stm: User
@@ -3497,8 +3603,8 @@ class EasyChessGui:
             if button == 'Neutral':
                 break
 
-            if button == 'GUI':
-                sg.popup_scrolled(HELP_MSG, title='Help/GUI')
+            if isinstance(button, str) and '::help_' in button:
+                self.show_help_topic(button)
                 continue
 
             if button == 'Load PGN::review_load_pgn_k':
@@ -4894,8 +5000,8 @@ class EasyChessGui:
                 continue
 
             # Mode: Neutral
-            if button == 'GUI':
-                sg.popup_scrolled(HELP_MSG, title='Help/GUI')
+            if isinstance(button, str) and '::help_' in button:
+                self.show_help_topic(button)
                 continue
 
             # Mode: Neutral

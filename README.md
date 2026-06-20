@@ -63,74 +63,92 @@ pip install pyperclip
 
 #### Note
 
-If you are on linux be sure to give permission to uci engine with:  
+If you are on linux be sure to give permission to uci engine with:
 `chmod +x uci_engine_fn`.
 
-### D. How to
-#### To start the gui
-* Execute python_easy_chess_gui.py<br>
-Typical command line:<br>
-`python python_easy_chess_gui.py`
-* Execute the exe when using exe file
+### D. How to use
 
-#### To play as white
-* Mode->Play
-* Move the piece you want to move
-* Press the square you want the piece to move to
+This is the detailed manual. Inside the app, the **Help** menu gives short,
+task-focused versions of these topics (adapted to the current mode), and
+**Help → Online Help** opens this page.
 
-#### To play as black
-* If current mode is Neutral, Board->Flip, flip such that black pieces are at the bottom
-* If current mode is Play, Mode->Neutral, then Board->Flip
-* Mode->Play
-* Engine->Go
+**Contents**
+* [Modes](#modes)
+* [Start the GUI](#start-the-gui)
+* [Play a game](#play-a-game)
+* [Engine setup and management](#engine-setup-and-management)
+* [Review mode — replay and analyse](#review-mode--replay-and-analyse)
+* [Settings / Game](#settings--game)
+* [Opponent book](#opponent-book)
+* [Show / hide info panels](#show--hide-info-panels)
+* [Board appearance](#board-appearance)
+* [Files the app writes](#files-the-app-writes)
 
-#### To paste a FEN
-* You should be in Play mode. If not, then Mode->Play
-* FEN->Paste
-* If you play as white, you can make your move
-* If you play as black, Engine->Go
+#### Modes
+The GUI has three modes, switched from the **Mode** menu:
+* **Neutral** — the default after startup; engine/board/settings setup is done here.
+* **Play** — play a game against the opponent engine.
+* **Review** — step through a saved game with optional engine analysis and threat.
 
-#### To review a PGN game
-* Mode->Review
-* Choose a PGN file, press Display Games, select a game and press OK
-* Use the First, Previous, Next and Last buttons below the board
-* You can also click a move in the move list to jump to that position
+#### Start the GUI
+* From source: `python python_easy_chess_gui.py`
+* Or run the prebuilt `.exe`.
 
-#### To flip board
-* If current mode is Neutral, Board->Flip
-* If current mode is Play, Mode->Neutral, then Board->Flip
+#### Play a game
+* **As white:** `Mode → Play`, then click the piece and the destination square (or drag the piece).
+* **As black:** in Neutral mode `Board → Flip` (black at the bottom), then `Mode → Play` and `Engine → Go` so the engine moves first. (If already in Play, switch to Neutral first.)
+* **Force the engine to move now:** `Engine → Move Now`.
+* **Start a new game:** `Game → New`.
+* **Paste a position (FEN):** in Play mode `FEN → Paste`. If it is black to move, then `Engine → Go`.
+* **End a game manually:** `Game → Resign`, `User Wins`, or `User Draws`.
+* **Save games:** every game auto-saves to `pecg_auto_save_games.pgn`. The `Game` menu also offers *Save to My Games* and *Save to White / Black Repertoire*.
+* **Time control:** `Time → User` (your clock) and `Time → Engine` (opponent clock).
 
-#### To set opponent engine book options
-* Book->Set Book, only available in Neutral mode. This book is used by your opponent engine. This book is named pecg_book.bin and is located in Book folder. You can build a polyglot book name it pecg_book.bin and replace the default.
+#### Engine setup and management
+Only **UCI** engines are supported. All engine actions are done in **Neutral** mode.
+* **Install:** `Engine → Manage → Install`, press **Add** and locate the engine executable. On Linux make it executable first: `chmod +x your_engine`.
+* **Configure options:** `Engine → Manage → Edit`, select the engine and press **Modify** (set Hash, Threads, etc.). Recommended right after installing.
+* **Delete:** `Engine → Manage → Delete`.
+* **Set the opponent:** `Engine → Set Engine Opponent` — the engine you play against.
+* **Set the adviser:** `Engine → Set Engine Adviser`. During a game, right-click the **Adviser** label and press **Start** for a suggested move and score.
+* **Set the analysis engine:** `Engine → Set Engine Analysis` — used by the **Analysis** button in Review mode.
+* **Set the threat engine:** `Engine → Set Engine Threat` — used by the **Threat** button in Review mode.
+* **Search depth:** `Engine → Set Depth` caps the depth of the playing and adviser engines. Review analysis/threat are limited by **time** instead (see Settings).
 
-#### To Hide/Unhide engine search info
-* Right-click on Opponent Search Info label an press Show. This would only work on Play mode.
+#### Review mode — replay and analyse
+* **Open a game:** `Mode → Review`, choose a PGN file, select a game and press **OK**. Switch games later with `Game → Load PGN` or `Game → Select Game`.
+* **Navigate:** use **First / Previous / Next / Last** below the board, or click a move in the move list to jump to that position.
+* **Analysis:** press the **Analysis** button to evaluate the current position (multi-line principal variations). The search stops after the *analysis time* (default 60s) and restarts automatically when you change position.
+* **Threat:** press the **Threat** button to see what the opponent would play if the side to move passed (a null move). It is unavailable when the side to move is in check, and stops after the *threat time* (default 30s).
+* **Flip the board:** `Board → Flip` within Review mode.
 
-#### To Hide/Unhide Book info
-* Right-click on BOOK 1 or BOOK 2 labels and press Show. This would only work on Play mode.
+Both analysis and threat run their engines for at most their configured time and then go idle, so they do not keep the CPU busy after a position has been evaluated.
 
-#### To request Adviser search info
-* Right-click on Adviser and press start. This would only work on Play mode.
+#### Settings / Game
+Open with `Settings → Game` (Neutral mode). **All values are saved to `pecg_settings.json` and restored on the next startup.**
+* **Save time left in game notation** — adds `[%clk h:mm:ss]` move comments, shown in the move list and saved to the PGN.
+* **Adjudicate game on time forfeit** — ends the game when a player runs out of time.
+* **Review analysis time (sec)** — time cap for the Review **Analysis** engine. Default **60**, range 1–3600.
+* **Review threat time (sec)** — time cap for the Review **Threat** engine. Default **30**, range 1–3600.
 
-#### To select opponent engine
-* Engine->Set Engine Opponent, available only in Neutral mode.
+#### Opponent book
+* `Book → Set Book` (Neutral mode) sets the opponent's polyglot book. It is named `pecg_book.bin` and lives in the `Book` folder. Build your own polyglot book, name it `pecg_book.bin` and replace the default to change it.
 
-#### To set time control of engine
-* Time->Engine
+#### Show / hide info panels
+These work in **Play** mode by right-clicking the panel's label:
+* **Engine search info:** right-click *Opponent Search Info* → **Show** / **Hide**.
+* **Opening books:** right-click *BOOK 1* or *BOOK 2* → **Show** / **Hide**.
 
-#### To set time control of user
-* Time->User
+#### Board appearance
+* **Flip:** Neutral mode `Board → Flip` (or `Mode → Neutral` first if you are in Play).
+* **Colors / theme:** `Board → Color` for square colors and `Board → Theme` for the overall GUI theme (Neutral mode).
 
-#### To install engine
-* Engine->Manage->Install  
-This is only accessible in Neutral mode. After the uci engine is installed, you have to Edit it to modify its options, etc. Only uci engines are supported so far.
-* Engine->Manage->Edit
-
-#### To Edit engine
-* Engine->Manage->Edit
-
-#### To delete engine from config file
-* Engine->Manage->Delete
+#### Files the app writes
+* `pecg_auto_save_games.pgn` — every game played.
+* `pecg_engines.json` — installed engines and their options.
+* `pecg_user.json` — user name(s).
+* `pecg_settings.json` — Settings/Game values (checkboxes and review times).
+* `pecg_log.txt` — log file.
 
 ### E. Credits
 * FreeSimpleGUI<br>
