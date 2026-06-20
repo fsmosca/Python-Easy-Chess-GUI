@@ -59,9 +59,15 @@ log_format = '%(asctime)s :: %(funcName)s :: line: %(lineno)d :: %(levelname)s :
 logging.basicConfig(
     filename='pecg_log.txt',
     filemode='w',
-    level=logging.DEBUG,
+    level=logging.INFO,
     format=log_format
 )
+
+# python-chess logs every UCI line exchanged with the engine at DEBUG level.
+# During live (infinite/long) analysis this floods pecg_log.txt with thousands
+# of lines and adds constant disk I/O, so keep the engine-communication logger
+# quiet regardless of the root level.
+logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
@@ -75,6 +81,11 @@ REVIEW_MOVE_LIST_HEIGHT = 8   # reduced from 11 to make room for the threat pane
 REVIEW_ANALYSIS_BOX_HEIGHT = 3
 REVIEW_THREAT_BOX_HEIGHT = 1
 REVIEW_THREAT_PV_PLIES = 5
+# Time cap (seconds) for Review-mode analysis and threat searches. Without a
+# cap these run "go infinite" and peg the CPU until the user navigates away.
+REVIEW_ANALYSIS_TIME_SEC = 60
+REVIEW_ANALYSIS_TIME_MIN = 1
+REVIEW_ANALYSIS_TIME_MAX = 3600
 
 
 platform = sys.platform
@@ -537,11 +548,11 @@ class RunEngine(threading.Thread):
             except Exception:
                 logging.exception('Failed to enable analyse mode.')
 
-        if self.multipv > 1 and 'multipv' in option_names:
-            try:
-                self.engine.configure({option_names['multipv']: self.multipv})
-            except Exception:
-                logging.exception('Failed to set MultiPV.')
+        # NOTE: MultiPV must NOT be set with engine.configure(). python-chess
+        # treats it as an automatically-managed option (chess.engine.
+        # MANAGED_OPTIONS) and raises EngineError "cannot set MultiPV which is
+        # automatically managed". It is applied instead by passing
+        # multipv=self.multipv to engine.analysis() in run().
 
     def run(self):
         """Run engine to get search info and bestmove.
@@ -854,6 +865,9 @@ class EasyChessGui:
         self.is_save_time_left = False
         self.is_save_user_comment = True
         self.is_time_forfeit_enabled = True
+        # Time cap (seconds) for Review-mode analysis and threat searches;
+        # user-configurable via Settings/Game.
+        self.review_analysis_time_sec = REVIEW_ANALYSIS_TIME_SEC
         self.analysis_file = None
         self.analysis_path_and_file = None
         self.analysis_id_name = None
@@ -3005,8 +3019,8 @@ class EasyChessGui:
         search = RunEngine(
             self.review_queue, self.engine_config_file,
             self.analysis_path_and_file, self.analysis_id_name,
-            self.max_depth, self.engine_base_time_ms, self.engine_inc_time_ms,
-            tc_type='infinite',
+            self.max_depth, self.review_analysis_time_sec * 1000, 0,
+            tc_type='timepermove',
             period_moves=0,
             is_stream_search_info=True,
             existing_engine=self.review_analysis_engine,
@@ -3179,8 +3193,8 @@ class EasyChessGui:
         search = RunEngine(
             self.threat_queue, self.engine_config_file,
             self.threat_path_and_file, self.threat_id_name,
-            self.max_depth, self.engine_base_time_ms, self.engine_inc_time_ms,
-            tc_type='infinite',
+            self.max_depth, self.review_analysis_time_sec * 1000, 0,
+            tc_type='timepermove',
             period_moves=0,
             is_stream_search_info=True,
             existing_engine=self.review_threat_engine,
@@ -4717,6 +4731,14 @@ class EasyChessGui:
                              tooltip='When enabled, the game is\n' +
                                      'adjudicated when the player\n' +
                                      'runs out of time.')],
+                    [sg.Text('Review analysis/threat time (sec)',
+                             tooltip='Maximum time the Review-mode analysis\n' +
+                                     'and threat engines search a position\n' +
+                                     'before stopping ({} to {}).'.format(
+                                         REVIEW_ANALYSIS_TIME_MIN,
+                                         REVIEW_ANALYSIS_TIME_MAX)),
+                     sg.Input(default_text=str(self.review_analysis_time_sec),
+                              key='review_analysis_time_k', size=(6, 1))],
                     [sg.OK(), sg.Cancel()],
                 ]
 
@@ -4731,6 +4753,16 @@ class EasyChessGui:
                     if e == 'OK':
                         self.is_save_time_left = v['save_time_left_k']
                         self.is_time_forfeit_enabled = v['time_forfeit_k']
+                        try:
+                            new_time = int(v['review_analysis_time_k'])
+                            self.review_analysis_time_sec = min(
+                                REVIEW_ANALYSIS_TIME_MAX,
+                                max(REVIEW_ANALYSIS_TIME_MIN, new_time))
+                        except (TypeError, ValueError):
+                            logging.info(
+                                'Invalid review analysis time %r; keeping %s s.',
+                                v['review_analysis_time_k'],
+                                self.review_analysis_time_sec)
                         break
 
                 window.UnHide()
