@@ -71,7 +71,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.0.0'
+APP_VERSION = 'v2.1.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -3078,17 +3078,24 @@ class EasyChessGui:
                     updated = True
                 except Exception:
                     logging.exception('Failed to parse Review mode analysis info.')
-            elif 'bestmove' in msg_str:
-                if self.review_analysis_search is not None:
-                    self.review_analysis_search.join(timeout=0.1)
-                    if not self.review_analysis_search.is_alive():
-                        self.review_analysis_engine = \
-                            self.review_analysis_search.get_engine()
-                        self.review_analysis_search = None
-                if self.review_analysis_enabled and not is_debouncing:
-                    self.review_analysis_status = \
-                        'Analysis ready - {}'.format(self.analysis_id_name)
-                    updated = True
+            # 'bestmove' messages need no handling here: engine recovery and
+            # the "ready" status are driven by the non-blocking is_alive()
+            # check below. A bestmove may originate from a stale search that
+            # shares this queue, so it must never act on the active search
+            # (the old blocking join(timeout=0.1) on a still-running search
+            # was what froze the GUI and made the buttons feel unresponsive).
+
+        # Recover the engine once the *active* search finishes, without ever
+        # blocking the GUI thread on join().
+        if self.review_analysis_search is not None \
+                and not self.review_analysis_search.is_alive():
+            self.review_analysis_engine = \
+                self.review_analysis_search.get_engine()
+            self.review_analysis_search = None
+            if self.review_analysis_enabled and not is_debouncing:
+                self.review_analysis_status = \
+                    'Analysis ready - {}'.format(self.analysis_id_name)
+                updated = True
 
         if updated:
             self.update_review_analysis_panel(window)
@@ -3241,17 +3248,21 @@ class EasyChessGui:
                 info_line = msg_str.rsplit(' info_all', 1)[0]
                 self.review_threat_line = self.shorten_threat_line(info_line)
                 updated = True
-            elif 'bestmove' in msg_str:
-                if self.review_threat_search is not None:
-                    self.review_threat_search.join(timeout=0.1)
-                    if not self.review_threat_search.is_alive():
-                        self.review_threat_engine = \
-                            self.review_threat_search.get_engine()
-                        self.review_threat_search = None
-                if self.review_threat_enabled and not is_debouncing:
-                    self.review_threat_status = \
-                        'Threat ready - {}'.format(self.threat_id_name)
-                    updated = True
+            # 'bestmove' messages need no handling here (see
+            # poll_review_analysis): engine recovery and the "ready" status come
+            # from the non-blocking is_alive() check below, so a stale search's
+            # bestmove can never block the GUI on join().
+
+        # Recover the engine once the *active* search finishes, without blocking.
+        if self.review_threat_search is not None \
+                and not self.review_threat_search.is_alive():
+            self.review_threat_engine = \
+                self.review_threat_search.get_engine()
+            self.review_threat_search = None
+            if self.review_threat_enabled and not is_debouncing:
+                self.review_threat_status = \
+                    'Threat ready - {}'.format(self.threat_id_name)
+                updated = True
 
         if updated:
             self.update_review_threat_panel(window)
