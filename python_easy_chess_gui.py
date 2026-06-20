@@ -53,6 +53,7 @@ import chess.engine
 import chess.polyglot
 import logging
 import webbrowser
+import tkinter as tk
 import platform as sys_plat
 
 
@@ -72,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.5.0'
+APP_VERSION = 'v2.6.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -907,6 +908,9 @@ class EasyChessGui:
         self._drag_source = None
         self._widget_to_square = {}
         self._drag_window = None
+        self._drag_piece = None    # piece code currently being dragged
+        self._drag_ghost = None    # floating Toplevel showing the dragged piece
+        self._drag_photo = None    # PhotoImage ref kept alive during the drag
         self.engine_id_name_list = []
         self.engine_file_list = []
         self.username = 'Human'
@@ -1805,12 +1809,78 @@ class EasyChessGui:
                 self._widget_to_square[widget] = (i, j)
                 widget.bind('<ButtonPress-1>',
                             self._on_drag_press, add='+')
+                widget.bind('<B1-Motion>',
+                            self._on_drag_motion, add='+')
                 widget.bind('<ButtonRelease-1>',
                             self._on_drag_release, add='+')
 
     def _on_drag_press(self, event):
-        """Record the source square when mouse is pressed on a board square."""
+        """Record the source square (and its piece) on mouse press."""
         self._drag_source = self._widget_to_square.get(event.widget)
+        if self._drag_source is not None:
+            row, col = self._drag_source
+            self._drag_piece = self.psg_board[row][col]
+        else:
+            self._drag_piece = None
+
+    def _on_drag_motion(self, event):
+        """Show a floating piece that follows the cursor while dragging.
+
+        The ghost is created lazily on the first motion, so a plain click
+        (press + release without movement) shows no ghost. Only the source
+        square's button image is blanked here; ``self.psg_board`` (the move
+        data) is left untouched so move validation stays correct.
+        """
+        if self._drag_source is None or self._drag_piece in (None, BLANK):
+            return
+
+        if self._drag_ghost is None:
+            row, col = self._drag_source
+            try:
+                root = self._drag_window.TKroot
+                # Lift the piece: blank the source square image only.
+                self._drag_window.find_element(key=(row, col)).Update(
+                    image_filename=images[BLANK])
+                self._drag_photo = tk.PhotoImage(
+                    file=images[self._drag_piece], master=root)
+                ghost = tk.Toplevel(root)
+                ghost.overrideredirect(True)
+                ghost.attributes('-topmost', True)
+                label_bg = None
+                try:
+                    # Windows: transparent background so only the piece shows.
+                    transparent = 'magenta'
+                    ghost.configure(bg=transparent)
+                    ghost.attributes('-transparentcolor', transparent)
+                    label_bg = transparent
+                except Exception:
+                    label_bg = None
+                lbl = tk.Label(ghost, image=self._drag_photo,
+                               borderwidth=0, highlightthickness=0)
+                if label_bg is not None:
+                    lbl.configure(bg=label_bg)
+                lbl.pack()
+                self._drag_ghost = ghost
+            except Exception:
+                logging.exception('Failed to create drag ghost.')
+                self._destroy_drag_ghost()
+                return
+
+        try:
+            self._drag_ghost.geometry(
+                '+{}+{}'.format(event.x_root - 30, event.y_root - 30))
+        except Exception:
+            self._destroy_drag_ghost()
+
+    def _destroy_drag_ghost(self):
+        """Destroy the floating drag piece and release its image reference."""
+        if self._drag_ghost is not None:
+            try:
+                self._drag_ghost.destroy()
+            except Exception:
+                pass
+            self._drag_ghost = None
+        self._drag_photo = None
 
     def _on_drag_release(self, event):
         """Handle mouse release for drag-and-drop moves.
@@ -1820,10 +1890,26 @@ class EasyChessGui:
         different square from the source, injects a drag move event
         into the FreeSimpleGUI event queue.
         """
+        had_ghost = self._drag_ghost is not None
+        self._destroy_drag_ghost()
+
         if self._drag_source is None:
+            self._drag_piece = None
             return
         source = self._drag_source
+        drag_piece = self._drag_piece
         self._drag_source = None
+        self._drag_piece = None
+
+        # If the piece was lifted, restore the source square image. A legal
+        # move is redrawn by the __drag_move__ handler; an illegal or
+        # cancelled drag keeps the piece on its origin square.
+        if had_ghost and drag_piece is not None:
+            try:
+                self._drag_window.find_element(key=source).Update(
+                    image_filename=images[drag_piece])
+            except Exception:
+                logging.exception('Failed to restore dragged piece image.')
 
         # Find the widget under the cursor at release position
         target_widget = event.widget.winfo_containing(
