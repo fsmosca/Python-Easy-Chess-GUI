@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.6.0'
+APP_VERSION = 'v2.7.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -1235,28 +1235,41 @@ class EasyChessGui:
 
         return eng_id_name_list
 
-    def update_user_config_file(self, username):
+    def get_usernames(self):
+        """Return the de-duplicated list of saved player names."""
+        try:
+            with open(self.user_config_file, 'r') as json_file:
+                data = json.load(json_file)
+        except Exception:
+            logging.exception('Failed to read usernames.')
+            return [self.username]
+        names = []
+        for p in data:
+            n = p.get('username')
+            if n and n not in names:
+                names.append(n)
+        return names
+
+    def set_current_user(self, name):
+        """Make ``name`` the active player and persist it.
+
+        The name is stored last in pecg_user.json (the entry that
+        check_user_config_file loads on startup), with duplicates removed, so
+        the choice survives a restart and the saved list never repeats a name.
+        Returns False if the name is empty.
         """
-        Update user config file. If username does not exist, save it.
-        :param username:
-        :return:
-        """
-        with open(self.user_config_file, 'r') as json_file:
-            data = json.load(json_file)
-
-        # Add the new entry if it does not exist
-        is_name = False
-        for i in range(len(data)):
-            if data[i]['username'] == username:
-                is_name = True
-                break
-
-        if not is_name:
-            data.append({'username': username})
-
-            # Save
+        name = (name or '').strip()
+        if not name:
+            return False
+        names = [n for n in self.get_usernames() if n != name]
+        names.append(name)
+        try:
             with open(self.user_config_file, 'w') as h:
-                json.dump(data, h, indent=4)
+                json.dump([{'username': n} for n in names], h, indent=4)
+        except Exception:
+            logging.exception('Failed to save usernames.')
+        self.username = name
+        return True
 
     def check_user_config_file(self):
         """
@@ -4264,32 +4277,75 @@ class EasyChessGui:
                 window.UnHide()
                 continue
 
-            # Mode: Neutral, set username
+            # Mode: Neutral, manage player names
             if button == 'Set Name::user_name_k':
-                win_title = 'User/username'
+                win_title = 'User/Player'
+                names = self.get_usernames() or [self.username]
+                preselect = [self.username] if self.username in names else []
                 layout = [
-                        [sg.Text('Current username: {}'.format(
-                            self.username))],
-                        [sg.T('Name', size=(4, 1)), sg.Input(
-                                self.username, key='username_k', size=(32, 1))],
-                        [sg.OK(), sg.Cancel()]
+                    [sg.Text('Current player:', size=(13, 1)),
+                     sg.Text(self.username, key='user_current_k',
+                             font=('Helvetica', 10, 'bold'), size=(28, 1))],
+                    [sg.HorizontalSeparator()],
+                    [sg.Text('Add a new name')],
+                    [sg.Input('', key='user_new_k', size=(30, 1),
+                              tooltip='Type a name and press Save and Use'),
+                     sg.Button('Save and Use', key='user_save_k')],
+                    [sg.HorizontalSeparator()],
+                    [sg.Text('Saved players (double-click to use)')],
+                    [sg.Listbox(values=names, size=(44, 8), key='user_list_k',
+                                default_values=preselect)],
+                    [sg.Button('Use Selected', key='user_use_k'),
+                     sg.Button('Close')],
                 ]
                 window.Hide()
                 w = sg.Window(win_title, layout,
-                              icon=ico_path[platform]['pecg'])
+                              icon=ico_path[platform]['pecg'], finalize=True)
+                # Keyboard / double-click affordances bound directly on the
+                # tk widgets (the element kwargs are unavailable in this
+                # FreeSimpleGUI version).
+                try:
+                    w['user_new_k'].Widget.bind(
+                        '<Return>',
+                        lambda e: w.write_event_value('user_save_k', True))
+                    w['user_list_k'].Widget.bind(
+                        '<Double-Button-1>',
+                        lambda e: w.write_event_value('user_use_k', True))
+                    w['user_list_k'].Widget.bind(
+                        '<Return>',
+                        lambda e: w.write_event_value('user_use_k', True))
+                except Exception:
+                    logging.exception('Failed to bind user dialog keys.')
+
+                def _refresh_users():
+                    names2 = self.get_usernames() or [self.username]
+                    idx = [names2.index(self.username)] \
+                        if self.username in names2 else None
+                    w['user_list_k'].Update(values=names2, set_to_index=idx)
+                    w['user_current_k'].Update(self.username)
+
                 while True:
-                    e, v = w.Read(timeout=10)
-                    if e is None:
+                    e, v = w.Read()
+                    if e in (None, 'Close'):
                         break
-                    if e == 'Cancel':
-                        break
-                    if e == 'OK':
-                        backup = self.username
-                        username = self.username = v['username_k']
-                        if username == '':
-                            username = backup
-                        self.update_user_config_file(username)
-                        break
+                    if e in ('user_save_k', 'user_new_k'):
+                        if not (v['user_new_k'] and v['user_new_k'].strip()):
+                            sg.popup('Please enter a name.', title=win_title,
+                                     icon=ico_path[platform]['pecg'])
+                            continue
+                        self.set_current_user(v['user_new_k'])
+                        w['user_new_k'].Update('')
+                        _refresh_users()
+                    elif e in ('user_use_k', 'user_list_k'):
+                        sel = v['user_list_k']
+                        if not sel:
+                            if e == 'user_use_k':
+                                sg.popup('Please select a saved player.',
+                                         title=win_title,
+                                         icon=ico_path[platform]['pecg'])
+                            continue
+                        self.set_current_user(sel[0])
+                        _refresh_users()
                 w.Close()
                 window.UnHide()
                 self.update_labels_and_game_tags(window, human=self.username)
