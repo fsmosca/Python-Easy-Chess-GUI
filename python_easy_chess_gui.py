@@ -72,7 +72,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.3.0'
+APP_VERSION = 'v2.4.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -2028,7 +2028,7 @@ class EasyChessGui:
                'A chess GUI built with FreeSimpleGUI and python-chess.\n'
                'Install any UCI engine to play, analyse and review games.\n\n'
                'Project:  {}\n'
-               'License:  see the bundled LICENSE file.').format(
+               'License:  LGPL-3.0 (see the bundled LICENSE file).').format(
                    APP_NAME, APP_VERSION, ONLINE_HELP_URL)
         sg.popup(msg, title='About {}'.format(APP_NAME),
                  icon=ico_path[platform]['pecg'])
