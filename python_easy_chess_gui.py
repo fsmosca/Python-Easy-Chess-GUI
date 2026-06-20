@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.7.0'
+APP_VERSION = 'v2.8.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -106,6 +106,13 @@ ico_path = {
 MIN_DEPTH = 1
 MAX_DEPTH = 1000
 MANAGED_UCI_OPTIONS = ['ponder', 'uci_chess960', 'multipv', 'uci_analysemode', 'ownbook']
+# Engine role -> (active id-name attr, file attr, path attr, icon key, title).
+ROLE_META = {
+    'opponent': ('opp_id_name', 'opp_file', 'opp_path_and_file', 'enemy', 'Opponent'),
+    'adviser': ('adviser_id_name', 'adviser_file', 'adviser_path_and_file', 'adviser', 'Adviser'),
+    'analysis': ('analysis_id_name', 'analysis_file', 'analysis_path_and_file', 'pecg', 'Analysis'),
+    'threat': ('threat_id_name', 'threat_file', 'threat_path_and_file', 'pecg', 'Threat'),
+}
 GUI_THEME = [
     'Green', 'GreenTan', 'LightGreen', 'BluePurple', 'Purple', 'BlueMono', 'GreenMono', 'BrownBlue',
     'BrightColors', 'NeutralBlue', 'Kayak', 'SandyBeach', 'TealMono', 'Topanga', 'Dark', 'Black', 'DarkAmber'
@@ -486,7 +493,7 @@ class RunEngine(threading.Thread):
                  engine_id_name, max_depth=MAX_DEPTH,
                  base_ms=300000, inc_ms=1000, tc_type='fischer',
                  period_moves=0, is_stream_search_info=True,
-                 existing_engine=None, multipv=1):
+                 existing_engine=None, multipv=1, option_overrides=None):
         """
         Run engine as opponent or as adviser.
 
@@ -524,6 +531,8 @@ class RunEngine(threading.Thread):
         self.period_moves = period_moves
         self.is_ownbook = False
         self.is_move_delay = True
+        # Per-role UCI option overrides applied on top of the engine config.
+        self.option_overrides = option_overrides or {}
         try:
             self.multipv = max(1, int(multipv))
         except (TypeError, ValueError):
@@ -623,6 +632,33 @@ class RunEngine(threading.Thread):
         # automatically managed". It is applied instead by passing
         # multipv=self.multipv to engine.analysis() in run().
 
+    def apply_option_overrides(self):
+        """Apply per-role UCI option overrides on top of the base config."""
+        if not self.option_overrides:
+            return
+        try:
+            option_names = {name.lower(): name for name in self.engine.options}
+        except Exception:
+            logging.exception('Failed to read engine options for overrides.')
+            return
+        managed = {m.lower() for m in chess.engine.MANAGED_OPTIONS}
+        for name, value in self.option_overrides.items():
+            lname = name.lower()
+            if lname in managed or lname not in option_names:
+                continue
+            real = option_names[lname]
+            try:
+                opt = self.engine.options[real]
+                if opt.type == 'spin':
+                    value = int(value)
+                elif opt.type == 'check':
+                    value = value if isinstance(value, bool) else \
+                        str(value).strip().lower() in ('true', '1', 'yes')
+                self.engine.configure({real: value})
+                logging.info('Override %s = %s', real, value)
+            except Exception:
+                logging.exception('Failed to apply override %s.', name)
+
     def run(self):
         """Run engine to get search info and bestmove.
          
@@ -661,6 +697,11 @@ class RunEngine(threading.Thread):
             self.configure_runtime_analysis_options()
         except Exception:
             logging.exception('Failed to configure runtime analysis options.')
+
+        try:
+            self.apply_option_overrides()
+        except Exception:
+            logging.exception('Failed to apply option overrides.')
 
         # Set search limits.
         # For infinite analysis pass limit=None so that python-chess sends
@@ -942,6 +983,9 @@ class EasyChessGui:
         # user-configurable via Settings/Game and persisted in the settings file.
         self.review_analysis_time_sec = REVIEW_ANALYSIS_TIME_SEC
         self.review_threat_time_sec = REVIEW_THREAT_TIME_SEC
+        # Per-(role, engine) UCI option overrides:
+        # {role: {engine_id_name: {option_name: value}}}, deltas vs base.
+        self.role_engine_options = {}
         self.analysis_file = None
         self.analysis_path_and_file = None
         self.analysis_id_name = None
@@ -1327,6 +1371,13 @@ class EasyChessGui:
             if key in data:
                 setattr(self, key,
                         self._read_review_time(data[key], getattr(self, key)))
+        if 'adviser_movetime_sec' in data:
+            self.adviser_movetime_sec = self._read_review_time(
+                data['adviser_movetime_sec'], self.adviser_movetime_sec)
+        # Per-role engine option overrides (the active role ids are applied
+        # later by restore_engine_roles, once the engine list exists).
+        if isinstance(data.get('role_engine_options'), dict):
+            self.role_engine_options = data['role_engine_options']
 
     def save_settings(self):
         """Persist Settings/Game values to the settings file."""
@@ -1335,12 +1386,286 @@ class EasyChessGui:
             'is_time_forfeit_enabled': self.is_time_forfeit_enabled,
             'review_analysis_time_sec': self.review_analysis_time_sec,
             'review_threat_time_sec': self.review_threat_time_sec,
+            'opp_id_name': self.opp_id_name,
+            'adviser_id_name': self.adviser_id_name,
+            'analysis_id_name': self.analysis_id_name,
+            'threat_id_name': self.threat_id_name,
+            'adviser_movetime_sec': self.adviser_movetime_sec,
+            'role_engine_options': self.role_engine_options,
         }
         try:
             with open(self.settings_file, 'w') as json_file:
                 json.dump(data, json_file, indent=4)
         except Exception:
             logging.exception('Failed to save settings file.')
+
+    # ----- Engine role helpers -----
+    def get_engine_options(self, eng_id_name):
+        """Return the option list for an engine from pecg_engines.json."""
+        try:
+            with open(self.engine_config_file, 'r') as json_file:
+                data = json.load(json_file)
+            for p in data:
+                if p['name'] == eng_id_name:
+                    return p.get('options', [])
+        except Exception:
+            logging.exception('Failed to read engine options.')
+        return []
+
+    def get_role_options(self, role, eng_id_name):
+        """Return saved option overrides {name: value} for (role, engine)."""
+        if not eng_id_name:
+            return {}
+        return dict(self.role_engine_options.get(role, {}).get(eng_id_name, {}))
+
+    def set_role_options(self, role, eng_id_name, deltas):
+        """Store (or clear) option overrides for (role, engine) and persist."""
+        role_map = self.role_engine_options.setdefault(role, {})
+        if deltas:
+            role_map[eng_id_name] = deltas
+        else:
+            role_map.pop(eng_id_name, None)
+        self.save_settings()
+
+    def delete_role_options(self, role, eng_id_name):
+        """Remove saved option overrides for (role, engine) and persist."""
+        self.role_engine_options.get(role, {}).pop(eng_id_name, None)
+        self.save_settings()
+
+    def set_active_role(self, role, eng_id_name):
+        """Make eng_id_name the active engine for role and persist."""
+        id_attr, file_attr, path_attr, _, _ = ROLE_META[role]
+        try:
+            eng_file, eng_path = self.get_engine_file(eng_id_name)
+        except Exception:
+            logging.exception('Failed to resolve engine file for %s.', eng_id_name)
+            return
+        setattr(self, id_attr, eng_id_name)
+        setattr(self, file_attr, eng_file)
+        setattr(self, path_attr, eng_path)
+        self.save_settings()
+
+    def restore_engine_roles(self):
+        """Apply persisted active engine per role (after the engine list exists).
+
+        Saved ids that are no longer installed are ignored (role keeps its
+        default). Must run after set_default_* in main_loop.
+        """
+        settings_path = Path(self.settings_file)
+        if not settings_path.exists():
+            return
+        try:
+            with open(self.settings_file, 'r') as json_file:
+                data = json.load(json_file)
+        except Exception:
+            logging.exception('Failed to read settings for engine roles.')
+            return
+        for role, (id_attr, _, _, _, _) in ROLE_META.items():
+            name = data.get(id_attr)
+            if name and name in self.engine_id_name_list:
+                self.set_active_role(role, name)
+
+    def build_engine_options_layout(self, option_list, current_values=None):
+        """Build editor rows for an engine's UCI options.
+
+        Returns (option_layout, option_layout2, opt_meta) where opt_meta is a
+        list of {'name','key','type','base'}. ``current_values`` (name->value)
+        overrides the displayed value per option. The 2-column split for many
+        options is preserved.
+        """
+        current_values = current_values or {}
+        option_layout, option_layout2 = [], []
+        opt_meta = []
+        num_opt = len(option_list)
+        opt_cnt = 0
+        for o in option_list:
+            type_ = o.get('type')
+            name = o.get('name')
+            if name is None or type_ == 'button':
+                continue
+            opt_cnt += 1
+            base = o.get('value')
+            value = current_values.get(name, base)
+            key_name = '{}_{}_k'.format(type_, name.lower())
+
+            if type_ == 'spin':
+                ttip = 'min {} max {}'.format(o.get('min'), o.get('max'))
+                row = [sg.Text(name, size=(16, 1)),
+                       sg.Input(value, size=(8, 1), key=key_name, tooltip=ttip)]
+            elif type_ == 'check':
+                row = [sg.Text(name, size=(16, 1)),
+                       sg.Checkbox('', key=key_name, default=bool(value))]
+            elif type_ == 'combo':
+                row = [sg.Text(name, size=(16, 1)),
+                       sg.Combo(o.get('choices', []), default_value=value,
+                                size=(12, 1), key=key_name)]
+            elif type_ == 'string':
+                if 'syzygypath' in name.lower():
+                    row = [sg.Text(name, size=(16, 1)),
+                           sg.Input(value, size=(12, 1), key=key_name),
+                           sg.FolderBrowse()]
+                elif 'weightsfile' in name.lower():
+                    row = [sg.Text(name, size=(16, 1)),
+                           sg.Input(value, size=(12, 1), key=key_name),
+                           sg.FileBrowse()]
+                else:
+                    row = [sg.Text(name, size=(16, 1)),
+                           sg.Input(value, size=(16, 1), key=key_name)]
+            else:
+                continue
+
+            opt_meta.append({'name': name, 'key': key_name,
+                             'type': type_, 'base': base})
+            if num_opt > 10 and opt_cnt > num_opt // 2:
+                option_layout2.append(row)
+            else:
+                option_layout.append(row)
+        return option_layout, option_layout2, opt_meta
+
+    def read_option_values(self, values, opt_meta):
+        """Read edited option values from a window values dict -> {name: value}."""
+        result = {}
+        for m in opt_meta:
+            if m['key'] in values:
+                result[m['name']] = values[m['key']]
+        return result
+
+    def _build_options_window_layout(self, option_layout, option_layout2):
+        """Wrap option rows in a screen-capped scrollable column + OK/Cancel."""
+        if len(option_layout2) > 1:
+            body = [[sg.Column(option_layout, vertical_alignment='top'),
+                     sg.Column(option_layout2, vertical_alignment='top')]]
+        else:
+            body = [[sg.Column(option_layout, vertical_alignment='top')]]
+        rows = max(len(option_layout), len(option_layout2))
+        try:
+            _, screen_h = sg.Window.get_screen_size()
+        except Exception:
+            screen_h = 800
+        view_h = min(rows * 28 + 10, max(300, screen_h - 200))
+        view_w = 760 if len(option_layout2) > 1 else 430
+        return [[sg.Column(body, scrollable=True, vertical_scroll_only=True,
+                           size=(view_w, view_h))],
+                [sg.OK(), sg.Cancel()]]
+
+    def configure_role_engine(self, role, eng_id_name):
+        """Open the options editor for (role, engine); save deltas vs base."""
+        option_list = self.get_engine_options(eng_id_name)
+        if not option_list:
+            sg.popup('No options available for {}.'.format(eng_id_name),
+                     title='Configure', icon=ico_path[platform]['pecg'])
+            return
+        saved = self.get_role_options(role, eng_id_name)
+        col1, col2, opt_meta = self.build_engine_options_layout(
+            option_list, current_values=saved)
+        layout = self._build_options_window_layout(col1, col2)
+        title = '{} options - {}'.format(ROLE_META[role][4], eng_id_name)
+        w = sg.Window(title, layout, icon=ico_path[platform]['pecg'],
+                      resizable=True, finalize=True)
+        while True:
+            e, v = w.Read()
+            if e in (None, 'Cancel'):
+                break
+            if e == 'OK':
+                entered = self.read_option_values(v, opt_meta)
+                base = {m['name']: m['base'] for m in opt_meta}
+                deltas = {n: val for n, val in entered.items()
+                          if str(val) != str(base.get(n))}
+                self.set_role_options(role, eng_id_name, deltas)
+                break
+        w.Close()
+
+    def manage_role_engine(self, window, role):
+        """Manager dialog for an engine role: select active, configure, delete."""
+        id_attr, _, _, icon_key, title = ROLE_META[role]
+        role_icon = ico_path[platform].get(icon_key, ico_path[platform]['pecg'])
+
+        def display_list():
+            configured = self.role_engine_options.get(role, {})
+            return ['{}{}'.format(n, '  (configured)' if n in configured else '')
+                    for n in self.engine_id_name_list]
+
+        def to_id(display):
+            return display.split('  (configured)')[0] if display else None
+
+        active = getattr(self, id_attr)
+        preselect = [d for d in display_list() if to_id(d) == active]
+        # Adviser also has an app-level movetime (how long it thinks).
+        extra = []
+        if role == 'adviser':
+            extra = [[sg.Text('Movetime (sec)', size=(14, 1)),
+                      sg.Spin([t for t in range(1, 3600)],
+                              initial_value=self.adviser_movetime_sec,
+                              size=(8, 1), key='role_movetime_k')]]
+        layout = [
+            [sg.Text('Active {}:'.format(title), size=(14, 1)),
+             sg.Text(active if active else 'None', key='role_active_k',
+                     font=('Helvetica', 10, 'bold'), size=(30, 1))],
+            [sg.HorizontalSeparator()],
+            [sg.Text('Installed engines  (select one, then use a button below)')],
+            [sg.Listbox(values=display_list(), size=(46, 10), key='role_list_k',
+                        default_values=preselect)],
+        ] + extra + [
+            [sg.Button('Use Selected', key='role_use_k'),
+             sg.Button('Configure', key='role_cfg_k'),
+             sg.Button('Delete Config', key='role_del_k'),
+             sg.Button('Close')],
+        ]
+        window.Hide()
+        w = sg.Window('{} Manager'.format(title), layout,
+                      icon=role_icon, finalize=True)
+        try:
+            w['role_list_k'].Widget.bind(
+                '<Double-Button-1>',
+                lambda e: w.write_event_value('role_use_k', True))
+            w['role_list_k'].Widget.bind(
+                '<Return>', lambda e: w.write_event_value('role_use_k', True))
+        except Exception:
+            logging.exception('Failed to bind role list keys.')
+
+        def refresh():
+            w['role_list_k'].Update(values=display_list())
+            w['role_active_k'].Update(getattr(self, id_attr) or 'None')
+
+        def store_movetime(values):
+            if role == 'adviser' and values and 'role_movetime_k' in values:
+                try:
+                    self.adviser_movetime_sec = min(
+                        3600, max(1, int(values['role_movetime_k'])))
+                    self.save_settings()
+                except (TypeError, ValueError):
+                    pass
+
+        while True:
+            e, v = w.Read()
+            if e in (None, 'Close'):
+                store_movetime(v)
+                break
+            sel = to_id(v['role_list_k'][0]) if v.get('role_list_k') else None
+            if e == 'role_use_k':
+                if not sel:
+                    sg.popup('Please select an engine.', title=title,
+                             icon=role_icon)
+                    continue
+                store_movetime(v)
+                self.set_active_role(role, sel)
+                refresh()
+            elif e == 'role_cfg_k':
+                if not sel:
+                    sg.popup('Please select an engine to configure.',
+                             title=title, icon=role_icon)
+                    continue
+                w.Hide()
+                self.configure_role_engine(role, sel)
+                w.UnHide()
+                refresh()
+            elif e == 'role_del_k':
+                if sel:
+                    self.delete_role_options(role, sel)
+                    refresh()
+        w.Close()
+        window.UnHide()
+        self.update_labels_and_game_tags(window, human=self.username)
 
     def update_engine_to_config_file(self, eng_path_file, new_name, old_name, user_opt):
         """
@@ -2343,7 +2668,9 @@ class EasyChessGui:
                             self.max_depth, adviser_base_ms, adviser_inc_ms,
                             tc_type='timepermove',
                             period_moves=0,
-                            is_stream_search_info=True
+                            is_stream_search_info=True,
+                            option_overrides=self.get_role_options(
+                                'adviser', self.adviser_id_name)
                         )
                         search.get_board(board)
                         search.daemon = True
@@ -2740,7 +3067,9 @@ class EasyChessGui:
                         self.opp_id_name, self.max_depth, engine_timer.base,
                         engine_timer.inc, tc_type=engine_timer.tc_type,
                         period_moves=board.fullmove_number,
-                        existing_engine=persistent_engine
+                        existing_engine=persistent_engine,
+                        option_overrides=self.get_role_options(
+                            'opponent', self.opp_id_name)
                     )
                     search.get_board(board)
                     search.daemon = True
@@ -3281,7 +3610,9 @@ class EasyChessGui:
             period_moves=0,
             is_stream_search_info=True,
             existing_engine=self.review_analysis_engine,
-            multipv=REVIEW_ANALYSIS_MULTIPV_LINES
+            multipv=REVIEW_ANALYSIS_MULTIPV_LINES,
+            option_overrides=self.get_role_options(
+                'analysis', self.analysis_id_name)
         )
         search.get_board(self.review_boards[self.review_move_index].copy(stack=False))
         search.is_move_delay = False
@@ -3462,7 +3793,9 @@ class EasyChessGui:
             period_moves=0,
             is_stream_search_info=True,
             existing_engine=self.review_threat_engine,
-            multipv=1
+            multipv=1,
+            option_overrides=self.get_role_options(
+                'threat', self.threat_id_name)
         )
         search.get_board(threat_board)
         search.is_move_delay = False
@@ -4041,6 +4374,9 @@ class EasyChessGui:
         # Define default threat engine for Review mode.
         self.set_default_threat_engine()
 
+        # Override defaults with any persisted per-role engine selections.
+        self.restore_engine_roles()
+
         self.init_game()
 
         # Initialize White and black boxes
@@ -4548,7 +4884,6 @@ class EasyChessGui:
                         is_cancel_edit_win = True
                         break
                     if e == 'Modify':
-                        option_layout, option_layout2 = [], []
                         button_title += '/' + e
 
                         try:
@@ -4559,155 +4894,27 @@ class EasyChessGui:
                                      icon=ico_path[platform]['pecg'])
                             continue
 
-                        # Read engine config file
+                        # Locate the engine record (path + options).
                         with open(self.engine_config_file, 'r') as json_file:
                             data = json.load(json_file)
-
-                        # First option that can be set is the config name
-                        option_layout.append(
-                                [sg.Text('name', size=(4, 1)),
-                                 sg.Input(engine_id_name, size=(38, 1),
-                                          key='string_name_k')])
-                        opt_name.append(['name', 'string_name_k'])
-
+                        option = []
+                        engine_path_file = None
                         for p in data:
-                            name = p['name']
-                            path = p['workingDirectory']
-                            file = p['command']
-                            engine_path_file = Path(path, file)
-                            option = p['options']
-
-                            if name == engine_id_name:
-                                num_opt = len(option)
-                                opt_cnt = 0
-                                for o in option:
-                                    opt_cnt += 1
-                                    name = o['name']
-                                    value = o['value']
-                                    type_ = o['type']
-
-                                    if type_ == 'spin':
-                                        min_ = o['min']
-                                        max_ = o['max']
-
-                                        key_name = type_ + '_' + name.lower() + '_k'
-                                        opt_name.append([name, key_name])
-
-                                        ttip = 'min {} max {}'.format(min_, max_)
-                                        spin_layout = \
-                                            [sg.Text(name, size=(16, 1)),
-                                             sg.Input(value, size=(8, 1),
-                                                      key=key_name,
-                                                      tooltip=ttip)]
-                                        if num_opt > 10 and opt_cnt > num_opt//2:
-                                            option_layout2.append(spin_layout)
-                                        else:
-                                            option_layout.append(spin_layout)
-
-                                    elif type_ == 'check':
-                                        key_name = type_ + '_' + name.lower() + '_k'
-                                        opt_name.append([name, key_name])
-
-                                        check_layout = \
-                                            [sg.Text(name, size=(16, 1)),
-                                             sg.Checkbox('', key=key_name,
-                                                         default=value)]
-                                        if num_opt > 10 and opt_cnt > num_opt//2:
-                                            option_layout2.append(check_layout)
-                                        else:
-                                            option_layout.append(check_layout)
-
-                                    elif type_ == 'string':
-                                        key_name = type_ + '_' + name + '_k'
-                                        opt_name.append([name, key_name])
-
-                                        # Use FolderBrowse()
-                                        if 'syzygypath' in name.lower():
-                                            sy_layout = \
-                                                [sg.Text(name, size=(16, 1)),
-                                                 sg.Input(value,
-                                                          size=(12, 1),
-                                                          key=key_name),
-                                                 sg.FolderBrowse()]
-
-                                            if num_opt > 10 and opt_cnt > num_opt//2:
-                                                option_layout2.append(sy_layout)
-                                            else:
-                                                option_layout.append(sy_layout)
-
-                                        # Use FileBrowse()
-                                        elif 'weightsfile' in name.lower():
-                                            weight_layout = \
-                                                [sg.Text(name, size=(16, 1)),
-                                                 sg.Input(value,
-                                                          size=(12, 1),
-                                                          key=key_name),
-                                                 sg.FileBrowse()]
-
-                                            if num_opt > 10 and opt_cnt > num_opt//2:
-                                                option_layout2.append(
-                                                    weight_layout)
-                                            else:
-                                                option_layout.append(
-                                                    weight_layout)
-                                        else:
-                                            str_layout = \
-                                                [sg.Text(name, size=(16, 1)),
-                                                 sg.Input(value, size=(16, 1),
-                                                          key=key_name)]
-
-                                            if num_opt > 10 and opt_cnt > num_opt//2:
-                                                option_layout2.append(
-                                                    str_layout)
-                                            else:
-                                                option_layout.append(
-                                                    str_layout)
-
-                                    elif type_ == 'combo':
-                                        key_name = type_ + '_' + name + '_k'
-                                        opt_name.append([name, key_name])
-                                        var = o['choices']
-                                        combo_layout = [
-                                            sg.Text(name, size=(16, 1)),
-                                            sg.Combo(var, default_value=value,
-                                                     size=(12, 1),
-                                                     key=key_name)]
-                                        if num_opt > 10 and opt_cnt > num_opt//2:
-                                            option_layout2.append(combo_layout)
-                                        else:
-                                            option_layout.append(combo_layout)
+                            if p['name'] == engine_id_name:
+                                engine_path_file = Path(
+                                    p['workingDirectory'], p['command'])
+                                option = p['options']
                                 break
 
-                        # Build the option body, keeping the 2-column split for
-                        # engines that have many options.
-                        if len(option_layout2) > 1:
-                            body = [[sg.Column(option_layout,
-                                               vertical_alignment='top'),
-                                     sg.Column(option_layout2,
-                                               vertical_alignment='top')]]
-                        else:
-                            body = [[sg.Column(option_layout,
-                                               vertical_alignment='top')]]
-
-                        # Cap the options viewport to the screen so the window
-                        # never grows taller than the display (which would push
-                        # its title bar above the top edge and make it
-                        # impossible to drag down). Tall option lists scroll.
-                        rows = max(len(option_layout), len(option_layout2))
-                        try:
-                            _, screen_h = sg.Window.get_screen_size()
-                        except Exception:
-                            screen_h = 800
-                        view_h = min(rows * 28 + 10, max(300, screen_h - 200))
-                        view_w = 760 if len(option_layout2) > 1 else 430
-
-                        # OK/Cancel sit outside the scroll area so they stay
-                        # visible no matter how many options there are.
-                        modify_layout = [
-                            [sg.Column(body, scrollable=True,
-                                       vertical_scroll_only=True,
-                                       size=(view_w, view_h))],
-                            [sg.OK(), sg.Cancel()]]
+                        opt_layout, opt_layout2, opt_meta = \
+                            self.build_engine_options_layout(option)
+                        # Prepend the engine-name field (renames the engine).
+                        opt_layout = [
+                            [sg.Text('name', size=(4, 1)),
+                             sg.Input(engine_id_name, size=(38, 1),
+                                      key='string_name_k')]] + opt_layout
+                        modify_layout = self._build_options_window_layout(
+                            opt_layout, opt_layout2)
 
                         edit_win.Hide()
                         modify_win = sg.Window(button_title,
@@ -4722,9 +4929,10 @@ class EasyChessGui:
                                 break
                             if e1 == 'OK':
                                 engine_id_name = v1['string_name_k']
-                                for o in opt_name:
-                                    d = {o[0]: v1[o[1]]}
-                                    ret_opt_name.append(d)
+                                ret_opt_name = [
+                                    {n: val} for n, val in
+                                    self.read_option_values(
+                                        v1, opt_meta).items()]
                                 break
 
                         edit_win.UnHide()
@@ -4798,194 +5006,21 @@ class EasyChessGui:
 
                 continue
 
-            # Mode: Neutral, Allow user to change opponent engine settings
+            # Mode: Neutral, engine role managers (configure options + select).
             if button == 'Set Engine Opponent':
-                current_engine_file = self.opp_file
-                current_engine_id_name = self.opp_id_name
-
-                logging.info('Backup current engine list and file.')
-                logging.info('Current engine file: {}'.format(
-                    current_engine_file))
-
-                layout = [
-                        [sg.T('Current Opponent: {}'.format(self.opp_id_name), size=(40, 1))],
-                        [sg.Listbox(values=self.engine_id_name_list, size=(48, 10), key='engine_id_k')],
-                        [sg.OK(), sg.Cancel()]
-                ]
-
-                # Create new window and disable the main window
-                w = sg.Window(BOX_TITLE + '/Select opponent', layout,
-                              icon=ico_path[platform]['enemy'])
-                window.Hide()
-
-                while True:
-                    e, v = w.Read(timeout=10)
-
-                    if e is None or e == 'Cancel':
-                        # Restore current engine list and file
-                        logging.info('User cancels engine selection. ' +
-                                     'We restore the current engine data.')
-                        self.opp_file = current_engine_file
-                        logging.info('Current engine data were restored.')
-                        logging.info('current engine file: {}'.format(
-                            self.opp_file))
-                        break
-
-                    if e == 'OK':
-                        # We use try/except because user can press OK without
-                        # selecting an engine
-                        try:
-                            engine_id_name = self.opp_id_name = v['engine_id_k'][0]
-                            self.opp_file, self.opp_path_and_file = self.get_engine_file(
-                                    engine_id_name)
-
-                        except IndexError:
-                            logging.info('User presses OK but did not select '
-                                         'an engine.')
-                        except Exception:
-                            logging.exception('Failed to set engine.')
-                        finally:
-                            if current_engine_id_name != self.opp_id_name:
-                                logging.info('User selected a new opponent {'
-                                             '}.'.format(self.opp_id_name))
-                        break
-
-                window.UnHide()
-                w.Close()
-
-                # Update the player box in main window
-                self.update_labels_and_game_tags(window, human=self.username)
+                self.manage_role_engine(window, 'opponent')
                 continue
 
-            # Mode: Neutral, Set Adviser engine
             if button == 'Set Engine Adviser':
-                current_adviser_engine_file = self.adviser_file
-                current_adviser_path_and_file = self.adviser_path_and_file
-
-                layout = [
-                        [sg.T('Current Adviser: {}'.format(self.adviser_id_name),
-                              size=(40, 1))],
-                        [sg.Listbox(values=self.engine_id_name_list, size=(48, 10),
-                                    key='adviser_id_name_k')],
-                        [sg.T('Movetime (sec)', size=(12, 1)),
-                         sg.Spin([t for t in range(1, 3600, 1)],
-                                 initial_value=self.adviser_movetime_sec,
-                                 size=(8, 1), key='adviser_movetime_k')],
-                        [sg.OK(), sg.Cancel()]
-                ]
-
-                # Create new window and disable the main window
-                w = sg.Window(BOX_TITLE + '/Select Adviser', layout,
-                              icon=ico_path[platform]['adviser'])
-                window.Hide()
-
-                while True:
-                    e, v = w.Read(timeout=10)
-
-                    if e is None or e == 'Cancel':
-                        self.adviser_file = current_adviser_engine_file
-                        self.adviser_path_and_file = current_adviser_path_and_file
-                        break
-
-                    if e == 'OK':
-                        movetime_sec = int(v['adviser_movetime_k'])
-                        self.adviser_movetime_sec = min(3600, max(1, movetime_sec))
-
-                        # We use try/except because user can press OK without selecting an engine
-                        try:
-                            adviser_eng_id_name = self.adviser_id_name = v['adviser_id_name_k'][0]
-                            self.adviser_file, self.adviser_path_and_file = self.get_engine_file(
-                                    adviser_eng_id_name)
-                        except IndexError:
-                            logging.info('User presses OK but did not select an engine')
-                        except Exception:
-                            logging.exception('Failed to set engine.')
-                        break
-
-                window.UnHide()
-                w.Close()
+                self.manage_role_engine(window, 'adviser')
                 continue
 
-            # Mode: Neutral, Set analysis engine for Review mode
             if button == 'Set Engine Analysis':
-                current_analysis_engine_file = self.analysis_file
-                current_analysis_path_and_file = self.analysis_path_and_file
-
-                layout = [
-                        [sg.T('Current Analysis Engine: {}'.format(
-                            self.analysis_id_name), size=(44, 1))],
-                        [sg.Listbox(values=self.engine_id_name_list, size=(48, 10),
-                                    key='analysis_id_name_k')],
-                        [sg.OK(), sg.Cancel()]
-                ]
-
-                w = sg.Window(BOX_TITLE + '/Select Analysis Engine', layout,
-                              icon=ico_path[platform]['adviser'])
-                window.Hide()
-
-                while True:
-                    e, v = w.Read(timeout=10)
-
-                    if e is None or e == 'Cancel':
-                        self.analysis_file = current_analysis_engine_file
-                        self.analysis_path_and_file = current_analysis_path_and_file
-                        break
-
-                    if e == 'OK':
-                        try:
-                            analysis_eng_id_name = self.analysis_id_name = \
-                                v['analysis_id_name_k'][0]
-                            self.analysis_file, self.analysis_path_and_file = \
-                                self.get_engine_file(analysis_eng_id_name)
-                        except IndexError:
-                            logging.info('User presses OK but did not select an engine.')
-                        except Exception:
-                            logging.exception('Failed to set analysis engine.')
-                        break
-
-                window.UnHide()
-                w.Close()
+                self.manage_role_engine(window, 'analysis')
                 continue
 
-            # Mode: Neutral, Set threat engine for Review mode
             if button == 'Set Engine Threat':
-                current_threat_engine_file = self.threat_file
-                current_threat_path_and_file = self.threat_path_and_file
-
-                layout = [
-                        [sg.T('Current Threat Engine: {}'.format(
-                            self.threat_id_name), size=(44, 1))],
-                        [sg.Listbox(values=self.engine_id_name_list, size=(48, 10),
-                                    key='threat_id_name_k')],
-                        [sg.OK(), sg.Cancel()]
-                ]
-
-                w = sg.Window(BOX_TITLE + '/Select Threat Engine', layout,
-                              icon=ico_path[platform]['adviser'])
-                window.Hide()
-
-                while True:
-                    e, v = w.Read(timeout=10)
-
-                    if e is None or e == 'Cancel':
-                        self.threat_file = current_threat_engine_file
-                        self.threat_path_and_file = current_threat_path_and_file
-                        break
-
-                    if e == 'OK':
-                        try:
-                            threat_eng_id_name = self.threat_id_name = \
-                                v['threat_id_name_k'][0]
-                            self.threat_file, self.threat_path_and_file = \
-                                self.get_engine_file(threat_eng_id_name)
-                        except IndexError:
-                            logging.info('User presses OK but did not select an engine.')
-                        except Exception:
-                            logging.exception('Failed to set threat engine.')
-                        break
-
-                window.UnHide()
-                w.Close()
+                self.manage_role_engine(window, 'threat')
                 continue
 
             # Mode: Neutral
