@@ -71,7 +71,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.1.0'
+APP_VERSION = 'v2.2.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -81,9 +81,11 @@ REVIEW_MOVE_LIST_HEIGHT = 8   # reduced from 11 to make room for the threat pane
 REVIEW_ANALYSIS_BOX_HEIGHT = 3
 REVIEW_THREAT_BOX_HEIGHT = 1
 REVIEW_THREAT_PV_PLIES = 5
-# Time cap (seconds) for Review-mode analysis and threat searches. Without a
-# cap these run "go infinite" and peg the CPU until the user navigates away.
-REVIEW_ANALYSIS_TIME_SEC = 60
+# Time caps (seconds) for Review-mode searches. Without a cap these run
+# "go infinite" and peg the CPU until the user navigates away. Editable via
+# Settings/Game and persisted in the settings file.
+REVIEW_ANALYSIS_TIME_SEC = 60   # default analysis time cap
+REVIEW_THREAT_TIME_SEC = 30     # default threat time cap
 REVIEW_ANALYSIS_TIME_MIN = 1
 REVIEW_ANALYSIS_TIME_MAX = 3600
 
@@ -824,6 +826,7 @@ class EasyChessGui:
         self.adviser_threads = 1
         self.adviser_movetime_sec = 10
         self.pecg_auto_save_game = 'pecg_auto_save_games.pgn'
+        self.settings_file = 'pecg_settings.json'
         self.my_games = 'pecg_my_games.pgn'
         self.repertoire_file = {
             'white': 'pecg_white_repertoire.pgn',
@@ -865,9 +868,10 @@ class EasyChessGui:
         self.is_save_time_left = False
         self.is_save_user_comment = True
         self.is_time_forfeit_enabled = True
-        # Time cap (seconds) for Review-mode analysis and threat searches;
-        # user-configurable via Settings/Game.
+        # Time caps (seconds) for Review-mode analysis and threat searches;
+        # user-configurable via Settings/Game and persisted in the settings file.
         self.review_analysis_time_sec = REVIEW_ANALYSIS_TIME_SEC
+        self.review_threat_time_sec = REVIEW_THREAT_TIME_SEC
         self.analysis_file = None
         self.analysis_path_and_file = None
         self.analysis_id_name = None
@@ -1206,6 +1210,54 @@ class EasyChessGui:
             # Save data to pecg_user.json
             with open(self.user_config_file, 'w') as h:
                 json.dump(data, h, indent=4)
+
+    def _read_review_time(self, value, fallback):
+        """Parse and clamp a Review-mode time (sec), falling back if invalid."""
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            logging.info('Invalid review time %r; keeping %s s.', value, fallback)
+            return fallback
+        return min(REVIEW_ANALYSIS_TIME_MAX,
+                   max(REVIEW_ANALYSIS_TIME_MIN, value))
+
+    def load_settings(self):
+        """Load persisted Settings/Game values from the settings file.
+
+        A missing file or missing keys leave the __init__ defaults in place.
+        """
+        settings_path = Path(self.settings_file)
+        if not settings_path.exists():
+            return
+        try:
+            with open(self.settings_file, 'r') as json_file:
+                data = json.load(json_file)
+        except Exception:
+            logging.exception('Failed to read settings file.')
+            return
+
+        if 'is_save_time_left' in data:
+            self.is_save_time_left = bool(data['is_save_time_left'])
+        if 'is_time_forfeit_enabled' in data:
+            self.is_time_forfeit_enabled = bool(data['is_time_forfeit_enabled'])
+        for key in ('review_analysis_time_sec', 'review_threat_time_sec'):
+            if key in data:
+                setattr(self, key,
+                        self._read_review_time(data[key], getattr(self, key)))
+
+    def save_settings(self):
+        """Persist Settings/Game values to the settings file."""
+        data = {
+            'is_save_time_left': self.is_save_time_left,
+            'is_time_forfeit_enabled': self.is_time_forfeit_enabled,
+            'review_analysis_time_sec': self.review_analysis_time_sec,
+            'review_threat_time_sec': self.review_threat_time_sec,
+        }
+        try:
+            with open(self.settings_file, 'w') as json_file:
+                json.dump(data, json_file, indent=4)
+        except Exception:
+            logging.exception('Failed to save settings file.')
 
     def update_engine_to_config_file(self, eng_path_file, new_name, old_name, user_opt):
         """
@@ -3200,7 +3252,7 @@ class EasyChessGui:
         search = RunEngine(
             self.threat_queue, self.engine_config_file,
             self.threat_path_and_file, self.threat_id_name,
-            self.max_depth, self.review_analysis_time_sec * 1000, 0,
+            self.max_depth, self.review_threat_time_sec * 1000, 0,
             tc_type='timepermove',
             period_moves=0,
             is_stream_search_info=True,
@@ -3764,6 +3816,9 @@ class EasyChessGui:
 
         # Read user config file, if missing create and new one
         self.check_user_config_file()
+
+        # Load persisted Settings/Game values (checkboxes, review times).
+        self.load_settings()
 
         # If engine config file (pecg_engines.json) is missing, then create it.
         self.check_engine_config_file()
@@ -4742,14 +4797,22 @@ class EasyChessGui:
                              tooltip='When enabled, the game is\n' +
                                      'adjudicated when the player\n' +
                                      'runs out of time.')],
-                    [sg.Text('Review analysis/threat time (sec)',
-                             tooltip='Maximum time the Review-mode analysis\n' +
-                                     'and threat engines search a position\n' +
-                                     'before stopping ({} to {}).'.format(
+                    [sg.Text('Review analysis time (sec)', size=(24, 1),
+                             tooltip='Maximum time the Review analysis engine\n' +
+                                     'searches a position before stopping\n' +
+                                     '({} to {}).'.format(
                                          REVIEW_ANALYSIS_TIME_MIN,
                                          REVIEW_ANALYSIS_TIME_MAX)),
                      sg.Input(default_text=str(self.review_analysis_time_sec),
                               key='review_analysis_time_k', size=(6, 1))],
+                    [sg.Text('Review threat time (sec)', size=(24, 1),
+                             tooltip='Maximum time the Review threat engine\n' +
+                                     'searches a position before stopping\n' +
+                                     '({} to {}).'.format(
+                                         REVIEW_ANALYSIS_TIME_MIN,
+                                         REVIEW_ANALYSIS_TIME_MAX)),
+                     sg.Input(default_text=str(self.review_threat_time_sec),
+                              key='review_threat_time_k', size=(6, 1))],
                     [sg.OK(), sg.Cancel()],
                 ]
 
@@ -4764,16 +4827,13 @@ class EasyChessGui:
                     if e == 'OK':
                         self.is_save_time_left = v['save_time_left_k']
                         self.is_time_forfeit_enabled = v['time_forfeit_k']
-                        try:
-                            new_time = int(v['review_analysis_time_k'])
-                            self.review_analysis_time_sec = min(
-                                REVIEW_ANALYSIS_TIME_MAX,
-                                max(REVIEW_ANALYSIS_TIME_MIN, new_time))
-                        except (TypeError, ValueError):
-                            logging.info(
-                                'Invalid review analysis time %r; keeping %s s.',
-                                v['review_analysis_time_k'],
-                                self.review_analysis_time_sec)
+                        self.review_analysis_time_sec = self._read_review_time(
+                            v['review_analysis_time_k'],
+                            self.review_analysis_time_sec)
+                        self.review_threat_time_sec = self._read_review_time(
+                            v['review_threat_time_k'],
+                            self.review_threat_time_sec)
+                        self.save_settings()
                         break
 
                 window.UnHide()
