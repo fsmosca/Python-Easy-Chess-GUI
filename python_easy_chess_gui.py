@@ -72,7 +72,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.4.0'
+APP_VERSION = 'v2.5.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -1988,7 +1988,7 @@ class EasyChessGui:
 
     def set_depth_limit(self):
         """ Returns max depth based from user setting """
-        user_depth = sg.PopupGetText(
+        user_depth = sg.popup_get_text(
             f'Current depth is {self.max_depth}\n\nInput depth [{MIN_DEPTH} to {MAX_DEPTH}]',
             title=BOX_TITLE,
             icon=ico_path[platform]['pecg']
@@ -4536,19 +4536,42 @@ class EasyChessGui:
                                             option_layout.append(combo_layout)
                                 break
 
-                        option_layout.append([sg.OK(), sg.Cancel()])
-
+                        # Build the option body, keeping the 2-column split for
+                        # engines that have many options.
                         if len(option_layout2) > 1:
-                            tab1 = [[sg.Column(option_layout)]]
-                            tab2 = [[sg.Column(option_layout2)]]
-                            modify_layout = [[sg.Column(tab1), sg.Column(tab2)]]
+                            body = [[sg.Column(option_layout,
+                                               vertical_alignment='top'),
+                                     sg.Column(option_layout2,
+                                               vertical_alignment='top')]]
                         else:
-                            modify_layout = option_layout
+                            body = [[sg.Column(option_layout,
+                                               vertical_alignment='top')]]
+
+                        # Cap the options viewport to the screen so the window
+                        # never grows taller than the display (which would push
+                        # its title bar above the top edge and make it
+                        # impossible to drag down). Tall option lists scroll.
+                        rows = max(len(option_layout), len(option_layout2))
+                        try:
+                            _, screen_h = sg.Window.get_screen_size()
+                        except Exception:
+                            screen_h = 800
+                        view_h = min(rows * 28 + 10, max(300, screen_h - 200))
+                        view_w = 760 if len(option_layout2) > 1 else 430
+
+                        # OK/Cancel sit outside the scroll area so they stay
+                        # visible no matter how many options there are.
+                        modify_layout = [
+                            [sg.Column(body, scrollable=True,
+                                       vertical_scroll_only=True,
+                                       size=(view_w, view_h))],
+                            [sg.OK(), sg.Cancel()]]
 
                         edit_win.Hide()
                         modify_win = sg.Window(button_title,
                                                layout=modify_layout,
-                                               icon=ico_path[platform]['pecg'])
+                                               icon=ico_path[platform]['pecg'],
+                                               resizable=True, finalize=True)
                         is_cancel_modify_win = False
                         while True:
                             e1, v1 = modify_win.Read(timeout=100)
