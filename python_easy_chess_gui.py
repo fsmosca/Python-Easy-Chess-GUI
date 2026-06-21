@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.8.0'
+APP_VERSION = 'v2.9.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -1314,6 +1314,27 @@ class EasyChessGui:
             logging.exception('Failed to save usernames.')
         self.username = name
         return True
+
+    def delete_username(self, name):
+        """Remove a saved player name from pecg_user.json and persist.
+
+        If the list becomes empty it falls back to ['Human']. If the removed
+        name was the active player (or the active is no longer present) the
+        active switches to the last remaining name, kept last so it reloads on
+        restart.
+        """
+        names = [n for n in self.get_usernames() if n != name]
+        if not names:
+            names = ['Human']
+        if self.username == name or self.username not in names:
+            self.username = names[-1]
+        # Keep the active player last (check_user_config_file loads the last).
+        names = [n for n in names if n != self.username] + [self.username]
+        try:
+            with open(self.user_config_file, 'w') as h:
+                json.dump([{'username': n} for n in names], h, indent=4)
+        except Exception:
+            logging.exception('Failed to delete username.')
 
     def check_user_config_file(self):
         """
@@ -4632,6 +4653,7 @@ class EasyChessGui:
                     [sg.Listbox(values=names, size=(44, 8), key='user_list_k',
                                 default_values=preselect)],
                     [sg.Button('Use Selected', key='user_use_k'),
+                     sg.Button('Delete', key='user_del_k'),
                      sg.Button('Close')],
                 ]
                 window.Hide()
@@ -4682,6 +4704,19 @@ class EasyChessGui:
                             continue
                         self.set_current_user(sel[0])
                         _refresh_users()
+                    elif e == 'user_del_k':
+                        sel = v['user_list_k']
+                        if not sel:
+                            sg.popup('Please select a saved player to delete.',
+                                     title=win_title,
+                                     icon=ico_path[platform]['pecg'])
+                            continue
+                        if sg.popup_yes_no(
+                                'Delete player "{}"?'.format(sel[0]),
+                                title=win_title,
+                                icon=ico_path[platform]['pecg']) == 'Yes':
+                            self.delete_username(sel[0])
+                            _refresh_users()
                 w.Close()
                 window.UnHide()
                 self.update_labels_and_game_tags(window, human=self.username)
