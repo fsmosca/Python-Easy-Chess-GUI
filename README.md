@@ -3,14 +3,6 @@ A Chess GUI based from Python using FreeSimpleGUI and Python-Chess modules. User
 
 ![](https://i.imgur.com/DT0lOO2.png)
 
-Command line to compile the source to exe using pyinstaller.
-
-```
-pyinstaller python_easy_chess_gui.py -F -w
-```
-
-Then add the folders for the exe to work.
-
 ### A. Requirements
 If you want to run from the python source the following are required or see the installation section below.
 * Python 3.7 and up
