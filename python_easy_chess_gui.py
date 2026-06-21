@@ -96,6 +96,66 @@ platform = sys.platform
 sys_os = sys_plat.system()
 
 
+# Consolas ships with Windows but not with stock Linux. Without a real monospace
+# font, Tk silently falls back to a proportional one, which breaks the
+# character-based right-edge alignment of the info panels (every element is sized
+# in character units). Pick a monospace font that exists on each platform.
+def _default_mono_font():
+    try:
+        temp_root = tk.Tk()
+        temp_root.withdraw()
+        import tkinter.font as tkfont
+        available = tkfont.families(temp_root)
+        temp_root.destroy()
+
+        if platform == 'win32':
+            preferred = ['Consolas', 'Courier New', 'Courier']
+        elif platform == 'darwin':
+            preferred = ['Menlo', 'Monaco', 'Courier New', 'Courier']
+        else:
+            preferred = ['DejaVu Sans Mono', 'Liberation Mono', 'Ubuntu Mono', 'Courier New', 'Courier', 'monospace']
+
+        for f in preferred:
+            if f in available:
+                return f
+    except Exception:
+        pass
+
+    if platform == 'win32':
+        return 'Consolas'
+    if platform == 'darwin':
+        return 'Menlo'
+    return 'DejaVu Sans Mono'   # present on essentially every Linux desktop
+
+
+FONT_NAME = _default_mono_font()
+if platform == 'win32':
+    FONT_BASE = (FONT_NAME, 10)
+    FONT_SMALL = (FONT_NAME, 9)
+elif platform == 'darwin':
+    FONT_BASE = (FONT_NAME, 10)
+    FONT_SMALL = (FONT_NAME, 9)
+else:
+    FONT_BASE = (FONT_NAME, 9)
+    FONT_SMALL = (FONT_NAME, 8)
+
+
+# The top menu BAR font can't be set through FreeSimpleGUI (its font= only styles
+# the drop-down submenus). The native Windows menubar uses Segoe UI 9; on Linux
+# Tk draws the menubar itself with its own default (DejaVu Sans 10), so it looks
+# bigger and a different family. Match Windows' size/class on Linux; leave the
+# native menubar untouched elsewhere (None -> no change).
+def _default_menu_font():
+    if platform == 'win32':
+        return None
+    if platform == 'darwin':
+        return None
+    return ('DejaVu Sans', 9)
+
+
+MENU_FONT = _default_menu_font()
+
+
 ico_path = {
     'win32': {'pecg': 'Icon/pecg.ico', 'enemy': 'Icon/enemy.ico', 'adviser': 'Icon/adviser.ico'},
     'linux': {'pecg': 'Icon/pecg.png', 'enemy': 'Icon/enemy.png', 'adviser': 'Icon/adviser.png'},
@@ -119,6 +179,8 @@ GUI_THEME = [
 ]
 
 IMAGE_PATH = 'Images/60'  # path to the chess pieces
+SQUARE_PX = 60            # piece images are 60x60, so the board is 8 * 60 wide
+BOARD_PX = 8 * SQUARE_PX
 
 
 BLANK = 0  # piece names
@@ -1080,17 +1142,19 @@ class EasyChessGui:
             default_button_element_size=(12, 1),
             auto_size_buttons=False,
             location=(loc[0], loc[1]),
+            finalize=True,
             icon=ico_path[platform]['pecg']
         )
 
         # Initialize White and black boxes
-        while True:
-            button, value = w.Read(timeout=50)
-            self.update_labels_and_game_tags(w, human=self.username)
-            break
+        self.update_labels_and_game_tags(w, human=self.username)
 
         # Re-bind drag-and-drop on the new window's board squares
         self.setup_board_drag_drop(w)
+        self.redraw_board(w)
+
+        # Match the Linux menubar font to Windows (no-op on Windows/macOS).
+        self.apply_menu_font(w)
 
         window.Close()
         return w
@@ -2152,6 +2216,24 @@ class EasyChessGui:
                 elem = window.find_element(key=(i, j))
                 elem.Update(button_color=('white', color),
                             image_filename=piece_image, )
+        self.configure_board_widgets(window)
+
+    def configure_board_widgets(self, window):
+        """Configure board square Tkinter buttons to ensure no gaps or borders."""
+        configured_count = 0
+        for i in range(8):
+            for j in range(8):
+                elem = window.find_element(key=(i, j), silent_on_error=True)
+                if elem is not None and elem.Widget is not None:
+                    try:
+                        if platform == 'linux':
+                            elem.Widget.configure(borderwidth=0, bd=0, highlightthickness=0, padx=0, pady=0, relief='flat', width=58, height=58)
+                        else:
+                            elem.Widget.configure(borderwidth=0, bd=0, highlightthickness=0, padx=0, pady=0, relief='flat')
+                        configured_count += 1
+                    except Exception as e:
+                        logging.warning('Failed to configure board square widget (%d, %d): %s', i, j, e)
+        logging.info('Successfully configured %d board square widgets.', configured_count)
 
     def setup_board_drag_drop(self, window):
         """Bind drag-and-drop events to board square buttons.
@@ -2161,6 +2243,8 @@ class EasyChessGui:
         """
         self._widget_to_square = {}
         self._drag_window = window
+        window.refresh()
+        self.configure_board_widgets(window)
         for i in range(8):
             for j in range(8):
                 elem = window.find_element(key=(i, j))
@@ -3929,68 +4013,82 @@ class EasyChessGui:
     def build_review_layout(self, is_user_white=True):
         """Create review mode layout with navigation controls."""
         sg.change_look_and_feel(self.gui_theme)
-        sg.set_options(margins=(0, 3), border_width=1)
+        sg.set_options(margins=(0, 3), border_width=1, font=FONT_BASE)
 
         board_layout = self.create_board(is_user_white)
         board_controls = [
-            [sg.Text('Mode     Review', size=(36, 1), font=('Consolas', 10),
+            [sg.Text('Mode     Review', size=(36, 1), font=FONT_BASE,
                      key='_gamestatus_')],
-            [sg.Text('PGN file', size=(8, 1), font=('Consolas', 10)),
-             sg.Text('', size=(44, 1), font=('Consolas', 9),
+            [sg.Text('PGN file', size=(8, 1), font=FONT_BASE),
+             sg.Text('', size=(44, 1), font=FONT_SMALL,
                      key='review_pgn_k', relief='sunken')],
-            [sg.Text('Game details', size=(16, 1), font=('Consolas', 10))],
+            [sg.Text('Game details', size=(16, 1), font=FONT_BASE)],
             [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
-                          font=('Consolas', 10), key='review_header_k',
+                          font=FONT_BASE, key='review_header_k',
                           disabled=True)],
             # Listbox scrollbar adds ~4 chars of visual width, so 18+30=48
             # aligns with the 52-char Multiline/Text elements above and below.
-            [sg.Text('Move list', size=(18, 1), font=('Consolas', 10)),
-             sg.Text('Book moves', size=(30, 1), font=('Consolas', 10))],
+            [sg.Text('Move list', size=(18, 1), font=FONT_BASE),
+             sg.Text('Book moves', size=(30, 1), font=FONT_BASE)],
             [sg.Listbox(values=['Start position'], size=(18, REVIEW_MOVE_LIST_HEIGHT),
-                        font=('Consolas', 10), key='review_move_list_k',
+                        font=FONT_BASE, key='review_move_list_k',
                         enable_events=True, expand_y=True),
              sg.Multiline('', do_not_clear=True, autoscroll=False,
                           size=(30, REVIEW_MOVE_LIST_HEIGHT),
-                          font=('Consolas', 10), key='review_book_k',
+                          font=FONT_BASE, key='review_book_k',
                           disabled=True, expand_y=True)],
-            [sg.Text('Position 0/0', size=(20, 1), font=('Consolas', 10),
+            [sg.Text('Position 0/0', size=(20, 1), font=FONT_BASE,
                      key='review_nav_k', relief='sunken')],
-            [sg.Text('Threat stopped', size=(52, 1), font=('Consolas', 10),
+            [sg.Text('Threat stopped', size=(55, 1), font=FONT_BASE,
                      key='review_threat_status_k', relief='sunken')],
             [sg.Multiline('', do_not_clear=True, autoscroll=False,
                           size=(52, REVIEW_THREAT_BOX_HEIGHT),
-                          font=('Consolas', 10), key='review_threat_k',
+                          font=FONT_BASE, key='review_threat_k',
                           text_color='red', disabled=True, wrap_lines=False)],
-            [sg.Text('Analysis stopped', size=(52, 1), font=('Consolas', 10),
+            [sg.Text('Analysis stopped', size=(55, 1), font=FONT_BASE,
                      key='review_analysis_status_k', relief='sunken')],
             [sg.Multiline('', do_not_clear=True, autoscroll=False,
                           size=(52, REVIEW_ANALYSIS_BOX_HEIGHT),
-                          font=('Consolas', 10), key='review_analysis_k',
+                          font=FONT_BASE, key='review_analysis_k',
                           disabled=True, wrap_lines=False)],
 
         ]
 
         nav_buttons = sg.Column(
-            [[sg.Button('First', size=(7, 1)),
-              sg.Button('Previous', size=(7, 1)),
-              sg.Button('Next', size=(7, 1)),
-              sg.Button('Last', size=(7, 1))]],
+            [[sg.Button('First', size=(7, 1), font=FONT_BASE, pad=(1, 3)),
+              sg.Button('Previous', size=(8, 1), font=FONT_BASE, pad=(1, 3)),
+              sg.Button('Next', size=(7, 1), font=FONT_BASE, pad=(1, 3)),
+              sg.Button('Last', size=(7, 1), font=FONT_BASE, pad=(1, 3))]],
             justification='left', pad=(0, 0))
         toggle_buttons = sg.Column(
-            [[sg.Button('Analysis', key='review_toggle_analysis_k', size=(7, 1),
+            [[sg.Button('Analysis', key='review_toggle_analysis_k', size=(8, 1),
+                        font=FONT_BASE, pad=(1, 3),
                         tooltip='Toggle engine analysis for the current position.'),
               sg.Button('Threat', key='review_toggle_threat_k', size=(7, 1),
+                        font=FONT_BASE, pad=(1, 3),
                         tooltip='Toggle threat analysis: engine analyses what the '
                                 'opponent threatens if the side to move were to pass.')]],
             justification='right', pad=(0, 0))
 
+        # Pin the button bar to the board width: expand_x makes the bar fill the
+        # board column and sg.Push() flush-rights Threat to the board's right
+        # edge. compact_review_buttons() (run after finalize) trims each button's
+        # Tk padding so all six fit inside the board width on Linux too, where the
+        # default button padding is much larger than on Windows.
+        button_bar = sg.Column(
+            [[nav_buttons, sg.Push(), toggle_buttons]],
+            expand_x=True, pad=(0, 0))
+
         board_column = [
-            [sg.Column(board_layout)],
-            [nav_buttons, sg.Push(), toggle_buttons]
+            # pad=(0, 0) so the board column's width is exactly the board (no
+            # extra side padding); the expand_x button_bar then matches the
+            # board's left and right edges precisely.
+            [sg.Column(board_layout, pad=(0, 0))],
+            [button_bar]
         ]
 
         layout = [
-            [sg.Menu(menu_def_review, tearoff=False)],
+            [sg.Menu(menu_def_review, tearoff=False, font=MENU_FONT)],
             [sg.Column(board_column, vertical_alignment='top'),
              sg.Column(board_controls, vertical_alignment='top', expand_y=True)]
         ]
@@ -4000,7 +4098,7 @@ class EasyChessGui:
     def create_review_window(self, location=None):
         """Create a review window."""
         layout = self.build_review_layout(self.is_user_white)
-        return sg.Window(
+        window = sg.Window(
             '{} {}'.format(APP_NAME, APP_VERSION),
             layout,
             default_button_element_size=(12, 1),
@@ -4009,6 +4107,51 @@ class EasyChessGui:
             location=location,
             icon=ico_path[platform]['pecg']
         )
+        self.configure_board_widgets(window)
+        self.compact_review_buttons(window)
+        self.apply_menu_font(window)
+        return window
+
+    def compact_review_buttons(self, window):
+        """Shrink the under-board nav/toggle buttons' internal Tk padding.
+
+        Classic Tk buttons default to padx='3m'/pady='1m' (~11 px per side on
+        Linux/X11), so the six buttons span wider than the 480 px board and push
+        the Threat button past the board's right edge. Windows uses tiny padding,
+        which is why the overhang only showed on Linux. Force small, uniform
+        padding so the whole button bar fits inside the board width everywhere.
+        """
+        for key in ('First', 'Previous', 'Next', 'Last',
+                    'review_toggle_analysis_k', 'review_toggle_threat_k'):
+            element = window.find_element(key, silent_on_error=True)
+            if element is None or element.Widget is None:
+                continue
+            try:
+                element.Widget.configure(
+                    padx=2, pady=2, borderwidth=1, highlightthickness=0)
+            except Exception:
+                logging.exception('Failed to compact review button %r', key)
+        window.refresh()
+
+    def apply_menu_font(self, window):
+        """Match the Linux menubar font to the native Windows one.
+
+        FreeSimpleGUI cannot set the menubar font (only submenus), so configure
+        the underlying Tk menu widget directly. Only needed where Tk draws the
+        menu (Linux); Windows/macOS use a native menubar and MENU_FONT is None.
+        The setting survives Menu.update() (mode switches) because update() only
+        rebuilds the submenu items, not the menubar's font.
+        """
+        if MENU_FONT is None:
+            return
+        try:
+            root = window.TKroot
+            menu_path = root.cget('menu')
+            if menu_path:
+                root.nametowidget(menu_path).configure(font=MENU_FONT)
+                window.refresh()
+        except Exception:
+            logging.exception('Failed to set the menubar font')
 
     def start_review_mode(self, window):
         """Open review mode in a separate window."""
@@ -4243,70 +4386,73 @@ class EasyChessGui:
         :return: GUI layout
         """
         sg.change_look_and_feel(self.gui_theme)
-        sg.set_options(margins=(0, 3), border_width=1)
+        sg.set_options(margins=(0, 3), border_width=1, font=FONT_BASE)
 
         # Define board
         board_layout = self.create_board(is_user_white)
 
         board_controls = [
-            [sg.Text('Mode     Neutral', size=(36, 1), font=('Consolas', 10), key='_gamestatus_')],
-            [sg.Text('White', size=(7, 1), font=('Consolas', 10)),
-             sg.Text('Human', font=('Consolas', 10), key='_White_',
+            [sg.Text('Mode     Neutral', size=(36, 1), font=FONT_BASE, key='_gamestatus_')],
+            [sg.Text('White', size=(7, 1), font=FONT_BASE),
+             sg.Text('Human', font=FONT_BASE, key='_White_',
                      size=(24, 1), relief='sunken'),
-             sg.Text('', font=('Consolas', 10), key='w_base_time_k',
+             sg.Text('', font=FONT_BASE, key='w_base_time_k',
                      size=(11, 1), relief='sunken'),
-             sg.Text('', font=('Consolas', 10), key='w_elapse_k', size=(7, 1),
+             sg.Text('', font=FONT_BASE, key='w_elapse_k', size=(7, 1),
                      relief='sunken')
              ],
-            [sg.Text('Black', size=(7, 1), font=('Consolas', 10)),
-             sg.Text('Computer', font=('Consolas', 10), key='_Black_',
+            [sg.Text('Black', size=(7, 1), font=FONT_BASE),
+             sg.Text('Computer', font=FONT_BASE, key='_Black_',
                      size=(24, 1), relief='sunken'),
-             sg.Text('', font=('Consolas', 10), key='b_base_time_k',
+             sg.Text('', font=FONT_BASE, key='b_base_time_k',
                      size=(11, 1), relief='sunken'),
-             sg.Text('', font=('Consolas', 10), key='b_elapse_k', size=(7, 1),
+             sg.Text('', font=FONT_BASE, key='b_elapse_k', size=(7, 1),
                      relief='sunken')
              ],
-            [sg.Text('Adviser', size=(7, 1), font=('Consolas', 10), key='adviser_k',
+            [sg.Text('Adviser', size=(7, 1), font=FONT_BASE, key='adviser_k',
                      right_click_menu=[
                         'Right',
                         ['Start::right_adviser_k', 'Stop::right_adviser_k']
                     ]),
-             sg.Text('', font=('Consolas', 10), key='advise_info_k', relief='sunken',
+             sg.Text('', font=FONT_BASE, key='advise_info_k', relief='sunken',
                      size=(46, 1))],
 
-            [sg.Text('Move list', size=(16, 1), font=('Consolas', 10))],
+            [sg.Text('Move list', size=(16, 1), font=FONT_BASE)],
             [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(52, 8),
-                          font=('Consolas', 10), key='_movelist_', disabled=True)],
+                          font=FONT_BASE, key='_movelist_', disabled=True)],
 
-            [sg.Text('Comment', size=(7, 1), font=('Consolas', 10))],
+            [sg.Text('Comment', size=(7, 1), font=FONT_BASE)],
             [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(52, 3),
-                          font=('Consolas', 10), key='comment_k')],
+                          font=FONT_BASE, key='comment_k')],
 
             [sg.Text('BOOK 1, Comp games', size=(26, 1),
-                     font=('Consolas', 10),
+                     font=FONT_BASE,
                      right_click_menu=['Right', ['Show::right_book1_k', 'Hide::right_book1_k']]),
              sg.Text('BOOK 2, Human games',
-                     font=('Consolas', 10),
+                     font=FONT_BASE,
                      right_click_menu=['Right', ['Show::right_book2_k', 'Hide::right_book2_k']])],
             [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(23, 4),
-                          font=('Consolas', 10), key='polyglot_book1_k', disabled=True),
+                           font=FONT_BASE, key='polyglot_book1_k', disabled=True),
              sg.Multiline('', do_not_clear=True, autoscroll=False, size=(25, 4),
-                          font=('Consolas', 10), key='polyglot_book2_k', disabled=True)],
-            [sg.Text('Opponent Search Info', font=('Consolas', 10), size=(30, 1),
+                           font=FONT_BASE, key='polyglot_book2_k', disabled=True)],
+            [sg.Text('Opponent Search Info', font=FONT_BASE, size=(30, 1),
                      right_click_menu=['Right',
                                        ['Show::right_search_info_k', 'Hide::right_search_info_k']])],
             [sg.Text('', key='search_info_all_k', size=(55, 1),
-                     font=('Consolas', 10), relief='sunken')],
+                     font=FONT_BASE, relief='sunken')],
         ]
 
-        board_tab = [[sg.Column(board_layout)]]
+        self.menu_elem = sg.Menu(menu_def_neutral, tearoff=False, font=MENU_FONT)
 
-        self.menu_elem = sg.Menu(menu_def_neutral, tearoff=False)
+        board_column = [
+            [sg.Column(board_layout, pad=(0, 0))]
+        ]
 
         # White board layout, mode: Neutral
         layout = [
                 [self.menu_elem],
-                [sg.Column(board_tab), sg.Column(board_controls)]
+                [sg.Column(board_column, vertical_alignment='top'),
+                 sg.Column(board_controls, vertical_alignment='top', expand_y=True)]
         ]
 
         return layout
@@ -4371,6 +4517,7 @@ class EasyChessGui:
         window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
                            layout, default_button_element_size=(12, 1),
                            auto_size_buttons=False,
+                           finalize=True,
                            icon=ico_path[platform]['pecg'])
 
         # Read user config file, if missing create and new one
@@ -4401,13 +4548,14 @@ class EasyChessGui:
         self.init_game()
 
         # Initialize White and black boxes
-        while True:
-            button, value = window.Read(timeout=50)
-            self.update_labels_and_game_tags(window, human=self.username)
-            break
+        self.update_labels_and_game_tags(window, human=self.username)
 
         # Set up drag-and-drop bindings for board squares
         self.setup_board_drag_drop(window)
+        self.redraw_board(window)
+
+        # Match the Linux menubar font to Windows (no-op on Windows/macOS).
+        self.apply_menu_font(window)
 
         # Mode: Neutral, main loop starts here
         while True:
@@ -4426,8 +4574,8 @@ class EasyChessGui:
                 layout = [
                     [sg.Text('PGN', size=(4, 1)),
                      sg.Input(size=(40, 1), key='pgn_k'), sg.FileBrowse()],
-                    [sg.Button('Display Players', size=(48, 1))],
-                    [sg.Text('Status:', size=(48, 1), key='status_k', relief='sunken')],
+                    [sg.Button('Display Players', size=(53, 1))],
+                    [sg.Text('Status:', size=(53, 1), key='status_k', relief='sunken')],
                     [sg.T('Current players in the pgn', size=(43, 1))],
                     [sg.Listbox([], size=(53, 10), key='player_k')],
                     [sg.Button('Delete Player'), sg.Cancel()]
@@ -5254,6 +5402,7 @@ class EasyChessGui:
 
                 # Change menu from Neutral to Play
                 self.menu_elem.Update(menu_def_play)
+                self.apply_menu_font(window)
                 self.psg_board = copy.deepcopy(initial_board)
                 board = chess.Board()
 
@@ -5277,6 +5426,7 @@ class EasyChessGui:
 
                 # Restore Neutral menu
                 self.menu_elem.Update(menu_def_neutral)
+                self.apply_menu_font(window)
                 self.psg_board = copy.deepcopy(initial_board)
                 board = chess.Board()
                 self.set_new_game()
@@ -5286,6 +5436,13 @@ class EasyChessGui:
 
 
 def main():
+    if sys.platform == 'win32':
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:
+            pass
+
     engine_config_file = 'pecg_engines.json'
     user_config_file = 'pecg_user.json'
 
