@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.10.0'
+APP_VERSION = 'v2.10.1'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -1081,6 +1081,22 @@ class EasyChessGui:
         self._stale_threat_search = None
         self.review_nav_last_time = 0
 
+    def reset_review_run_state(self):
+        """Reset run state of review mode when exiting, keeping loaded game/pgn."""
+        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+        self.review_analysis_enabled = False
+        self.review_analysis_status = 'Analysis stopped'
+        self.review_analysis_search = None
+        self.review_analysis_engine = None
+        self._stale_analysis_search = None
+        self.review_threat_enabled = False
+        self.review_threat_status = 'Threat stopped'
+        self.review_threat_line = ''
+        self.review_threat_search = None
+        self.review_threat_engine = None
+        self._stale_threat_search = None
+        self.review_nav_last_time = 0
+
     def update_game(self, mc: int, user_move: str, time_left: int, user_comment: str):
         """Saves moves in the game.
 
@@ -1463,6 +1479,13 @@ class EasyChessGui:
         # later by restore_engine_roles, once the engine list exists).
         if isinstance(data.get('role_engine_options'), dict):
             self.role_engine_options = data['role_engine_options']
+        if 'review_pgn_file' in data:
+            self.review_pgn_file = data['review_pgn_file']
+            if self.review_pgn_file and os.path.isfile(self.review_pgn_file):
+                try:
+                    self.review_games, _ = self.load_pgn_games(self.review_pgn_file)
+                except Exception:
+                    logging.exception('Failed to auto-load PGN games from saved path.')
 
     def save_settings(self):
         """Persist Settings/Game values to the settings file."""
@@ -1477,6 +1500,7 @@ class EasyChessGui:
             'threat_id_name': self.threat_id_name,
             'adviser_movetime_sec': self.adviser_movetime_sec,
             'role_engine_options': self.role_engine_options,
+            'review_pgn_file': self.review_pgn_file,
         }
         try:
             with open(self.settings_file, 'w') as json_file:
@@ -3481,14 +3505,26 @@ class EasyChessGui:
         if games is None:
             games = []
 
+        selected_games = games
+        selected_pgn = pgn_file or ''
+        is_truncated = False
+
+        # Auto-load games if a valid PGN file path is passed but no games are loaded yet
+        if selected_pgn and not selected_games:
+            if os.path.isfile(selected_pgn):
+                try:
+                    selected_games, is_truncated = self.load_pgn_games(selected_pgn)
+                except Exception:
+                    logging.exception(f'Failed to auto-load PGN games from {selected_pgn}')
+
         selection_list = [
             self.get_review_game_text(game, index)
-            for index, game in enumerate(games)
+            for index, game in enumerate(selected_games)
         ]
 
         layout = [
             [sg.Text('PGN', size=(4, 1)),
-             sg.Input(default_text=pgn_file or '', key='pgn_k', expand_x=True),
+             sg.Input(default_text=selected_pgn, key='pgn_k', expand_x=True, enable_events=True),
              sg.FileBrowse()],
             [sg.Button('Display Games', expand_x=True)],
             [sg.Text('Status: Load a PGN, select a game, then press OK.',
@@ -3499,23 +3535,37 @@ class EasyChessGui:
         ]
 
         w = sg.Window('Review/Load PGN', layout,
-                      icon=ico_path[platform]['pecg'])
+                      icon=ico_path[platform]['pecg'], finalize=True)
+
+        # Update initial selection and status message if games are loaded
+        if selected_games:
+            w['game_k'].Update(selection_list, set_to_index=[0])
+            if is_truncated:
+                w['status_k'].Update(
+                    f'Status: Showing first {len(selected_games)} games only. Select one and press OK.')
+            else:
+                w['status_k'].Update(
+                    f'Status: Loaded {len(selected_games)} game(s). Select one and press OK.')
 
         selected_game = None
-        selected_games = games
-        selected_pgn = pgn_file or ''
 
         while True:
             e, v = w.Read(timeout=50)
             if e is None or e == 'Cancel':
                 break
 
-            if e == 'Display Games':
-                selected_pgn = v['pgn_k']
-                if not selected_pgn:
-                    w['status_k'].Update('Status: Please choose a PGN file.')
+            if e == 'Display Games' or e == 'pgn_k':
+                new_pgn = v['pgn_k']
+                if not new_pgn:
+                    if e == 'Display Games':
+                        w['status_k'].Update('Status: Please choose a PGN file.')
                     continue
 
+                # For auto-loading via typing/browsing event, only proceed if it exists as a file
+                if e == 'pgn_k' and not os.path.isfile(new_pgn):
+                    continue
+
+                selected_pgn = new_pgn
                 try:
                     selected_games, is_truncated = self.load_pgn_games(selected_pgn)
                 except (FileNotFoundError, OSError, UnicodeError) as exc:
@@ -4155,16 +4205,18 @@ class EasyChessGui:
 
     def start_review_mode(self, window):
         """Open review mode in a separate window."""
-        selected_game = self.select_review_game()
-        if selected_game is None:
-            return
+        if self.review_game is None:
+            if self.review_games:
+                selected_game_obj = self.load_review_game(
+                    self.review_pgn_file, self.review_games[0])
+                if selected_game_obj is not None:
+                    self.prepare_review_game(selected_game_obj, 0)
+                else:
+                    self.prepare_review_game(chess.pgn.Game())
+            else:
+                self.prepare_review_game(chess.pgn.Game())
 
         saved_orientation = self.is_user_white
-
-        self.review_pgn_file = selected_game['pgn_file']
-        self.review_games = selected_game['games']
-        self.prepare_review_game(
-            selected_game['game'], selected_game['game_index'])
 
         location = window.CurrentLocation()
         window.Hide()
@@ -4216,6 +4268,7 @@ class EasyChessGui:
                 self.update_review_window(review_window)
                 self.refresh_review_analysis(review_window)
                 self.refresh_review_threat(review_window)
+                self.save_settings()
                 continue
 
             if button == 'Select Game::review_select_game_k':
@@ -4231,6 +4284,7 @@ class EasyChessGui:
                 self.update_review_window(review_window)
                 self.refresh_review_analysis(review_window)
                 self.refresh_review_threat(review_window)
+                self.save_settings()
                 continue
 
             if button == 'Flip':
@@ -4320,7 +4374,7 @@ class EasyChessGui:
         self.close_review_analysis()
         self.close_review_threat()
         review_window.Close()
-        self.reset_review_state()
+        self.reset_review_run_state()
         self.is_user_white = saved_orientation
         window.UnHide()
 
