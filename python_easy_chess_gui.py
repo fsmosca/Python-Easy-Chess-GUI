@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.10.1'
+APP_VERSION = 'v2.11.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -1067,6 +1067,8 @@ class EasyChessGui:
         self.review_move_index = 0
         self.review_move_labels = []
         self.review_boards = []
+        self.review_nodes = []
+        self.review_window = None
         self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
         self.review_analysis_enabled = False
         self.review_analysis_status = 'Analysis stopped'
@@ -1083,6 +1085,7 @@ class EasyChessGui:
 
     def reset_review_run_state(self):
         """Reset run state of review mode when exiting, keeping loaded game/pgn."""
+        self.review_window = None
         self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
         self.review_analysis_enabled = False
         self.review_analysis_status = 'Analysis stopped'
@@ -1096,6 +1099,217 @@ class EasyChessGui:
         self.review_threat_engine = None
         self._stale_threat_search = None
         self.review_nav_last_time = 0
+
+    def on_move_clicked(self, idx):
+        """Callback when a move in the Multiline PGN view is clicked."""
+        if self.review_window is None:
+            return
+        self.review_move_index = idx
+        self.update_review_window(self.review_window)
+        if self.review_analysis_enabled or self.review_threat_enabled:
+            # Stop currently running analysis and trigger a debounce restart
+            if self.review_analysis_search is not None:
+                self.review_analysis_search.stop()
+            if self.review_threat_search is not None:
+                self.review_threat_search.stop()
+            self.review_nav_last_time = time.time()
+            self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+            self.review_analysis_status = 'Waiting...'
+            self.review_threat_line = ''
+            self.review_threat_status = 'Waiting...'
+            self.update_review_analysis_panel(self.review_window)
+            self.update_review_threat_panel(self.review_window)
+        else:
+            self.refresh_review_analysis(self.review_window)
+            self.refresh_review_threat(self.review_window)
+
+    def highlight_current_move(self, widget):
+        """Highlights the active move in the Multiline text and scrolls it into view."""
+        widget.tag_remove("current_move", "1.0", "end")
+        widget.tag_remove("current_var_move", "1.0", "end")
+        widget.tag_remove("current_var_block", "1.0", "end")
+
+        current_node = self.review_nodes[self.review_move_index]
+
+        # 1. Determine if the current move is in a variation
+        in_var = False
+        curr = current_node
+        while curr.parent is not None:
+            if curr.parent.variations and curr != curr.parent.variations[0]:
+                in_var = True
+                break
+            curr = curr.parent
+
+        # 2. Highlight active move
+        tag_name = f"move_{self.review_move_index}"
+        ranges = widget.tag_ranges(tag_name)
+        if ranges:
+            if in_var:
+                widget.tag_add("current_var_move", ranges[0], ranges[1])
+            else:
+                widget.tag_add("current_move", ranges[0], ranges[1])
+            widget.see(ranges[0])
+
+        # 3. Highlight parenthetical variation block if in variation
+        if in_var:
+            var_root_idx = None
+            curr = current_node
+            while curr.parent is not None:
+                if curr.parent.variations and curr in curr.parent.variations[1:]:
+                    if curr in self.review_nodes:
+                        var_root_idx = self.review_nodes.index(curr)
+                        break
+                curr = curr.parent
+
+            if var_root_idx is not None:
+                var_tag = f"var_block_{var_root_idx}"
+                var_ranges = widget.tag_ranges(var_tag)
+                if var_ranges:
+                    widget.tag_add("current_var_block", var_ranges[0], var_ranges[1])
+
+    def render_pgn_tree(self, node, board, widget, indent=0, is_var=False):
+        """Recursively render game node and variations into the Tkinter Text widget."""
+
+        def render_only_move(n, b, ind):
+            NAG_SYMBOLS = {
+                1: "!",
+                2: "?",
+                3: "!!",
+                4: "??",
+                5: "!?",
+                6: "?!",
+            }
+            if n.move is None:
+                return b, None
+
+            # 1. Print starting comment, if any
+            if n.starting_comment:
+                comment_text = f"{{{n.starting_comment}}} "
+                widget.insert("insert", comment_text, "comment")
+
+            turn = b.turn
+            fullmove = b.fullmove_number
+            san = b.san(n.move)
+
+            nag_suffix = ""
+            for nag in n.nags:
+                if nag in NAG_SYMBOLS:
+                    nag_suffix += NAG_SYMBOLS[nag]
+
+            idx = len(self.review_nodes)
+            self.review_nodes.append(n)
+            next_b = b.copy()
+            next_b.push(n.move)
+            self.review_boards.append(next_b)
+
+            prefix = ""
+            if turn == chess.WHITE:
+                prefix = f"{fullmove}. "
+            else:
+                if self.first_move_in_line:
+                    prefix = f"{fullmove}... "
+
+            move_text = f"{prefix}{san}{nag_suffix} "
+            tag_name = f"move_{idx}"
+            widget.insert("insert", move_text, (tag_name, "move_link"))
+            widget.tag_bind(tag_name, "<Button-1>", lambda event, i=idx: self.on_move_clicked(i))
+
+            self.first_move_in_line = False
+
+            # 2. Print comment, if any
+            if n.comment:
+                comment_text = f"{{{n.comment}}} "
+                widget.insert("insert", comment_text, "comment")
+
+            return next_b, idx
+
+        def render_continuations(n, b, ind):
+            if not n.variations:
+                return
+
+            mainline_child = n.variations[0]
+            # 1. Render mainline child's move
+            next_b, idx = render_only_move(mainline_child, b, ind)
+
+            # 2. Render sibling variations (alternatives to mainline child)
+            if len(n.variations) > 1:
+                for var_node in n.variations[1:]:
+                    var_idx = len(self.review_nodes)
+                    start_mark = widget.index("insert")
+
+                    widget.insert("insert", "\n" + "    " * (ind + 1) + "( ")
+                    self.first_move_in_line = True
+                    render_node(var_node, b, ind + 1, True)
+                    widget.insert("insert", " ) ")
+                    self.first_move_in_line = True
+
+                    end_mark = widget.index("insert")
+                    var_tag = f"var_block_{var_idx}"
+                    widget.tag_add(var_tag, start_mark, end_mark)
+
+            # 3. Render mainline child's continuation
+            render_continuations(mainline_child, next_b, ind)
+
+        def render_node(n, b, ind, is_v):
+            next_b, idx = render_only_move(n, b, ind)
+            render_continuations(n, next_b, ind)
+
+        render_node(node, board, indent, is_var)
+
+    def render_review_movelist(self, window):
+        """Build and render the entire PGN move list with variations into the Multiline widget."""
+        if self.review_game is None or 'review_move_list_k' not in window.AllKeysDict:
+            return
+
+        widget = window['review_move_list_k'].Widget
+        widget.configure(state='normal')
+        widget.delete('1.0', tk.END)
+
+        # Re-initialize index mapping lists
+        self.review_nodes = [self.review_game]
+        self.review_boards = [self.review_game.board()]
+
+        # Configure styles
+        default_fg = widget.cget("foreground")
+        widget.tag_configure("move_link", foreground=default_fg, font=widget.cget("font"))
+        widget.tag_configure("comment", foreground="green")
+        widget.tag_configure("current_move", background="yellow", foreground="black")
+        widget.tag_configure("current_var_move", background="#adff2f", foreground="black")
+        widget.tag_configure("current_var_block", background="#e2f0d9")
+
+        widget.tag_raise("current_move", "move_link")
+        widget.tag_raise("current_var_move", "move_link")
+        widget.tag_raise("current_move", "current_var_block")
+        widget.tag_raise("current_var_move", "current_var_block")
+
+        widget.tag_bind("move_link", "<Enter>", lambda event: widget.configure(cursor="hand2"))
+        widget.tag_bind("move_link", "<Leave>", lambda event: widget.configure(cursor=""))
+
+        # Insert Start Position
+        widget.insert("insert", "Start Position", ("move_0", "move_link"))
+        widget.tag_bind("move_0", "<Button-1>", lambda event, i=0: self.on_move_clicked(i))
+        widget.insert("insert", "\n\n")
+
+        self.first_move_in_line = True
+        game = self.review_game
+        if game.variations:
+            self.render_pgn_tree(game.variations[0], game.board(), widget, 0, False)
+            for var_node in game.variations[1:]:
+                var_idx = len(self.review_nodes)
+                start_mark = widget.index("insert")
+
+                widget.insert("insert", "\n( ")
+                self.first_move_in_line = True
+                self.render_pgn_tree(var_node, game.board(), widget, 1, True)
+                widget.insert("insert", " ) ")
+                self.first_move_in_line = True
+
+                end_mark = widget.index("insert")
+                var_tag = f"var_block_{var_idx}"
+                widget.tag_add(var_tag, start_mark, end_mark)
+
+        widget.configure(state='disabled')
+        self.highlight_current_move(widget)
 
     def update_game(self, mc: int, user_move: str, time_left: int, user_comment: str):
         """Saves moves in the game.
@@ -3627,29 +3841,73 @@ class EasyChessGui:
         w.Close()
         return selected_game
 
+    def traverse_review_game(self, node, current_board, indent, is_var):
+        """Recursively traverse game tree to build flat list of moves, boards, and nodes."""
+
+        def traverse_only_move(n, b, ind, is_v):
+            if n.move is None:
+                return b
+
+            # 1. Add starting comment to label if present
+            start_comment = f"{{{n.starting_comment}}} " if n.starting_comment else ""
+
+            turn = b.turn
+            fullmove = b.fullmove_number
+            san = b.san(n.move)
+            prefix = f'{fullmove}. ' if turn == chess.WHITE else f'{fullmove}... '
+
+            # 2. Add ending comment to label if present
+            end_comment = f" {{{n.comment}}}" if n.comment else ""
+
+            if is_v:
+                label = '    ' * ind + f'( {start_comment}{prefix}{san}{end_comment} )'
+            else:
+                label = '    ' * ind + f'{start_comment}{prefix}{san}{end_comment}'
+
+            next_b = b.copy()
+            next_b.push(n.move)
+
+            self.review_move_labels.append(label)
+            self.review_boards.append(next_b)
+            self.review_nodes.append(n)
+            return next_b
+
+        def traverse_continuations(n, b, ind):
+            if not n.variations:
+                return
+
+            mainline_child = n.variations[0]
+            next_b = traverse_only_move(mainline_child, b, ind, False)
+
+            if len(n.variations) > 1:
+                for var_node in n.variations[1:]:
+                    traverse_node(var_node, b, ind + 1, True)
+
+            traverse_continuations(mainline_child, next_b, ind)
+
+        def traverse_node(n, b, ind, is_v):
+            next_b = traverse_only_move(n, b, ind, is_v)
+            traverse_continuations(n, next_b, ind)
+
+        traverse_node(node, current_board, indent, is_var)
+
     def prepare_review_game(self, game, game_index=None):
         """Prepare move list and board positions for review."""
         self.review_game = game
         self.review_game_index = game_index
         self.review_move_index = 0
         self.review_move_labels = ['Start position']
-        self.review_boards = []
+        self.review_boards = [game.board()]
+        self.review_nodes = [game]
         self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
         self.review_analysis_status = 'Analysis stopped'
 
-        board = game.board()
-        self.review_boards.append(board.copy(stack=False))
-
-        for move in game.mainline_moves():
-            san = board.san(move)
-            prefix = (
-                f'{board.fullmove_number}. '
-                if board.turn == chess.WHITE
-                else f'{board.fullmove_number}... '
-            )
-            self.review_move_labels.append(f'{prefix}{san}')
-            board.push(move)
-            self.review_boards.append(board.copy(stack=False))
+        if game.variations:
+            # Mainline starts at variations[0]
+            self.traverse_review_game(game.variations[0], game.board(), 0, False)
+            # Alternative starting moves (variations) start at variations[1:]
+            for var_node in game.variations[1:]:
+                self.traverse_review_game(var_node, game.board(), 1, True)
 
     def set_board_from_board_state(self, window, board):
         """Update the GUI board from a python-chess board."""
@@ -4038,10 +4296,9 @@ class EasyChessGui:
         window['review_header_k'].Update(header_text)
         window['review_nav_k'].Update(
             f'Position {self.review_move_index}/{len(self.review_boards) - 1}')
-        window['review_move_list_k'].Update(
-            values=self.review_move_labels,
-            set_to_index=[self.review_move_index],
-            scroll_to_index=self.review_move_index)
+        # Highlight the current move in the multiline
+        if 'review_move_list_k' in window.AllKeysDict:
+            self.highlight_current_move(window['review_move_list_k'].Widget)
 
         # Update book moves for the current position.
         board = self.review_boards[self.review_move_index]
@@ -4072,21 +4329,19 @@ class EasyChessGui:
             [sg.Text('PGN file', size=(8, 1), font=FONT_BASE),
              sg.Text('', size=(44, 1), font=FONT_SMALL,
                      key='review_pgn_k', relief='sunken')],
-            [sg.Text('Game details', size=(16, 1), font=FONT_BASE)],
-            [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
-                          font=FONT_BASE, key='review_header_k',
-                          disabled=True)],
-            # Listbox scrollbar adds ~4 chars of visual width, so 18+30=48
-            # aligns with the 52-char Multiline/Text elements above and below.
-            [sg.Text('Move list', size=(18, 1), font=FONT_BASE),
-             sg.Text('Book moves', size=(30, 1), font=FONT_BASE)],
-            [sg.Listbox(values=['Start position'], size=(18, REVIEW_MOVE_LIST_HEIGHT),
-                        font=FONT_BASE, key='review_move_list_k',
-                        enable_events=True, expand_y=True),
-             sg.Multiline('', do_not_clear=True, autoscroll=False,
-                          size=(30, REVIEW_MOVE_LIST_HEIGHT),
-                          font=FONT_BASE, key='review_book_k',
-                          disabled=True, expand_y=True)],
+            [sg.TabGroup([
+                [sg.Tab('Game details', [[sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
+                                                       font=FONT_BASE, key='review_header_k',
+                                                       disabled=True, expand_x=True, expand_y=True)]], font=FONT_BASE),
+                 sg.Tab('Book moves', [[sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
+                                                     font=FONT_BASE, key='review_book_k',
+                                                     disabled=True, expand_x=True, expand_y=True)]], font=FONT_BASE)]
+            ], font=FONT_BASE, key='review_tab_group_k', expand_x=True)],
+            [sg.Text('Move list', size=(18, 1), font=FONT_BASE)],
+            [sg.Multiline('', do_not_clear=True, autoscroll=False,
+                          size=(52, REVIEW_MOVE_LIST_HEIGHT),
+                          font=FONT_BASE, key='review_move_list_k',
+                          disabled=True, expand_x=True, expand_y=True)],
             [sg.Text('Position 0/0', size=(20, 1), font=FONT_BASE,
                      key='review_nav_k', relief='sunken')],
             [sg.Text('Threat stopped', size=(55, 1), font=FONT_BASE,
@@ -4221,6 +4476,8 @@ class EasyChessGui:
         location = window.CurrentLocation()
         window.Hide()
         review_window = self.create_review_window(location=location)
+        self.review_window = review_window
+        self.render_review_movelist(review_window)
         self.update_review_window(review_window)
 
         while True:
@@ -4246,6 +4503,7 @@ class EasyChessGui:
                 self.close_review_analysis()
                 self.close_review_threat()
                 review_window.Close()
+                self.review_window = None
                 sys.exit(0)
 
             if button == 'Neutral':
@@ -4265,6 +4523,7 @@ class EasyChessGui:
                 self.review_games = selected_game['games']
                 self.prepare_review_game(
                     selected_game['game'], selected_game['game_index'])
+                self.render_review_movelist(review_window)
                 self.update_review_window(review_window)
                 self.refresh_review_analysis(review_window)
                 self.refresh_review_threat(review_window)
@@ -4281,6 +4540,7 @@ class EasyChessGui:
                 self.review_games = selected_game['games']
                 self.prepare_review_game(
                     selected_game['game'], selected_game['game_index'])
+                self.render_review_movelist(review_window)
                 self.update_review_window(review_window)
                 self.refresh_review_analysis(review_window)
                 self.refresh_review_threat(review_window)
@@ -4294,6 +4554,8 @@ class EasyChessGui:
                 review_window.Close()
                 self.is_user_white = not self.is_user_white
                 review_window = self.create_review_window(location=review_location)
+                self.review_window = review_window
+                self.render_review_movelist(review_window)
                 self.update_review_window(review_window)
                 if self.review_analysis_enabled:
                     self.start_review_analysis(review_window)
@@ -4332,23 +4594,27 @@ class EasyChessGui:
                 self.review_move_index = 0
                 position_changed = True
             elif button == 'Previous':
-                self.review_move_index = max(0, self.review_move_index - 1)
+                current_node = self.review_nodes[self.review_move_index]
+                prev_node = current_node.parent if (current_node and hasattr(current_node, 'parent')) else None
+                if prev_node in self.review_nodes:
+                    self.review_move_index = self.review_nodes.index(prev_node)
+                else:
+                    self.review_move_index = 0
                 position_changed = True
             elif button == 'Next':
-                self.review_move_index = min(
-                    len(self.review_boards) - 1, self.review_move_index + 1)
+                current_node = self.review_nodes[self.review_move_index]
+                next_node = current_node.variations[0] if (current_node and current_node.variations) else None
+                if next_node in self.review_nodes:
+                    self.review_move_index = self.review_nodes.index(next_node)
                 position_changed = True
             elif button == 'Last':
-                self.review_move_index = len(self.review_boards) - 1
+                current_node = self.review_nodes[self.review_move_index]
+                node = current_node
+                while node and node.variations:
+                    node = node.variations[0]
+                if node in self.review_nodes:
+                    self.review_move_index = self.review_nodes.index(node)
                 position_changed = True
-            elif button == 'review_move_list_k':
-                try:
-                    selected_index = review_window['review_move_list_k'].Widget.curselection()[0]
-                    self.review_move_index = selected_index
-                    position_changed = True
-                except (IndexError, AttributeError):
-                    self.update_review_window(review_window)
-                    continue
 
             if position_changed:
                 self.update_review_window(review_window)
@@ -4374,6 +4640,7 @@ class EasyChessGui:
         self.close_review_analysis()
         self.close_review_threat()
         review_window.Close()
+        self.review_window = None
         self.reset_review_run_state()
         self.is_user_white = saved_orientation
         window.UnHide()
