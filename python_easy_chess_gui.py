@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.11.0'
+APP_VERSION = 'v2.12.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -1074,13 +1074,13 @@ class EasyChessGui:
         self.review_analysis_status = 'Analysis stopped'
         self.review_analysis_search = None
         self.review_analysis_engine = None
-        self._stale_analysis_search = None
+        self._stale_analysis_searches = []
         self.review_threat_enabled = False
         self.review_threat_status = 'Threat stopped'
         self.review_threat_line = ''
         self.review_threat_search = None
         self.review_threat_engine = None
-        self._stale_threat_search = None
+        self._stale_threat_searches = []
         self.review_nav_last_time = 0
 
     def reset_review_run_state(self):
@@ -1091,13 +1091,13 @@ class EasyChessGui:
         self.review_analysis_status = 'Analysis stopped'
         self.review_analysis_search = None
         self.review_analysis_engine = None
-        self._stale_analysis_search = None
+        self._stale_analysis_searches = []
         self.review_threat_enabled = False
         self.review_threat_status = 'Threat stopped'
         self.review_threat_line = ''
         self.review_threat_search = None
         self.review_threat_engine = None
-        self._stale_threat_search = None
+        self._stale_threat_searches = []
         self.review_nav_last_time = 0
 
     def on_move_clicked(self, idx):
@@ -3963,7 +3963,7 @@ class EasyChessGui:
         """Stop the current Review mode analysis search.
 
         Signals the engine thread to stop without blocking the GUI.
-        The thread is parked as ``_stale_analysis_search`` so that
+        The thread is parked in ``_stale_analysis_searches`` so that
         ``poll_review_analysis`` can collect it later.  This keeps the
         button click fully non-blocking — no ``join()`` on the GUI
         thread — eliminating the "long press" feel.
@@ -3972,21 +3972,26 @@ class EasyChessGui:
             self.review_analysis_search.stop()
             # Park the thread for asynchronous cleanup instead of
             # blocking the GUI with join().
-            self._stale_analysis_search = self.review_analysis_search
+            self._stale_analysis_searches.append(self.review_analysis_search)
             self.review_analysis_search = None
         self.clear_queue(self.review_queue)
 
     def close_review_analysis(self):
         """Stop Review analysis and close its engine process."""
         self.stop_review_analysis()
-        # Also clean up any stale search thread.
-        if self._stale_analysis_search is not None:
-            self._stale_analysis_search.join(timeout=2.0)
-            if not self._stale_analysis_search.is_alive():
-                eng = self._stale_analysis_search.get_engine()
+        # Also clean up all stale search threads.
+        for s in self._stale_analysis_searches:
+            s.join(timeout=2.0)
+            if not s.is_alive():
+                eng = s.get_engine()
                 if eng is not None and self.review_analysis_engine is None:
                     self.review_analysis_engine = eng
-            self._stale_analysis_search = None
+                elif eng is not None:
+                    try:
+                        eng.quit()
+                    except Exception:
+                        pass
+        self._stale_analysis_searches = []
         if self.review_analysis_engine is not None:
             try:
                 self.review_analysis_engine.quit()
@@ -4045,10 +4050,14 @@ class EasyChessGui:
 
     def poll_review_analysis(self, window):
         """Consume engine messages for Review mode analysis."""
-        # Try to collect any stale analysis thread from a previous stop.
-        if self._collect_stale_search(
-                self._stale_analysis_search, 'review_analysis_engine'):
-            self._stale_analysis_search = None
+        # Try to collect any stale analysis threads from previous stops.
+        active_stale = []
+        for s in self._stale_analysis_searches:
+            if self._collect_stale_search(s, 'review_analysis_engine'):
+                pass
+            else:
+                active_stale.append(s)
+        self._stale_analysis_searches = active_stale
 
         updated = False
         is_debouncing = bool(self.review_nav_last_time)
@@ -4126,21 +4135,27 @@ class EasyChessGui:
         """
         if self.review_threat_search is not None:
             self.review_threat_search.stop()
-            self._stale_threat_search = self.review_threat_search
+            self._stale_threat_searches.append(self.review_threat_search)
             self.review_threat_search = None
+            logging.info('Threat analysis search stopped.')
         self.clear_queue(self.threat_queue)
 
     def close_review_threat(self):
         """Stop threat analysis and close its engine process."""
         self.stop_review_threat()
-        # Also clean up any stale search thread.
-        if self._stale_threat_search is not None:
-            self._stale_threat_search.join(timeout=2.0)
-            if not self._stale_threat_search.is_alive():
-                eng = self._stale_threat_search.get_engine()
+        # Also clean up all stale search threads.
+        for s in self._stale_threat_searches:
+            s.join(timeout=2.0)
+            if not s.is_alive():
+                eng = s.get_engine()
                 if eng is not None and self.review_threat_engine is None:
                     self.review_threat_engine = eng
-            self._stale_threat_search = None
+                elif eng is not None:
+                    try:
+                        eng.quit()
+                    except Exception:
+                        pass
+        self._stale_threat_searches = []
         if self.review_threat_engine is not None:
             try:
                 self.review_threat_engine.quit()
@@ -4173,22 +4188,26 @@ class EasyChessGui:
 
         board = self.review_boards[self.review_move_index]
 
-        # Cannot use null move when the side to move is in check.
-        if board.is_check():
-            self.review_threat_status = 'Check - threat N/A'
-            self.review_threat_line = ''
-            self.update_review_threat_panel(window)
-            return
-
         if self.threat_path_and_file is None or self.threat_id_name is None:
             self.review_threat_enabled = False
             self.review_threat_status = 'No threat engine selected'
             self.review_threat_line = ''
             self.update_review_threat_panel(window)
+            logging.warning('Threat analysis failed to start: no threat engine selected.')
+            return
+
+        self.review_threat_enabled = True
+
+        # Cannot use null move when the side to move is in check.
+        if board.is_check():
+            self.stop_review_threat()
+            self.review_threat_status = 'Check - threat N/A'
+            self.review_threat_line = ''
+            self.update_review_threat_panel(window)
+            logging.info('Threat analysis is unavailable at move index %d: king is in check.', self.review_move_index)
             return
 
         self.stop_review_threat()
-        self.review_threat_enabled = True
         self.review_threat_line = ''
         self.review_threat_status = 'Threat: {} pos {}'.format(
             self.threat_id_name, self.review_move_index)
@@ -4216,6 +4235,7 @@ class EasyChessGui:
         search.start()
         self.review_threat_search = search
         self.review_threat_engine = None
+        logging.info('Threat analysis started for move index %d.', self.review_move_index)
 
     def refresh_review_threat(self, window):
         """Restart threat analysis after the Review mode position changes."""
@@ -4228,10 +4248,14 @@ class EasyChessGui:
 
     def poll_review_threat(self, window):
         """Consume engine messages for Review mode threat analysis."""
-        # Try to collect any stale threat thread from a previous stop.
-        if self._collect_stale_search(
-                self._stale_threat_search, 'review_threat_engine'):
-            self._stale_threat_search = None
+        # Try to collect any stale threat threads from previous stops.
+        active_stale = []
+        for s in self._stale_threat_searches:
+            if self._collect_stale_search(s, 'review_threat_engine'):
+                pass
+            else:
+                active_stale.append(s)
+        self._stale_threat_searches = active_stale
 
         updated = False
         is_debouncing = bool(self.review_nav_last_time)
@@ -4569,23 +4593,27 @@ class EasyChessGui:
 
             if button == 'review_toggle_analysis_k':
                 if self.review_analysis_enabled:
+                    logging.info('User toggled review analysis OFF.')
                     self.review_analysis_enabled = False
                     self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
                     self.review_analysis_status = 'Analysis stopped'
                     self.stop_review_analysis()
                     self.update_review_analysis_panel(review_window)
                 else:
+                    logging.info('User toggled review analysis ON.')
                     self.start_review_analysis(review_window)
                 continue
 
             if button == 'review_toggle_threat_k':
                 if self.review_threat_enabled:
+                    logging.info('User toggled review threat analysis OFF.')
                     self.review_threat_enabled = False
                     self.review_threat_line = ''
                     self.review_threat_status = 'Threat stopped'
                     self.stop_review_threat()
                     self.update_review_threat_panel(review_window)
                 else:
+                    logging.info('User toggled review threat analysis ON.')
                     self.start_review_threat(review_window)
                 continue
 
