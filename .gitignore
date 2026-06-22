@@ -29,3 +29,5 @@ __pycache__/
 pecg_user.json
 pecg_engines.json
 pecg_settings.json
+.venv
+PythonEasyChessGUI.spec
