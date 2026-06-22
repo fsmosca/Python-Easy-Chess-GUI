@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.9.0'
+APP_VERSION = 'v2.10.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
