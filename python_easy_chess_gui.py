@@ -1075,12 +1075,14 @@ class EasyChessGui:
         self.review_analysis_search = None
         self.review_analysis_engine = None
         self._stale_analysis_searches = []
+        self.review_analysis_stale = False
         self.review_threat_enabled = False
         self.review_threat_status = 'Threat stopped'
         self.review_threat_line = ''
         self.review_threat_search = None
         self.review_threat_engine = None
         self._stale_threat_searches = []
+        self.review_threat_stale = False
         self.review_nav_last_time = 0
 
     def reset_review_run_state(self):
@@ -1092,12 +1094,14 @@ class EasyChessGui:
         self.review_analysis_search = None
         self.review_analysis_engine = None
         self._stale_analysis_searches = []
+        self.review_analysis_stale = False
         self.review_threat_enabled = False
         self.review_threat_status = 'Threat stopped'
         self.review_threat_line = ''
         self.review_threat_search = None
         self.review_threat_engine = None
         self._stale_threat_searches = []
+        self.review_threat_stale = False
         self.review_nav_last_time = 0
 
     def on_move_clicked(self, idx):
@@ -1112,6 +1116,10 @@ class EasyChessGui:
                 self.review_analysis_search.stop()
             if self.review_threat_search is not None:
                 self.review_threat_search.stop()
+            # Mark output stale so poll discards the old position's lines and the
+            # debounce restart knows these roles still need restarting.
+            self.review_analysis_stale = True
+            self.review_threat_stale = True
             self.review_nav_last_time = time.time()
             self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
             self.review_analysis_status = 'Waiting...'
@@ -3943,6 +3951,24 @@ class EasyChessGui:
         limited_pv = ' '.join(pv_moves[:REVIEW_ANALYSIS_PV_MOVES])
         return '{} | {}'.format(prefix, limited_pv)
 
+    def _keep_one_engine(self, attr_engine, engine):
+        """Store ``engine`` in ``attr_engine``, keeping exactly one live engine.
+
+        If a different engine is already held, quit the redundant one instead of
+        overwriting the reference, which would otherwise orphan a live engine
+        process (a leak that accumulates idle engines and slows the app).
+        """
+        if engine is None:
+            return
+        current = getattr(self, attr_engine)
+        if current is not None and current is not engine:
+            try:
+                engine.quit()
+            except Exception:
+                logging.exception('Failed to quit redundant review engine.')
+            return
+        setattr(self, attr_engine, engine)
+
     def _collect_stale_search(self, search, attr_engine):
         """Attempt to join a previously-stopped search thread.
 
@@ -3953,9 +3979,7 @@ class EasyChessGui:
             return True
         search.join(timeout=0)
         if not search.is_alive():
-            engine = search.get_engine()
-            if engine is not None:
-                setattr(self, attr_engine, engine)
+            self._keep_one_engine(attr_engine, search.get_engine())
             return True
         return False
 
@@ -4014,11 +4038,22 @@ class EasyChessGui:
 
         self.stop_review_analysis()
         self.review_analysis_enabled = True
+        # Fresh search: its output is current, so poll must not discard it.
+        self.review_analysis_stale = False
         self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
-        self.review_analysis_status = \
-            'Analysing with {} at position {}'.format(
-                self.analysis_id_name, self.review_move_index)
+        # Give immediate feedback: a cold start (no reusable engine) must spawn
+        # and hand-shake an engine process, so say so; a warm reuse is fast.
+        if self.review_analysis_engine is None:
+            self.review_analysis_status = \
+                'Analysis: starting {}...'.format(self.analysis_id_name)
+        else:
+            self.review_analysis_status = \
+                'Analysing with {} at position {}'.format(
+                    self.analysis_id_name, self.review_move_index)
         self.update_review_analysis_panel(window)
+        # Force an immediate repaint so the click is acknowledged now instead of
+        # on the next Read(timeout=50) tick.
+        window.refresh()
 
         search = RunEngine(
             self.review_queue, self.engine_config_file,
@@ -4048,6 +4083,26 @@ class EasyChessGui:
             return
         self.start_review_analysis(window)
 
+    def reset_review_engines_for_new_game(self, window):
+        """Stop and disable Review analysis/threat after loading a new game.
+
+        A freshly loaded game starts with both panels cleanly 'stopped', so the
+        next click on the Analysis/Threat button starts a new search. Loading
+        used to auto-restart the searches, so if analysis was already on the
+        first click — meant to start it — instead toggled the running search
+        off, and only a second click showed output.
+        """
+        self.review_analysis_enabled = False
+        self.review_threat_enabled = False
+        self.stop_review_analysis()
+        self.stop_review_threat()
+        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+        self.review_analysis_status = 'Analysis stopped'
+        self.review_threat_line = ''
+        self.review_threat_status = 'Threat stopped'
+        self.update_review_analysis_panel(window)
+        self.update_review_threat_panel(window)
+
     def poll_review_analysis(self, window):
         """Consume engine messages for Review mode analysis."""
         # Try to collect any stale analysis threads from previous stops.
@@ -4060,7 +4115,6 @@ class EasyChessGui:
         self._stale_analysis_searches = active_stale
 
         updated = False
-        is_debouncing = bool(self.review_nav_last_time)
         while True:
             try:
                 msg = self.review_queue.get_nowait()
@@ -4072,9 +4126,10 @@ class EasyChessGui:
 
             msg_str = str(msg)
             if 'multipv_info' in msg_str:
-                # Skip stale analysis info from the old position while
-                # waiting for the debounce to restart analysis.
-                if is_debouncing:
+                # Skip stale analysis info: the search was stopped by navigation
+                # and the engine is still draining old-position lines. A freshly
+                # started search clears this flag, so its output is shown.
+                if self.review_analysis_stale:
                     continue
                 try:
                     line_no, info_line = msg_str.split(' | ', 1)
@@ -4099,10 +4154,11 @@ class EasyChessGui:
         # blocking the GUI thread on join().
         if self.review_analysis_search is not None \
                 and not self.review_analysis_search.is_alive():
-            self.review_analysis_engine = \
-                self.review_analysis_search.get_engine()
+            self._keep_one_engine(
+                'review_analysis_engine',
+                self.review_analysis_search.get_engine())
             self.review_analysis_search = None
-            if self.review_analysis_enabled and not is_debouncing:
+            if self.review_analysis_enabled and not self.review_analysis_stale:
                 self.review_analysis_status = \
                     'Analysis ready - {}'.format(self.analysis_id_name)
                 updated = True
@@ -4197,6 +4253,8 @@ class EasyChessGui:
             return
 
         self.review_threat_enabled = True
+        # Fresh search: its output is current, so poll must not discard it.
+        self.review_threat_stale = False
 
         # Cannot use null move when the side to move is in check.
         if board.is_check():
@@ -4209,9 +4267,18 @@ class EasyChessGui:
 
         self.stop_review_threat()
         self.review_threat_line = ''
-        self.review_threat_status = 'Threat: {} pos {}'.format(
-            self.threat_id_name, self.review_move_index)
+        # Give immediate feedback: a cold start (no reusable engine) must spawn
+        # and hand-shake an engine process, so say so; a warm reuse is fast.
+        if self.review_threat_engine is None:
+            self.review_threat_status = 'Threat: starting {}...'.format(
+                self.threat_id_name)
+        else:
+            self.review_threat_status = 'Threat: {} searching... (pos {})'.format(
+                self.threat_id_name, self.review_move_index)
         self.update_review_threat_panel(window)
+        # Force an immediate repaint so the click is acknowledged now instead of
+        # on the next Read(timeout=50) tick.
+        window.refresh()
 
         # Build a null-move board: flip the side to move so the engine sees
         # the position as if the current side passed their turn.
@@ -4258,7 +4325,6 @@ class EasyChessGui:
         self._stale_threat_searches = active_stale
 
         updated = False
-        is_debouncing = bool(self.review_nav_last_time)
         while True:
             try:
                 msg = self.threat_queue.get_nowait()
@@ -4270,7 +4336,10 @@ class EasyChessGui:
 
             msg_str = str(msg)
             if 'info_all' in msg_str:
-                if is_debouncing:
+                # Skip stale threat info from the old position; a freshly started
+                # search clears this flag so its output is shown (see
+                # poll_review_analysis).
+                if self.review_threat_stale:
                     continue
                 info_line = msg_str.rsplit(' info_all', 1)[0]
                 self.review_threat_line = self.shorten_threat_line(info_line)
@@ -4283,10 +4352,11 @@ class EasyChessGui:
         # Recover the engine once the *active* search finishes, without blocking.
         if self.review_threat_search is not None \
                 and not self.review_threat_search.is_alive():
-            self.review_threat_engine = \
-                self.review_threat_search.get_engine()
+            self._keep_one_engine(
+                'review_threat_engine',
+                self.review_threat_search.get_engine())
             self.review_threat_search = None
-            if self.review_threat_enabled and not is_debouncing:
+            if self.review_threat_enabled and not self.review_threat_stale:
                 self.review_threat_status = \
                     'Threat ready - {}'.format(self.threat_id_name)
                 updated = True
@@ -4512,14 +4582,17 @@ class EasyChessGui:
             # Skip timeout events as analysis updates are processed by
             # poll_review_analysis() and poll_review_threat() called earlier.
             if button == sg.TIMEOUT_KEY:
-                # Restart analysis/threat after debounce delay following navigation.
+                # After navigation settles (debounce), restart each enabled role
+                # that is still stale (its search was stopped by navigation and
+                # not yet restarted). A role the user toggled on during the wait
+                # is no longer stale, so it keeps running and its output shows.
                 nav_time = self.review_nav_last_time
                 if (nav_time
                         and time.time() - nav_time >= REVIEW_NAV_DEBOUNCE_SEC):
                     self.review_nav_last_time = 0
-                    if self.review_analysis_enabled:
+                    if self.review_analysis_enabled and self.review_analysis_stale:
                         self.start_review_analysis(review_window)
-                    if self.review_threat_enabled:
+                    if self.review_threat_enabled and self.review_threat_stale:
                         self.start_review_threat(review_window)
                 continue
 
@@ -4549,8 +4622,7 @@ class EasyChessGui:
                     selected_game['game'], selected_game['game_index'])
                 self.render_review_movelist(review_window)
                 self.update_review_window(review_window)
-                self.refresh_review_analysis(review_window)
-                self.refresh_review_threat(review_window)
+                self.reset_review_engines_for_new_game(review_window)
                 self.save_settings()
                 continue
 
@@ -4566,8 +4638,7 @@ class EasyChessGui:
                     selected_game['game'], selected_game['game_index'])
                 self.render_review_movelist(review_window)
                 self.update_review_window(review_window)
-                self.refresh_review_analysis(review_window)
-                self.refresh_review_threat(review_window)
+                self.reset_review_engines_for_new_game(review_window)
                 self.save_settings()
                 continue
 
@@ -4580,18 +4651,29 @@ class EasyChessGui:
                 review_window = self.create_review_window(location=review_location)
                 self.review_window = review_window
                 self.render_review_movelist(review_window)
-                self.update_review_window(review_window)
+                # Restart via the debounce path so the engines (parked in the
+                # stale lists by stop_review_* above) are reaped and reused
+                # instead of cold-starting new processes for the flipped board.
                 if self.review_analysis_enabled:
-                    self.start_review_analysis(review_window)
-                else:
-                    self.update_review_analysis_panel(review_window)
+                    self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+                    self.review_analysis_status = 'Waiting...'
+                    self.review_analysis_stale = True
                 if self.review_threat_enabled:
-                    self.start_review_threat(review_window)
-                else:
-                    self.update_review_threat_panel(review_window)
+                    self.review_threat_line = ''
+                    self.review_threat_status = 'Waiting...'
+                    self.review_threat_stale = True
+                if self.review_analysis_enabled or self.review_threat_enabled:
+                    self.review_nav_last_time = time.time()
+                self.update_review_window(review_window)
                 continue
 
             if button == 'review_toggle_analysis_k':
+                # Toggle on the *enabled* flag, not whether a search is actively
+                # computing: a finished analysis (time/depth cap reached) still
+                # shows its results with search == None, and a press there must
+                # stop/clear it, not restart it. A fresh search's output is no
+                # longer discarded thanks to the per-role stale flag, so pressing
+                # when off reliably starts and shows.
                 if self.review_analysis_enabled:
                     logging.info('User toggled review analysis OFF.')
                     self.review_analysis_enabled = False
@@ -4605,6 +4687,9 @@ class EasyChessGui:
                 continue
 
             if button == 'review_toggle_threat_k':
+                # Toggle on the *enabled* flag (see analysis toggle above): a
+                # finished threat search still shows its line with search == None,
+                # and a press there must stop it, not restart it.
                 if self.review_threat_enabled:
                     logging.info('User toggled review threat analysis OFF.')
                     self.review_threat_enabled = False
@@ -4654,6 +4739,10 @@ class EasyChessGui:
                         self.review_analysis_search.stop()
                     if self.review_threat_search is not None:
                         self.review_threat_search.stop()
+                    # Mark current output stale so poll discards the old
+                    # position's lines until a fresh search is started.
+                    self.review_analysis_stale = True
+                    self.review_threat_stale = True
                     self.review_nav_last_time = time.time()
                     self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
                     self.review_analysis_status = 'Waiting...'
