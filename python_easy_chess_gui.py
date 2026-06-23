@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.12.0'
+APP_VERSION = 'v2.13.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -3909,6 +3909,12 @@ class EasyChessGui:
         self.review_nodes = [game]
         self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
         self.review_analysis_status = 'Analysis stopped'
+        self.review_analysis_enabled = False
+        self.review_analysis_stale = False
+        self.review_threat_line = ''
+        self.review_threat_status = 'Threat stopped'
+        self.review_threat_enabled = False
+        self.review_threat_stale = False
 
         if game.variations:
             # Mainline starts at variations[0]
@@ -3954,19 +3960,20 @@ class EasyChessGui:
     def _keep_one_engine(self, attr_engine, engine):
         """Store ``engine`` in ``attr_engine``, keeping exactly one live engine.
 
-        If a different engine is already held, quit the redundant one instead of
-        overwriting the reference, which would otherwise orphan a live engine
-        process (a leak that accumulates idle engines and slows the app).
+        If a different engine is already held, quit the old one and keep the
+        newly-recovered engine. The previous code quit the new engine instead,
+        which reused an older (possibly stale) process and discarded the engine
+        that had just finished the active search, causing intermittent analysis
+        failures and wasting processes.
         """
         if engine is None:
             return
         current = getattr(self, attr_engine)
         if current is not None and current is not engine:
             try:
-                engine.quit()
+                current.quit()
             except Exception:
                 logging.exception('Failed to quit redundant review engine.')
-            return
         setattr(self, attr_engine, engine)
 
     def _collect_stale_search(self, search, attr_engine):
@@ -4094,6 +4101,8 @@ class EasyChessGui:
         """
         self.review_analysis_enabled = False
         self.review_threat_enabled = False
+        self.review_analysis_stale = False
+        self.review_threat_stale = False
         self.stop_review_analysis()
         self.stop_review_threat()
         self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
@@ -4509,7 +4518,25 @@ class EasyChessGui:
         self.configure_board_widgets(window)
         self.compact_review_buttons(window)
         self.apply_menu_font(window)
+        self.bind_review_shortcuts(window)
         return window
+
+    def bind_review_shortcuts(self, window):
+        """Bind Alt+A and Alt+T to the Review window's toggle buttons.
+
+        The bindings write the same event keys used by the Analysis and Threat
+        buttons, so the existing event-loop handlers take over.
+        """
+        try:
+            root = window.TKroot
+            root.bind('<Alt-Key-a>',
+                      lambda e: window.write_event_value(
+                          'review_toggle_analysis_k', True))
+            root.bind('<Alt-Key-t>',
+                      lambda e: window.write_event_value(
+                          'review_toggle_threat_k', True))
+        except Exception:
+            logging.exception('Failed to bind review window shortcuts.')
 
     def compact_review_buttons(self, window):
         """Shrink the under-board nav/toggle buttons' internal Tk padding.
