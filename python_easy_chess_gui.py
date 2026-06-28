@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.14.0'
+APP_VERSION = 'v2.14.1'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -1104,6 +1104,27 @@ class AutoAnalyzeGame(threading.Thread):
             return 6   # ?! dubious
         return None
 
+    def _clear_existing_annotations(self):
+        """Strip comments, NAGs and non-mainline variations from the game.
+
+        Re-analysis starts from a clean slate instead of piling new scores
+        and engine lines on top of old annotations.
+        """
+        node = self.game
+        while node.variations:
+            child = node.variations[0]
+            # Keep only the mainline child; drop sibling variations.
+            for var in list(node.variations[1:]):
+                try:
+                    node.remove_variation(var)
+                except Exception:
+                    logging.exception('Failed to remove existing variation.')
+            # Wipe annotations on the mainline child.
+            child.comment = ''
+            child.starting_comment = ''
+            child.nags = set()
+            node = child
+
     def run(self):
         """Analyze the game and emit progress/done messages."""
         try:
@@ -1117,6 +1138,7 @@ class AutoAnalyzeGame(threading.Thread):
                     self.engine_path_and_file, cwd=folder)
             self._configure_engine()
             self._configure_runtime_analysis_options()
+            self._clear_existing_annotations()
 
             # Count mainline moves for progress reporting.
             total = 0
@@ -1162,11 +1184,7 @@ class AutoAnalyzeGame(threading.Thread):
 
                 if game_move_score is not None:
                     score_text = self._format_score(game_move_score)
-                    existing = child.comment or ''
-                    if existing:
-                        child.comment = '{} | {}'.format(existing, score_text)
-                    else:
-                        child.comment = score_text
+                    child.comment = score_text
 
                     if engine_cp is not None:
                         if best_move == child.move:
