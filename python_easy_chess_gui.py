@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.13.0'
+APP_VERSION = 'v2.14.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -83,6 +83,10 @@ REVIEW_MOVE_LIST_HEIGHT = 8   # reduced from 11 to make room for the threat pane
 REVIEW_ANALYSIS_BOX_HEIGHT = 3
 REVIEW_THREAT_BOX_HEIGHT = 1
 REVIEW_THREAT_PV_PLIES = 5
+# Output file for games annotated by the Review-mode auto-analyzer.
+AUTO_ANALYSIS_OUTPUT_FILE = 'pecg_analyzed_games.pgn'
+# Number of plies to include when adding an engine PV as a sub-variation.
+AUTO_ANALYSIS_PV_PLIES = 9
 # Time caps (seconds) for Review-mode searches. Without a cap these run
 # "go infinite" and peg the CPU until the user navigates away. Editable via
 # Settings/Game and persisted in the settings file.
@@ -312,6 +316,14 @@ HELP_TOPICS = {
         'Threat button: show the opponent threat (null move).\n'
         'Both stop after their time limits in Settings -> Game (analysis\n'
         '60s, threat 30s) and restart automatically when you change move.'),
+    'help_review_auto': (
+        'Auto-Analyze Game',
+        'Game -> Auto-Analyze Game annotates every move of the loaded game\n'
+        'with an engine and time per move that you choose. Each move gets an\n'
+        'evaluation comment and engine-best lines are added as variations.\n'
+        'Results are appended to pecg_analyzed_games.pgn and the annotated\n'
+        'game replaces the current review game. Use Game -> Cancel Analysis\n'
+        'to stop early.'),
     'help_board_flip': (
         'Flip Board',
         'Board -> Flip swaps the side shown at the bottom. Use it in\n'
@@ -341,7 +353,8 @@ HELP_GAME_MENU = ['Game', ['Play a Game::help_game_play',
                            'Time Control::help_game_time']]
 HELP_REVIEW_MENU = ['Review', ['Open a Game::help_review_open',
                                'Navigate Moves::help_review_nav',
-                               'Analysis and Threat::help_review_engine']]
+                               'Analysis and Threat::help_review_engine',
+                               'Auto-Analyze Game::help_review_auto']]
 HELP_BOARD_MENU = ['Board', ['Flip::help_board_flip',
                              'Colors and Themes::help_board_color']]
 
@@ -441,7 +454,9 @@ menu_def_play = [
 menu_def_review = [
         ['&Mode', ['Neutral']],
         ['&Game', ['Load PGN::review_load_pgn_k',
-                   'Select Game::review_select_game_k']],
+                   'Select Game::review_select_game_k',
+                   'Auto-Analyze Game::review_auto_analyze_k',
+                   'Cancel Analysis::review_cancel_analysis_k']],
         ['Boar&d', ['Flip']],
         make_help_menu(HELP_REVIEW_MENU, HELP_ENGINE_MENU, HELP_BOARD_MENU),
 ]
@@ -968,6 +983,230 @@ class RunEngine(threading.Thread):
         return ' '.join(short_san_pv)
 
 
+class AutoAnalyzeGame(threading.Thread):
+    """Background thread that annotates a game with engine analysis.
+
+    Walks the mainline of the supplied game, evaluates each position with the
+    configured analysis engine, writes the evaluation as a comment from White's
+    point of view, and adds the engine's PV as a sub-variation when it disagrees
+    with the move played in the game.
+    """
+
+    def __init__(self, game, engine_config_file, engine_path_and_file,
+                 engine_id_name, time_sec, output_queue, cancel_event,
+                 max_depth=MAX_DEPTH, option_overrides=None,
+                 output_file=AUTO_ANALYSIS_OUTPUT_FILE):
+        threading.Thread.__init__(self)
+        self.game = game
+        self.engine_config_file = engine_config_file
+        self.engine_path_and_file = engine_path_and_file
+        self.engine_id_name = engine_id_name
+        self.time_sec = time_sec
+        self.output_queue = output_queue
+        self.cancel_event = cancel_event
+        self.max_depth = max_depth
+        self.option_overrides = option_overrides or {}
+        self.output_file = output_file
+        self.engine = None
+        self.daemon = True
+
+    def _format_score(self, score):
+        """Return a human-readable score string from White's POV."""
+        white_score = score.white()
+        if white_score.is_mate():
+            mate = white_score.mate()
+            return 'Mate in {}'.format(mate) if mate > 0 \
+                else 'Mated in {}'.format(abs(mate))
+        cp = white_score.score(mate_score=32000)
+        return '{:+.2f}'.format(cp / 100.0)
+
+    def _build_engine_variation(self, node, best_move, pv, board, score):
+        """Add best_move and the rest of the PV as a variation on node."""
+        if best_move not in board.legal_moves:
+            return
+        comment = self._format_score(score) if score is not None else ''
+        var_board = board.copy()
+        var_node = node.add_variation(best_move, comment=comment)
+        var_board.push(best_move)
+        for move in pv[1:AUTO_ANALYSIS_PV_PLIES]:
+            if move not in var_board.legal_moves:
+                break
+            var_node = var_node.add_variation(move)
+            var_board.push(move)
+
+    def _configure_engine(self):
+        """Apply UCI options from the engine config and per-role overrides."""
+        with open(self.engine_config_file, 'r') as json_file:
+            data = json.load(json_file)
+            for p in data:
+                if p['name'] != self.engine_id_name:
+                    continue
+                for n in p['options']:
+                    if n['type'] == 'button':
+                        continue
+                    if n['type'] == 'spin':
+                        user_value = int(n['value'])
+                        default_value = int(n['default'])
+                    else:
+                        user_value = n['value']
+                        default_value = n['default']
+                    if user_value != default_value:
+                        try:
+                            self.engine.configure({n['name']: user_value})
+                        except Exception:
+                            logging.exception('Failed to configure engine option.')
+
+        managed = {m.lower() for m in chess.engine.MANAGED_OPTIONS}
+        option_names = {name.lower(): name for name in self.engine.options}
+        for name, value in self.option_overrides.items():
+            lname = name.lower()
+            if lname in managed or lname not in option_names:
+                continue
+            real = option_names[lname]
+            try:
+                opt = self.engine.options[real]
+                if opt.type == 'spin':
+                    value = int(value)
+                elif opt.type == 'check':
+                    value = value if isinstance(value, bool) else \
+                        str(value).strip().lower() in ('true', '1', 'yes')
+                self.engine.configure({real: value})
+            except Exception:
+                logging.exception('Failed to apply override %s.', name)
+
+    def _configure_runtime_analysis_options(self):
+        """Enable analysis-specific UCI options (e.g. UCI_AnalyseMode)."""
+        try:
+            option_names = {name.lower(): name for name in self.engine.options}
+        except Exception:
+            logging.exception('Failed to read engine options.')
+            return
+        if 'uci_analysemode' in option_names:
+            try:
+                self.engine.configure({option_names['uci_analysemode']: True})
+            except Exception:
+                logging.exception('Failed to enable analyse mode.')
+
+    def _centipawns(self, score):
+        """Return the evaluation in centipawns from the side-to-move POV."""
+        return score.relative.score(mate_score=32000)
+
+    def _classify_nag(self, engine_cp, game_move_cp):
+        """Return a NAG integer if the game move is much worse than best.
+
+        Both scores are from the POV of the player who made the game move.
+        """
+        if game_move_cp <= -500 and engine_cp >= -200:
+            return 4   # ?? blunder
+        if game_move_cp <= -300 and engine_cp > -300:
+            return 2   # ? mistake
+        if game_move_cp <= -100 and engine_cp > -100:
+            return 6   # ?! dubious
+        return None
+
+    def run(self):
+        """Analyze the game and emit progress/done messages."""
+        try:
+            folder = Path(self.engine_path_and_file).parents[0]
+            if sys_os == 'Windows':
+                self.engine = chess.engine.SimpleEngine.popen_uci(
+                    self.engine_path_and_file, cwd=folder,
+                    creationflags=subprocess.CREATE_NO_WINDOW)
+            else:
+                self.engine = chess.engine.SimpleEngine.popen_uci(
+                    self.engine_path_and_file, cwd=folder)
+            self._configure_engine()
+            self._configure_runtime_analysis_options()
+
+            # Count mainline moves for progress reporting.
+            total = 0
+            node = self.game
+            while node.variations:
+                total += 1
+                node = node.variations[0]
+
+            current = 0
+            node = self.game
+            board = self.game.board()
+            while node.variations:
+                if self.cancel_event.is_set():
+                    self.output_queue.put({'type': 'cancelled'})
+                    return
+
+                current += 1
+                child = node.variations[0]
+                limit = chess.engine.Limit(
+                    time=self.time_sec,
+                    depth=self.max_depth if self.max_depth != MAX_DEPTH else None)
+                infos = self.engine.analyse(board, limit, multipv=1)
+                info = infos[0] if isinstance(infos, list) else infos
+
+                score = info.get('score')
+                pv = info.get('pv', [])
+                best_move = pv[0] if pv else None
+                engine_cp = self._centipawns(score) if score is not None else None
+
+                # Determine the actual evaluation of the move played in the game.
+                if score is not None and best_move == child.move:
+                    game_move_score = score
+                elif score is not None:
+                    after_board = board.copy()
+                    after_board.push(child.move)
+                    after_infos = self.engine.analyse(
+                        after_board, limit, multipv=1)
+                    after_info = after_infos[0] if isinstance(
+                        after_infos, list) else after_infos
+                    game_move_score = after_info.get('score')
+                else:
+                    game_move_score = None
+
+                if game_move_score is not None:
+                    score_text = self._format_score(game_move_score)
+                    existing = child.comment or ''
+                    if existing:
+                        child.comment = '{} | {}'.format(existing, score_text)
+                    else:
+                        child.comment = score_text
+
+                    if engine_cp is not None:
+                        if best_move == child.move:
+                            game_move_cp = engine_cp
+                        else:
+                            game_move_cp = -self._centipawns(game_move_score)
+                        nag = self._classify_nag(engine_cp, game_move_cp)
+                        if nag is not None:
+                            child.nags.add(nag)
+
+                if best_move is not None and best_move != child.move:
+                    self._build_engine_variation(node, best_move, pv, board, score)
+
+                self.output_queue.put({
+                    'type': 'progress',
+                    'current': current,
+                    'total': total,
+                })
+
+                board.push(child.move)
+                node = child
+
+            self.game.headers['Annotator'] = self.engine_id_name
+            with open(self.output_file, mode='a+', encoding='utf-8') as f:
+                f.write('\n{}\n\n'.format(self.game))
+
+            self.output_queue.put({'type': 'done', 'game': self.game})
+        except Exception:
+            logging.exception('Auto-analysis failed.')
+            self.output_queue.put({
+                'type': 'error',
+                'message': 'Auto-analysis failed. Check the log for details.'})
+        finally:
+            if self.engine is not None:
+                try:
+                    self.engine.quit()
+                except Exception:
+                    logging.exception('Failed to quit auto-analysis engine.')
+
+
 class EasyChessGui:
     queue = queue.Queue()
     is_user_white = True  # White is at the bottom in board layout
@@ -1045,6 +1284,10 @@ class EasyChessGui:
         # user-configurable via Settings/Game and persisted in the settings file.
         self.review_analysis_time_sec = REVIEW_ANALYSIS_TIME_SEC
         self.review_threat_time_sec = REVIEW_THREAT_TIME_SEC
+        # Auto-analysis defaults to the analysis engine/time, but the user can
+        # pick any installed engine and a separate time cap per move.
+        self.auto_analysis_engine_id_name = None
+        self.auto_analysis_time_sec = REVIEW_ANALYSIS_TIME_SEC
         # Per-(role, engine) UCI option overrides:
         # {role: {engine_id_name: {option_name: value}}}, deltas vs base.
         self.role_engine_options = {}
@@ -1056,6 +1299,9 @@ class EasyChessGui:
         self.threat_id_name = None
         self.review_queue = queue.Queue()
         self.threat_queue = queue.Queue()
+        self.auto_analysis_queue = queue.Queue()
+        self.auto_analysis_thread = None
+        self.auto_analysis_cancel = threading.Event()
         self.reset_review_state()
 
     def reset_review_state(self):
@@ -1084,6 +1330,10 @@ class EasyChessGui:
         self._stale_threat_searches = []
         self.review_threat_stale = False
         self.review_nav_last_time = 0
+        if self.auto_analysis_thread is not None:
+            self.auto_analysis_cancel.set()
+            self.auto_analysis_thread = None
+        self.auto_analysis_cancel = threading.Event()
 
     def reset_review_run_state(self):
         """Reset run state of review mode when exiting, keeping loaded game/pgn."""
@@ -1103,6 +1353,10 @@ class EasyChessGui:
         self._stale_threat_searches = []
         self.review_threat_stale = False
         self.review_nav_last_time = 0
+        if self.auto_analysis_thread is not None:
+            self.auto_analysis_cancel.set()
+            self.auto_analysis_thread = None
+        self.auto_analysis_cancel = threading.Event()
 
     def on_move_clicked(self, idx):
         """Callback when a move in the Multiline PGN view is clicked."""
@@ -1255,6 +1509,11 @@ class EasyChessGui:
                     var_tag = f"var_block_{var_idx}"
                     widget.tag_add(var_tag, start_mark, end_mark)
 
+                # After the last variation, continue the mainline on a fresh
+                # line at the parent's indentation level.
+                if mainline_child.variations:
+                    widget.insert("insert", "\n" + "    " * ind)
+
             # 3. Render mainline child's continuation
             render_continuations(mainline_child, next_b, ind)
 
@@ -1301,20 +1560,10 @@ class EasyChessGui:
         self.first_move_in_line = True
         game = self.review_game
         if game.variations:
-            self.render_pgn_tree(game.variations[0], game.board(), widget, 0, False)
-            for var_node in game.variations[1:]:
-                var_idx = len(self.review_nodes)
-                start_mark = widget.index("insert")
-
-                widget.insert("insert", "\n( ")
-                self.first_move_in_line = True
-                self.render_pgn_tree(var_node, game.board(), widget, 1, True)
-                widget.insert("insert", " ) ")
-                self.first_move_in_line = True
-
-                end_mark = widget.index("insert")
-                var_tag = f"var_block_{var_idx}"
-                widget.tag_add(var_tag, start_mark, end_mark)
+            # Render from the root so that alternative first moves (e.g. an
+            # engine-best line for move 1) appear inline after the mainline
+            # first move instead of at the end of the move list.
+            self.render_pgn_tree(game, game.board(), widget, 0, False)
 
         widget.configure(state='disabled')
         self.highlight_current_move(widget)
@@ -1697,6 +1946,11 @@ class EasyChessGui:
         if 'adviser_movetime_sec' in data:
             self.adviser_movetime_sec = self._read_review_time(
                 data['adviser_movetime_sec'], self.adviser_movetime_sec)
+        if 'auto_analysis_engine_id_name' in data:
+            self.auto_analysis_engine_id_name = data['auto_analysis_engine_id_name']
+        if 'auto_analysis_time_sec' in data:
+            self.auto_analysis_time_sec = self._read_review_time(
+                data['auto_analysis_time_sec'], self.auto_analysis_time_sec)
         # Per-role engine option overrides (the active role ids are applied
         # later by restore_engine_roles, once the engine list exists).
         if isinstance(data.get('role_engine_options'), dict):
@@ -1721,6 +1975,8 @@ class EasyChessGui:
             'analysis_id_name': self.analysis_id_name,
             'threat_id_name': self.threat_id_name,
             'adviser_movetime_sec': self.adviser_movetime_sec,
+            'auto_analysis_engine_id_name': self.auto_analysis_engine_id_name,
+            'auto_analysis_time_sec': self.auto_analysis_time_sec,
             'role_engine_options': self.role_engine_options,
             'review_pgn_file': self.review_pgn_file,
         }
@@ -1890,7 +2146,8 @@ class EasyChessGui:
         col1, col2, opt_meta = self.build_engine_options_layout(
             option_list, current_values=saved)
         layout = self._build_options_window_layout(col1, col2)
-        title = '{} options - {}'.format(ROLE_META[role][4], eng_id_name)
+        role_label = ROLE_META[role][4] if role in ROLE_META else 'Auto-Analysis'
+        title = '{} options - {}'.format(role_label, eng_id_name)
         w = sg.Window(title, layout, icon=ico_path[platform]['pecg'],
                       resizable=True, finalize=True)
         while True:
@@ -4112,6 +4369,227 @@ class EasyChessGui:
         self.update_review_analysis_panel(window)
         self.update_review_threat_panel(window)
 
+    def confirm_auto_analysis(self, window):
+        """Ask the user to pick an engine/time and confirm auto-analysis.
+
+        Returns a dict with engine_id_name, engine_path_and_file and time_sec
+        if the user confirms, otherwise False.
+        """
+        if self.review_game is None:
+            sg.popup('Load a game first.', title='Auto-Analyze',
+                     icon=ico_path[platform]['pecg'])
+            return False
+
+        if not self.engine_id_name_list:
+            sg.popup('No engines installed.\n\n'
+                     'Add one via Engine -> Install / Manage.',
+                     title='Auto-Analyze', icon=ico_path[platform]['pecg'])
+            return False
+
+        move_count = 0
+        node = self.review_game
+        while node.variations:
+            move_count += 1
+            node = node.variations[0]
+
+        # Default to the saved auto-analysis engine, or the analysis engine.
+        default_engine = self.auto_analysis_engine_id_name
+        if default_engine not in self.engine_id_name_list:
+            default_engine = self.analysis_id_name
+        if default_engine not in self.engine_id_name_list:
+            default_engine = self.engine_id_name_list[0]
+
+        default_time = self.auto_analysis_time_sec
+        if not isinstance(default_time, int) or default_time < REVIEW_ANALYSIS_TIME_MIN:
+            default_time = REVIEW_ANALYSIS_TIME_SEC
+
+        def format_est(time_sec):
+            approx = move_count * time_sec
+            minutes, seconds = divmod(approx, 60)
+            return '{:d}m {:d}s'.format(int(minutes), int(seconds))
+
+        layout = [
+            [sg.Text('Select engine and time per move for auto-analysis:')],
+            [sg.Text('Engine:', size=(16, 1)),
+             sg.Listbox(values=self.engine_id_name_list, size=(40, 6),
+                        key='auto_engine_k',
+                        default_values=[default_engine])],
+            [sg.Text('Seconds per move:', size=(16, 1)),
+             sg.Spin([t for t in range(REVIEW_ANALYSIS_TIME_MIN,
+                                       REVIEW_ANALYSIS_TIME_MAX + 1)],
+                     initial_value=default_time, size=(8, 1),
+                     key='auto_time_k'),
+             sg.Text('Estimated:', size=(10, 1)),
+             sg.Text(format_est(default_time), size=(20, 1),
+                     key='auto_est_k')],
+            [sg.Text('Moves to analyze:', size=(16, 1)),
+             sg.Text(str(move_count), size=(30, 1))],
+            [sg.Text('The annotated game will be saved to:')],
+            [sg.Text(AUTO_ANALYSIS_OUTPUT_FILE, size=(50, 1),
+                     relief='sunken')],
+            [sg.OK(), sg.Button('Configure'), sg.Cancel()],
+        ]
+
+        window.Hide()
+        w = sg.Window('Auto-Analyze Game', layout,
+                      icon=ico_path[platform]['pecg'])
+        result = False
+        while True:
+            e, v = w.Read(timeout=10)
+            if e == sg.TIMEOUT_KEY:
+                continue
+            if e is None or e == 'Cancel':
+                break
+            try:
+                current_time = int(v['auto_time_k'])
+                w['auto_est_k'].Update(format_est(current_time))
+            except (TypeError, ValueError):
+                pass
+            if e == 'Configure':
+                selected = v.get('auto_engine_k', [])
+                eng = selected[0] if selected else None
+                if eng is None:
+                    sg.popup('Please select an engine to configure.',
+                             title='Auto-Analyze',
+                             icon=ico_path[platform]['pecg'])
+                    continue
+                w.Hide()
+                self.configure_role_engine('auto_analysis', eng)
+                w.UnHide()
+                continue
+            if e == 'OK':
+                selected = v.get('auto_engine_k', [])
+                engine_id_name = selected[0] if selected else None
+                if engine_id_name is None:
+                    sg.popup('Please select an engine.', title='Auto-Analyze',
+                             icon=ico_path[platform]['pecg'])
+                    continue
+                try:
+                    time_sec = int(v['auto_time_k'])
+                except (TypeError, ValueError):
+                    sg.popup('Invalid seconds per move.', title='Auto-Analyze',
+                             icon=ico_path[platform]['pecg'])
+                    continue
+                time_sec = min(REVIEW_ANALYSIS_TIME_MAX,
+                               max(REVIEW_ANALYSIS_TIME_MIN, time_sec))
+                try:
+                    eng_file, eng_path = self.get_engine_file(engine_id_name)
+                except Exception:
+                    logging.exception('Failed to resolve engine file.')
+                    sg.popup('Failed to locate the selected engine.',
+                             title='Auto-Analyze',
+                             icon=ico_path[platform]['pecg'])
+                    break
+                self.auto_analysis_engine_id_name = engine_id_name
+                self.auto_analysis_time_sec = time_sec
+                self.save_settings()
+                result = {
+                    'engine_id_name': engine_id_name,
+                    'engine_path_and_file': eng_path,
+                    'time_sec': time_sec,
+                }
+                break
+        w.Close()
+        window.UnHide()
+        return result
+
+    def start_auto_analysis(self, window):
+        """Start the background auto-analysis thread for the loaded game."""
+        if self.review_game is None:
+            return
+        if self.auto_analysis_thread is not None and \
+                self.auto_analysis_thread.is_alive():
+            sg.popup('An analysis is already running.',
+                     title='Auto-Analyze', icon=ico_path[platform]['pecg'])
+            return
+        config = self.confirm_auto_analysis(window)
+        if config is False:
+            return
+
+        self.auto_analysis_cancel = threading.Event()
+        self.auto_analysis_queue = queue.Queue()
+        self.auto_analysis_thread = AutoAnalyzeGame(
+            copy.deepcopy(self.review_game),
+            self.engine_config_file,
+            config['engine_path_and_file'],
+            config['engine_id_name'],
+            config['time_sec'],
+            self.auto_analysis_queue,
+            self.auto_analysis_cancel,
+            self.max_depth,
+            option_overrides=self.get_role_options(
+                'auto_analysis', config['engine_id_name'])
+        )
+        self.auto_analysis_thread.start()
+        window['_gamestatus_'].Update(
+            'Auto-analyzing move 1/{}...'.format(
+                self._count_mainline_moves(self.review_game)))
+        logging.info('Started auto-analysis of game with %d moves.',
+                     self._count_mainline_moves(self.review_game))
+
+    def _count_mainline_moves(self, game):
+        """Return the number of half-moves on the game's mainline."""
+        count = 0
+        node = game
+        while node.variations:
+            count += 1
+            node = node.variations[0]
+        return count
+
+    def cancel_auto_analysis(self, window):
+        """Signal the running auto-analysis thread to stop."""
+        if self.auto_analysis_thread is None:
+            return
+        self.auto_analysis_cancel.set()
+        window['_gamestatus_'].Update('Cancelling analysis...')
+        logging.info('User cancelled auto-analysis.')
+
+    def poll_auto_analysis(self, window):
+        """Consume messages from the auto-analysis background thread."""
+        if self.auto_analysis_thread is None:
+            return
+
+        done = False
+        cancelled = False
+        while True:
+            try:
+                msg = self.auto_analysis_queue.get_nowait()
+            except queue.Empty:
+                break
+            except Exception:
+                logging.exception('Failed to read auto-analysis queue.')
+                break
+
+            msg_type = msg.get('type')
+            if msg_type == 'progress':
+                window['_gamestatus_'].Update(
+                    'Auto-analyzing move {}/{}...'.format(
+                        msg['current'], msg['total']))
+            elif msg_type == 'done':
+                annotated = msg['game']
+                self.review_game = annotated
+                self.review_game_index = None
+                self.prepare_review_game(annotated)
+                self.render_review_movelist(window)
+                self.update_review_window(window)
+                self.reset_review_engines_for_new_game(window)
+                window['_gamestatus_'].Update(
+                    'Analysis complete. Saved to {}.'.format(
+                        AUTO_ANALYSIS_OUTPUT_FILE))
+                done = True
+            elif msg_type == 'cancelled':
+                window['_gamestatus_'].Update('Analysis cancelled.')
+                cancelled = True
+            elif msg_type == 'error':
+                sg.popup(msg.get('message', 'Auto-analysis failed.'),
+                         title='Auto-Analyze',
+                         icon=ico_path[platform]['pecg'])
+                window['_gamestatus_'].Update('Analysis failed.')
+                done = True
+
+        if done or cancelled:
+            self.auto_analysis_thread = None
+
     def poll_review_analysis(self, window):
         """Consume engine messages for Review mode analysis."""
         # Try to collect any stale analysis threads from previous stops.
@@ -4605,6 +5083,7 @@ class EasyChessGui:
             button, value = review_window.Read(timeout=50)
             self.poll_review_analysis(review_window)
             self.poll_review_threat(review_window)
+            self.poll_auto_analysis(review_window)
 
             # Skip timeout events as analysis updates are processed by
             # poll_review_analysis() and poll_review_threat() called earlier.
@@ -4624,6 +5103,7 @@ class EasyChessGui:
                 continue
 
             if button is None:
+                self.cancel_auto_analysis(review_window)
                 self.close_review_analysis()
                 self.close_review_threat()
                 review_window.Close()
@@ -4631,6 +5111,7 @@ class EasyChessGui:
                 sys.exit(0)
 
             if button == 'Neutral':
+                self.cancel_auto_analysis(review_window)
                 break
 
             if isinstance(button, str) and '::help_' in button:
@@ -4667,6 +5148,14 @@ class EasyChessGui:
                 self.update_review_window(review_window)
                 self.reset_review_engines_for_new_game(review_window)
                 self.save_settings()
+                continue
+
+            if button == 'Auto-Analyze Game::review_auto_analyze_k':
+                self.start_auto_analysis(review_window)
+                continue
+
+            if button == 'Cancel Analysis::review_cancel_analysis_k':
+                self.cancel_auto_analysis(review_window)
                 continue
 
             if button == 'Flip':
