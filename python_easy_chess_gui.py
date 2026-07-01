@@ -4916,6 +4916,16 @@ class EasyChessGui:
         self.update_review_analysis_panel(window)
         self.update_review_threat_panel(window)
 
+    def _right_panel_spacer(self, width=60):
+        """Return an invisible element that forces a minimum right-panel width.
+
+        Used so the right-hand control column has the same right edge in
+        Neutral/Play and Review modes.
+        """
+        bg = sg.theme_background_color()
+        return sg.Text('', size=(width, 1), text_color=bg,
+                       background_color=bg, pad=(0, 0))
+
     def build_review_layout(self, is_user_white=True):
         """Create review mode layout with navigation controls."""
         sg.change_look_and_feel(self.gui_theme)
@@ -4924,10 +4934,10 @@ class EasyChessGui:
         board_layout = self.create_board(is_user_white)
         board_controls = [
             [sg.Text('Mode     Review', size=(36, 1), font=FONT_BASE,
-                     key='_gamestatus_')],
+                     key='_gamestatus_', expand_x=True)],
             [sg.Text('PGN file', size=(8, 1), font=FONT_BASE),
              sg.Text('', size=(44, 1), font=FONT_SMALL,
-                     key='review_pgn_k', relief='sunken')],
+                     key='review_pgn_k', relief='sunken', expand_x=True)],
             [sg.TabGroup([
                 [sg.Tab('Game details', [[sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
                                                        font=FONT_BASE, key='review_header_k',
@@ -4942,20 +4952,24 @@ class EasyChessGui:
                           font=FONT_BASE, key='review_move_list_k',
                           disabled=True, expand_x=True, expand_y=True)],
             [sg.Text('Position 0/0', size=(20, 1), font=FONT_BASE,
-                     key='review_nav_k', relief='sunken')],
+                     key='review_nav_k', relief='sunken', expand_x=True)],
             [sg.Text('Threat stopped', size=(55, 1), font=FONT_BASE,
-                     key='review_threat_status_k', relief='sunken')],
+                     key='review_threat_status_k', relief='sunken',
+                     expand_x=True)],
             [sg.Multiline('', do_not_clear=True, autoscroll=False,
                           size=(52, REVIEW_THREAT_BOX_HEIGHT),
                           font=FONT_BASE, key='review_threat_k',
-                          text_color='red', disabled=True, wrap_lines=False)],
+                          text_color='red', disabled=True, wrap_lines=False,
+                          expand_x=True)],
             [sg.Text('Analysis stopped', size=(55, 1), font=FONT_BASE,
-                     key='review_analysis_status_k', relief='sunken')],
+                     key='review_analysis_status_k', relief='sunken',
+                     expand_x=True)],
             [sg.Multiline('', do_not_clear=True, autoscroll=False,
                           size=(52, REVIEW_ANALYSIS_BOX_HEIGHT),
                           font=FONT_BASE, key='review_analysis_k',
-                          disabled=True, wrap_lines=False)],
-
+                          disabled=True, wrap_lines=False,
+                          expand_x=True)],
+            [self._right_panel_spacer()],
         ]
 
         nav_buttons = sg.Column(
@@ -5364,10 +5378,11 @@ class EasyChessGui:
         board_layout = self.create_board(is_user_white)
 
         board_controls = [
-            [sg.Text('Mode     Neutral', size=(36, 1), font=FONT_BASE, key='_gamestatus_')],
+            [sg.Text('Mode     Neutral', size=(36, 1), font=FONT_BASE,
+                     key='_gamestatus_', expand_x=True)],
             [sg.Text('White', size=(7, 1), font=FONT_BASE),
              sg.Text('Human', font=FONT_BASE, key='_White_',
-                     size=(24, 1), relief='sunken'),
+                     size=(24, 1), relief='sunken', expand_x=True),
              sg.Text('', font=FONT_BASE, key='w_base_time_k',
                      size=(11, 1), relief='sunken'),
              sg.Text('', font=FONT_BASE, key='w_elapse_k', size=(7, 1),
@@ -5375,7 +5390,7 @@ class EasyChessGui:
              ],
             [sg.Text('Black', size=(7, 1), font=FONT_BASE),
              sg.Text('Computer', font=FONT_BASE, key='_Black_',
-                     size=(24, 1), relief='sunken'),
+                     size=(24, 1), relief='sunken', expand_x=True),
              sg.Text('', font=FONT_BASE, key='b_base_time_k',
                      size=(11, 1), relief='sunken'),
              sg.Text('', font=FONT_BASE, key='b_elapse_k', size=(7, 1),
@@ -5387,31 +5402,36 @@ class EasyChessGui:
                         ['Start::right_adviser_k', 'Stop::right_adviser_k']
                     ]),
              sg.Text('', font=FONT_BASE, key='advise_info_k', relief='sunken',
-                     size=(46, 1))],
+                     size=(46, 1), expand_x=True)],
 
             [sg.Text('Move list', size=(16, 1), font=FONT_BASE)],
             [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(52, 8),
-                          font=FONT_BASE, key='_movelist_', disabled=True)],
+                          font=FONT_BASE, key='_movelist_', disabled=True,
+                          expand_x=True)],
 
             [sg.Text('Comment', size=(7, 1), font=FONT_BASE)],
             [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(52, 3),
-                          font=FONT_BASE, key='comment_k')],
+                          font=FONT_BASE, key='comment_k', expand_x=True)],
 
             [sg.Text('BOOK 1, Comp games', size=(26, 1),
-                     font=FONT_BASE,
+                     font=FONT_BASE, expand_x=True,
                      right_click_menu=['Right', ['Show::right_book1_k', 'Hide::right_book1_k']]),
              sg.Text('BOOK 2, Human games',
-                     font=FONT_BASE,
+                     font=FONT_BASE, expand_x=True,
                      right_click_menu=['Right', ['Show::right_book2_k', 'Hide::right_book2_k']])],
             [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(23, 4),
-                           font=FONT_BASE, key='polyglot_book1_k', disabled=True),
+                           font=FONT_BASE, key='polyglot_book1_k', disabled=True,
+                           expand_x=True),
              sg.Multiline('', do_not_clear=True, autoscroll=False, size=(25, 4),
-                           font=FONT_BASE, key='polyglot_book2_k', disabled=True)],
+                           font=FONT_BASE, key='polyglot_book2_k', disabled=True,
+                           expand_x=True)],
             [sg.Text('Opponent Search Info', font=FONT_BASE, size=(30, 1),
+                     expand_x=True,
                      right_click_menu=['Right',
                                        ['Show::right_search_info_k', 'Hide::right_search_info_k']])],
             [sg.Text('', key='search_info_all_k', size=(55, 1),
-                     font=FONT_BASE, relief='sunken')],
+                     font=FONT_BASE, relief='sunken', expand_x=True)],
+            [self._right_panel_spacer()],
         ]
 
         self.menu_elem = sg.Menu(menu_def_neutral, tearoff=False, font=MENU_FONT)
