@@ -77,27 +77,27 @@ task-focused versions of these topics (adapted to the current mode), and
 * [Files the app writes](#files-the-app-writes)
 
 #### Modes
-The GUI has three modes, switched from the **Mode** menu:
-* **Neutral** — the default after startup; engine/board/settings setup is done here.
-* **Play** — play a game against the opponent engine.
-* **Review** — step through a saved game with optional engine analysis and threat.
+The GUI opens directly in **Play** mode, ready to play. There are two modes:
+* **Play** — the default; play a game against the opponent engine. All setup (engine, time, book, settings, board colors) is done from the same menubar **before a game starts**; the setup menu items are grayed out while a game is running and come back after `Game → New` or when the game ends.
+* **Review** — step through a saved game with optional engine analysis and threat. Enter with `Mode → Review` (before a game starts), leave with `Mode → Play`.
 
 #### Start the GUI
 * From source: `python python_easy_chess_gui.py`
 * Or run the prebuilt `.exe`.
 
 #### Play a game
-* **As white:** `Mode → Play`, then click the piece and the destination square (or drag the piece).
-* **As black:** in Neutral mode `Board → Flip` (black at the bottom), then `Mode → Play` and `Engine → Go` so the engine moves first. (If already in Play, switch to Neutral first.)
+* **As white:** just click the piece and the destination square (or drag the piece). Your first move starts the game and the clocks.
+* **As black:** press `Engine → Go` before making a move — the engine takes White and moves first, and the board flips so Black is at the bottom. `Game → New` returns you to White.
+* **Flip the board:** `Board → Flip`, at any time — before, during or after a game. The game is not affected.
 * **Force the engine to move now:** `Engine → Move Now`.
 * **Start a new game:** `Game → New`.
-* **Paste a position (FEN):** in Play mode `FEN → Paste`. If it is black to move, then `Engine → Go`.
+* **Paste a position (FEN):** `FEN → Paste` (before a game starts). If the side to move is not yours, press `Engine → Go`.
 * **End a game manually:** `Game → Resign`, `User Wins`, or `User Draws`.
-* **Save games:** every game auto-saves to `pecg_auto_save_games.pgn`. The `Game` menu also offers *Save to My Games* and *Save to White / Black Repertoire*.
-* **Time control:** `Time → User` (your clock) and `Time → Engine` (opponent clock).
+* **Save games:** every game auto-saves to `pecg_auto_save_games.pgn`. During a game the `Game` menu also offers *Save to My Games* and *Save to White / Black Repertoire*.
+* **Time control:** `Time → User` (your clock) and `Time → Engine` (opponent clock), set before a game starts.
 
 #### Engine setup and management
-Only **UCI** engines are supported. All engine actions are done in **Neutral** mode.
+Only **UCI** engines are supported. All engine actions are available **before a game starts**.
 * **Install:** `Engine → Manage → Install`, press **Add** and locate the engine executable. On Linux make it executable first: `chmod +x your_engine`.
 * **Configure options:** `Engine → Manage → Edit`, select the engine and press **Modify** (set Hash, Threads, etc.). Recommended right after installing.
 * **Delete:** `Engine → Manage → Delete`.
@@ -117,14 +117,14 @@ Only **UCI** engines are supported. All engine actions are done in **Neutral** m
 Both analysis and threat run their engines for at most their configured time and then go idle, so they do not keep the CPU busy after a position has been evaluated.
 
 #### Settings / Game
-Open with `Settings → Game` (Neutral mode). **All values are saved to `pecg_settings.json` and restored on the next startup.**
+Open with `Settings → Game` (before a game starts). **All values are saved to `pecg_settings.json` and restored on the next startup.**
 * **Save time left in game notation** — adds `[%clk h:mm:ss]` move comments, shown in the move list and saved to the PGN.
 * **Adjudicate game on time forfeit** — ends the game when a player runs out of time.
 * **Review analysis time (sec)** — time cap for the Review **Analysis** engine. Default **60**, range 1–3600.
 * **Review threat time (sec)** — time cap for the Review **Threat** engine. Default **30**, range 1–3600.
 
 #### Opponent book
-* `Book → Set Book` (Neutral mode) sets the opponent's polyglot book. It is named `pecg_book.bin` and lives in the `Book` folder. Build your own polyglot book, name it `pecg_book.bin` and replace the default to change it.
+* `Book → Set Book` (before a game starts) sets the opponent's polyglot book. It is named `pecg_book.bin` and lives in the `Book` folder. Build your own polyglot book, name it `pecg_book.bin` and replace the default to change it.
 
 #### Show / hide info panels
 These work in **Play** mode by right-clicking the panel's label:
@@ -132,8 +132,8 @@ These work in **Play** mode by right-clicking the panel's label:
 * **Opening books:** right-click *BOOK 1* or *BOOK 2* → **Show** / **Hide**.
 
 #### Board appearance
-* **Flip:** Neutral mode `Board → Flip` (or `Mode → Neutral` first if you are in Play).
-* **Colors / theme:** `Board → Color` for square colors and `Board → Theme` for the overall GUI theme (Neutral mode).
+* **Flip:** `Board → Flip`, at any time — including while a game is running or the engine is thinking. The game is not affected.
+* **Colors / theme:** `Board → Color` for square colors and `Board → Theme` for the overall GUI theme (before a game starts).
 
 #### Files the app writes
 * `pecg_auto_save_games.pgn` — every game played.

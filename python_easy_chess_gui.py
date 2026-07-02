@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.14.1'
+APP_VERSION = 'v2.15.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -238,23 +238,25 @@ black_init_promote_board = [[QUEENB, ROOKB, BISHOPB, KNIGHTB]]
 HELP_TOPICS = {
     'help_start': (
         'Getting Started',
-        'Python Easy Chess GUI has 3 modes: Neutral, Play and Review.\n'
-        'You start in Neutral; switch using the Mode menu.\n\n'
+        'Python Easy Chess GUI opens ready to play.\n\n'
         '1. Install a UCI engine:  Engine -> Manage -> Install.\n'
         '2. Choose your opponent:  Engine -> Set Engine Opponent.\n'
-        '3. Play:  Mode -> Play, then move on the board.\n\n'
+        '3. Move a piece to start the game, or press Engine -> Go\n'
+        '   to play as Black.\n\n'
+        'Setup menus are disabled while a game is running; press\n'
+        'Game -> New to end it and set up again.\n'
         'Games auto-save to pecg_auto_save_games.pgn.\n'
         'For the full manual use Help -> Online Help.'),
     'help_eng_install': (
         'Install / Manage Engines',
-        'Neutral mode only. Only UCI engines are supported.\n\n'
+        'Available before a game starts. Only UCI engines are supported.\n\n'
         'Install:    Engine -> Manage -> Install -> Add.\n'
         'Configure:  Engine -> Manage -> Edit -> pick engine -> Modify\n'
         '            (Hash, Threads and other options).\n'
         'Remove:     Engine -> Manage -> Delete.'),
     'help_eng_opponent': (
         'Set Engine Opponent',
-        'Neutral mode:  Engine -> Set Engine Opponent.\n\n'
+        'Engine -> Set Engine Opponent (before a game starts).\n\n'
         'This is the engine you play against; the list shows the engines\n'
         'you have installed. Set its clock under Time -> Engine.'),
     'help_eng_adviser': (
@@ -281,22 +283,24 @@ HELP_TOPICS = {
         'Review analysis/threat are limited by time, not depth.'),
     'help_game_play': (
         'Play a Game',
-        'Mode -> Play, then click the piece and its destination square\n'
-        '(or drag it). Engine -> Move Now forces the engine to move;\n'
+        'Click the piece and its destination square (or drag it).\n'
+        'Your first move starts the game and the clocks.\n'
+        'Engine -> Move Now forces the engine to move;\n'
         'Game -> New starts a new game.'),
     'help_game_black': (
         'Play as Black',
-        'In Neutral mode:  Board -> Flip (black at the bottom), then\n'
-        'Mode -> Play and Engine -> Go so the engine moves first.\n'
-        '(If already in Play, switch to Neutral first.)'),
+        'Press Engine -> Go before making a move: the engine takes\n'
+        'White and moves first, and the board flips so Black is at\n'
+        'the bottom. Game -> New returns you to White.'),
     'help_game_fen': (
         'Paste a FEN',
-        'In Play mode:  FEN -> Paste to set up a position from the\n'
-        'clipboard. If it is Black to move, use Engine -> Go.'),
+        'FEN -> Paste sets up a position from the clipboard (only\n'
+        'before a game starts). If the side to move is not yours,\n'
+        'press Engine -> Go.'),
     'help_game_save': (
         'Save Games and Repertoire',
         'Every game auto-saves to pecg_auto_save_games.pgn.\n\n'
-        'In Play mode the Game menu also offers Save to My Games and\n'
+        'During a game the Game menu also offers Save to My Games and\n'
         'Save to White / Black Repertoire.'),
     'help_game_time': (
         'Time Control',
@@ -326,12 +330,13 @@ HELP_TOPICS = {
         'to stop early.'),
     'help_board_flip': (
         'Flip Board',
-        'Board -> Flip swaps the side shown at the bottom. Use it in\n'
-        'Neutral mode, or in Review mode via its Board menu.'),
+        'Board -> Flip swaps the side shown at the bottom. It works at\n'
+        'any time: before, during and after a game, and in Review mode.\n'
+        'The game itself is not affected.'),
     'help_board_color': (
         'Board Colors and Themes',
-        'Neutral mode:  Board -> Color changes the square colors and\n'
-        'Board -> Theme changes the overall GUI theme.'),
+        'Board -> Color changes the square colors and Board -> Theme\n'
+        'changes the overall GUI theme (before a game starts).'),
 }
 
 # Online (detailed) help target for Help -> Online Help.
@@ -415,44 +420,57 @@ INIT_PGN_TAG = {
 }
 
 
-# (1) Mode: Neutral
-menu_def_neutral = [
-        ['&Mode', ['Play', 'Review']],
-        ['Boar&d', ['Flip', 'Color', ['Brown::board_color_k',
-                                      'Blue::board_color_k',
-                                      'Green::board_color_k',
-                                      'Gray::board_color_k'],
-                    'Theme', GUI_THEME]],
-        ['&Engine', ['Set Engine Adviser', 'Set Engine Analysis',
-                     'Set Engine Threat', 'Set Engine Opponent', 'Set Depth',
-                     'Manage', ['Install', 'Edit', 'Delete']]],
-        ['&Time', ['User::tc_k', 'Engine::tc_k']],
-        ['&Book', ['Set Book::book_set_k']],
-        ['&User', ['Set Name::user_name_k']],
-        ['Tools', ['PGN', ['Delete Player::delete_player_k']]],
-        ['&Settings', ['Game::settings_game_k']],
-        make_help_menu(HELP_ENGINE_MENU, HELP_GAME_MENU,
-                       HELP_REVIEW_MENU, HELP_BOARD_MENU),
-]
+# (1) Mode: Play. The GUI opens directly in Play mode with a single menubar.
+# Items that change the game/engine setup are usable only before a game
+# starts (idle), while game actions need a started game. A leading '!'
+# renders an item or submenu label disabled (grayed and unclickable).
+def build_play_menu(in_game=False):
+    """Return the Play-mode menubar definition for the given state.
 
-# (2) Mode: Play, info: hide
-menu_def_play = [
-        ['&Mode', ['Neutral']],
+    :param in_game: True once a game has started (first user move made or
+        Engine->Go pressed) until it ends (game over or Game->New).
+    """
+    def g(enabled, label):
+        return label if enabled else '!' + label
+
+    idle = not in_game
+
+    return [
+        ['&Mode', [g(idle, 'Review')]],
         ['&Game', ['&New::new_game_k',
-                   'Save to My Games::save_game_k',
-                   'Save to White Repertoire',
-                   'Save to Black Repertoire',
-                   'Resign::resign_game_k',
-                   'User Wins::user_wins_k',
-                   'User Draws::user_draws_k']],
-        ['FEN', ['Paste']],
-        ['&Engine', ['Go', 'Move Now']],
-        make_help_menu(HELP_GAME_MENU, HELP_ENGINE_MENU),
-]
+                   g(in_game, 'Save to My Games::save_game_k'),
+                   g(in_game, 'Save to White Repertoire'),
+                   g(in_game, 'Save to Black Repertoire'),
+                   g(in_game, 'Resign::resign_game_k'),
+                   g(in_game, 'User Wins::user_wins_k'),
+                   g(in_game, 'User Draws::user_draws_k')]],
+        ['FEN', [g(idle, 'Paste')]],
+        ['&Engine', [g(idle, 'Go'), g(in_game, 'Move Now'),
+                     g(idle, 'Set Engine Opponent'),
+                     g(idle, 'Set Engine Adviser'),
+                     g(idle, 'Set Engine Analysis'),
+                     g(idle, 'Set Engine Threat'),
+                     g(idle, 'Set Depth'),
+                     g(idle, 'Manage'), ['Install', 'Edit', 'Delete']]],
+        ['Boar&d', ['Flip',
+                    g(idle, 'Color'), ['Brown::board_color_k',
+                                       'Blue::board_color_k',
+                                       'Green::board_color_k',
+                                       'Gray::board_color_k'],
+                    g(idle, 'Theme'), list(GUI_THEME)]],
+        ['&Time', [g(idle, 'User::tc_k'), g(idle, 'Engine::tc_k')]],
+        ['&Book', [g(idle, 'Set Book::book_set_k')]],
+        ['&User', [g(idle, 'Set Name::user_name_k')]],
+        ['Tools', [g(idle, 'PGN'), ['Delete Player::delete_player_k']]],
+        ['&Settings', [g(idle, 'Game::settings_game_k')]],
+        make_help_menu(HELP_GAME_MENU, HELP_ENGINE_MENU,
+                       HELP_REVIEW_MENU, HELP_BOARD_MENU),
+    ]
 
-# (3) Mode: Review
+
+# (2) Mode: Review
 menu_def_review = [
-        ['&Mode', ['Neutral']],
+        ['&Mode', ['Play']],
         ['&Game', ['Load PGN::review_load_pgn_k',
                    'Select Game::review_select_game_k',
                    'Auto-Analyze Game::review_auto_analyze_k',
@@ -1227,7 +1245,6 @@ class AutoAnalyzeGame(threading.Thread):
 
 class EasyChessGui:
     queue = queue.Queue()
-    is_user_white = True  # White is at the bottom in board layout
 
     def __init__(self, theme, engine_config_file, user_config_file,
                  gui_book_file, computer_book_file, human_book_file,
@@ -1259,6 +1276,15 @@ class EasyChessGui:
             'white': 'pecg_white_repertoire.pgn',
             'black': 'pecg_black_repertoire.pgn'
         }
+        # The color the human plays. It defaults to white for every new game;
+        # pressing Engine->Go before the first move switches it to black.
+        self.is_user_white = True
+        # Board orientation only (which color is drawn at the bottom).
+        # Board->Flip toggles it at any time without affecting the game.
+        self.is_white_at_bottom = True
+        # Active menubar definition; swapped between the idle and in-game
+        # states by set_menu_state() and reused on window rebuilds.
+        self.current_menu_def = build_play_menu(in_game=False)
         self.init_game()
         self.fen = None
         self.psg_board = None
@@ -1637,9 +1663,9 @@ class EasyChessGui:
         loc = window.CurrentLocation()
         window.Hide()
         if flip:
-            self.is_user_white = not self.is_user_white
+            self.is_white_at_bottom = not self.is_white_at_bottom
 
-        layout = self.build_main_layout(self.is_user_white)
+        layout = self.build_main_layout(self.is_white_at_bottom)
 
         w = sg.Window(
             '{} {}'.format(APP_NAME, APP_VERSION),
@@ -2549,7 +2575,7 @@ class EasyChessGui:
                 logging.exception(f'Engine sent {best_move}')
                 sg.popup(
                     f'Engine error, it sent a {best_move} bestmove.\n \
-                    Back to Neutral mode, it is better to change engine {self.opp_id_name}.',
+                    It is better to change engine {self.opp_id_name}.',
                     icon=ico_path[platform]['pecg'],
                     title=BOX_TITLE
                 )
@@ -2621,12 +2647,12 @@ class EasyChessGui:
 
     def fen_to_psg_board(self, window):
         """ Update psg_board based on FEN """
+        self.board_to_psg_board(chess.BaseBoard(self.fen.split()[0]))
+        self.redraw_board(window)
+
+    def board_to_psg_board(self, board):
+        """Set psg_board from a python-chess (base) board. No redraw."""
         psgboard = []
-
-        # Get piece locations only to build psg board
-        pc_locations = self.fen.split()[0]
-
-        board = chess.BaseBoard(pc_locations)
         old_r = None
 
         for s in chess.SQUARES:
@@ -2683,7 +2709,6 @@ class EasyChessGui:
             old_r = r
 
         self.psg_board = psgboard
-        self.redraw_board(window)
 
     def change_square_color(self, window, row, col):
         """
@@ -3113,12 +3138,81 @@ class EasyChessGui:
 
         return timer
 
+    def set_menu_state(self, window, in_game):
+        """Swap the menubar between the idle and in-game states."""
+        self.current_menu_def = build_play_menu(in_game)
+        self.menu_elem.Update(self.current_menu_def)
+        self.apply_menu_font(window)
+
+    def flip_play_window(self, window, board, human_timer=None,
+                         engine_timer=None):
+        """Flip the board orientation during Play without touching the game.
+
+        The orientation is baked into the board layout, so the window is
+        rebuilt; the position, move list, status, comment and clock displays
+        are then restored from the current game state. Safe while the engine
+        is thinking: the engine talks only through self.queue, and psg_board
+        is restored before this returns, i.e. before any buffered bestmove
+        is processed.
+
+        :return: the new window.
+        """
+        status = ''
+        comment = ''
+        try:
+            status = window.find_element('_gamestatus_').get()
+            comment = window.find_element('comment_k').get()
+        except Exception:
+            logging.exception('Failed to read status/comment before flip.')
+
+        window = self.create_new_window(window, flip=True)
+
+        # create_new_window resets psg_board to the initial position; put the
+        # actual game position back before anything else reads psg_board.
+        self.board_to_psg_board(board)
+        self.redraw_board(window)
+
+        if status:
+            window.find_element('_gamestatus_').Update(status)
+        if comment:
+            window.find_element('comment_k').Update(comment)
+        if len(self.game.variations):
+            window.find_element('_movelist_').Update(disabled=False)
+            window.find_element('_movelist_').Update('')
+            window.find_element('_movelist_').Update(
+                self.game.variations[0], append=True, disabled=True)
+
+        if human_timer is not None:
+            k1 = 'w_elapse_k' if self.is_user_white else 'b_elapse_k'
+            k2 = 'w_base_time_k' if self.is_user_white else 'b_base_time_k'
+            window.Element(k1).Update(
+                self.get_time_mm_ss_ms(human_timer.elapse))
+            window.Element(k2).Update(
+                self.get_time_h_mm_ss(human_timer.base))
+        if engine_timer is not None:
+            k1 = 'b_elapse_k' if self.is_user_white else 'w_elapse_k'
+            k2 = 'b_base_time_k' if self.is_user_white else 'w_base_time_k'
+            window.Element(k1).Update(
+                self.get_time_mm_ss_ms(engine_timer.elapse))
+            window.Element(k2).Update(
+                self.get_time_h_mm_ss(engine_timer.base))
+
+        return window
+
     def play_game(self, window: sg.Window, board: chess.Board):
-        """Play a game against an engine or human.
+        """Play a game against an engine.
+
+        The window also idles here between games: setup menu events are
+        delegated to handle_setup_event() until the game starts (first user
+        move or Engine->Go).
 
         Args:
           window: A PySimplegUI window.
           board: current board position
+
+        Returns:
+          (is_new_game, window) - the window may have been rebuilt by a
+          board flip, color or theme change.
         """
         window.find_element('_movelist_').Update(disabled=False)
         window.find_element('_movelist_').Update('', disabled=True)
@@ -3127,10 +3221,14 @@ class EasyChessGui:
 
         move_state = 0
         move_from, move_to = None, None
-        is_new_game, is_exit_game, is_exit_app = False, False, False
+        is_new_game, is_exit_app = False, False
 
         # Do not play immediately when stm is computer
         is_engine_ready = True if is_human_stm else False
+
+        # The game starts at the first user move or Engine->Go; setup menus
+        # stay enabled and the clocks do not tick until then.
+        is_game_started = False
 
         # For saving game
         move_cnt = 0
@@ -3141,7 +3239,6 @@ class EasyChessGui:
         is_user_time_forfeit = False
         is_search_stop_for_exit = False
         is_search_stop_for_new_game = False
-        is_search_stop_for_neutral = False
         is_search_stop_for_resign = False
         is_search_stop_for_user_wins = False
         is_search_stop_for_user_draws = False
@@ -3152,7 +3249,9 @@ class EasyChessGui:
         is_hide_book2 = True
         is_hide_search_info = True
 
-        # Init timer
+        # Init timer. The clocks only start ticking once the game starts;
+        # the timers are re-created when an idle setup event may have
+        # changed the time control or the user's color.
         human_timer = self.define_timer(window)
         engine_timer = self.define_timer(window, 'engine')
 
@@ -3198,13 +3297,13 @@ class EasyChessGui:
                         is_new_game = True
                         break
 
-                    # Mode: Play, Stm: Computer first move
-                    if button == 'Neutral':
-                        is_exit_game = True
-                        break
-
                     if isinstance(button, str) and '::help_' in button:
                         self.show_help_topic(button)
+                        continue
+
+                    if button == 'Flip':
+                        window = self.flip_play_window(
+                            window, board, human_timer, engine_timer)
                         continue
 
                     if button == 'Paste':
@@ -3218,28 +3317,31 @@ class EasyChessGui:
 
                         self.fen_to_psg_board(window)
 
-                        # If user is black and side to move is black
-                        if not self.is_user_white and not board.turn:
-                            is_human_stm = True
-                            window.find_element('_gamestatus_').Update(
-                                'Mode     Play')
-
-                        # Elif user is black and side to move is white
-                        elif not self.is_user_white and board.turn:
-                            is_human_stm = False
-                            window.find_element('_gamestatus_').Update(
-                                    'Mode     Play, press Engine->Go')
-
-                        # When computer is to move in the first move, don't
-                        # allow the engine to search immediately, wait for the
-                        # user to press Engine->Go menu.
+                        # The human plays their color, the engine the other;
+                        # wait for Engine->Go when it is the engine's turn.
+                        is_human_stm = (board.turn == self.is_user_white)
                         is_engine_ready = True if is_human_stm else False
+
+                        window.find_element('_gamestatus_').Update(
+                            'Mode     Play' if is_human_stm else
+                            'Mode     Play, press Engine->Go')
 
                         self.game.headers['FEN'] = self.fen
                         break
 
                     if button == 'Go':
+                        if self.opp_path_and_file is None:
+                            sg.popup(
+                                'Install engine first! in Engine/Manage/Install',
+                                icon=ico_path[platform]['pecg'],
+                                title='Mode Play')
+                            continue
                         is_engine_ready = True
+                        if not is_game_started:
+                            is_game_started = True
+                            human_timer = self.define_timer(window)
+                            engine_timer = self.define_timer(window, 'engine')
+                            self.set_menu_state(window, True)
                         break
 
                     if button is None:
@@ -3247,7 +3349,37 @@ class EasyChessGui:
                         is_exit_app = True
                         break
 
-                if is_exit_app or is_exit_game or is_new_game:
+                    # Mode: Play, idle setup (game not started): engine, time,
+                    # book, user, settings, color and theme dialogs plus
+                    # Review mode entry.
+                    if (not is_game_started and isinstance(button, str)
+                            and button != sg.TIMEOUT_KEY):
+                        if button == 'Review':
+                            prev_orientation = self.is_white_at_bottom
+                            self.start_review_mode(window)
+                            if prev_orientation != self.is_white_at_bottom:
+                                window = self.create_new_window(window)
+                            self.board_to_psg_board(board)
+                            self.redraw_board(window)
+                            human_timer = self.define_timer(window)
+                            engine_timer = self.define_timer(window, 'engine')
+                            window.find_element('_gamestatus_').Update(
+                                'Mode     Play, press Engine->Go')
+                            continue
+                        is_handled, window = self.handle_setup_event(
+                            button, window)
+                        if is_handled:
+                            # The window may have been rebuilt (theme/colors):
+                            # restore the position display and re-map clocks.
+                            self.board_to_psg_board(board)
+                            self.redraw_board(window)
+                            human_timer = self.define_timer(window)
+                            engine_timer = self.define_timer(window, 'engine')
+                            window.find_element('_gamestatus_').Update(
+                                'Mode     Play, press Engine->Go')
+                            continue
+
+                if is_exit_app or is_new_game:
                     break
 
             # If side to move is human
@@ -3257,30 +3389,39 @@ class EasyChessGui:
                 while True:
                     button, value = window.Read(timeout=100)
 
-                    # Update elapse box in m:s format
-                    elapse_str = self.get_time_mm_ss_ms(human_timer.elapse)
-                    k = 'w_elapse_k'
-                    if not self.is_user_white:
-                        k = 'b_elapse_k'
-                    window.Element(k).Update(elapse_str)
-                    human_timer.elapse += 100
+                    # The clock only runs once the game has started.
+                    if is_game_started:
+                        # Update elapse box in m:s format
+                        elapse_str = self.get_time_mm_ss_ms(human_timer.elapse)
+                        k = 'w_elapse_k'
+                        if not self.is_user_white:
+                            k = 'b_elapse_k'
+                        window.Element(k).Update(elapse_str)
+                        human_timer.elapse += 100
 
-                    # Check if human has run out of time
-                    if (self.is_time_forfeit_enabled and
-                            human_timer.elapse >= human_timer.base):
-                        color = 'white' if self.is_user_white else 'black'
-                        sg.popup(
-                            '{} loses on time!'.format(color.capitalize()),
-                            title=BOX_TITLE,
-                            icon=ico_path[platform]['pecg'])
-                        is_user_time_forfeit = True
-                        break
+                        # Check if human has run out of time
+                        if (self.is_time_forfeit_enabled and
+                                human_timer.elapse >= human_timer.base):
+                            color = 'white' if self.is_user_white else 'black'
+                            sg.popup(
+                                '{} loses on time!'.format(color.capitalize()),
+                                title=BOX_TITLE,
+                                icon=ico_path[platform]['pecg'])
+                            is_user_time_forfeit = True
+                            break
 
                     if not is_human_stm:
                         break
 
                     # Mode: Play, Stm: User, Run adviser engine
                     if button == 'Start::right_adviser_k':
+                        if self.adviser_path_and_file is None:
+                            sg.popup(
+                                'Set an engine adviser first!\n'
+                                'Engine -> Set Engine Adviser',
+                                icon=ico_path[platform]['pecg'],
+                                title='Adviser')
+                            break
                         self.adviser_threads = self.get_engine_threads(
                             self.adviser_id_name)
                         self.adviser_hash = self.get_engine_hash(
@@ -3451,24 +3592,46 @@ class EasyChessGui:
                         is_user_draws = True
                         break
 
-                    # Mode: Play, Stm: User
-                    if button == 'Neutral' or is_search_stop_for_neutral:
-                        is_exit_game = True
-                        self.clear_elements(window)
-                        break
-
                     # Mode: Play, stm: User
                     if isinstance(button, str) and '::help_' in button:
                         self.show_help_topic(button)
                         break
 
-                    # Mode: Play, stm: User
+                    # Mode: Play, stm: User, flip the board view anytime
+                    if button == 'Flip':
+                        window = self.flip_play_window(
+                            window, board, human_timer, engine_timer)
+                        break
+
+                    # Mode: Play, stm: User. Engine->Go before the first move:
+                    # the engine takes the side to move and the user plays the
+                    # other color (the way to play as black).
                     if button == 'Go':
-                        if is_human_stm:
-                            is_human_stm = False
-                        else:
-                            is_human_stm = True
+                        if is_game_started or len(self.game.variations):
+                            # Only for starting the engine before the first
+                            # move; disabled in the in-game menu.
+                            continue
+                        if self.opp_path_and_file is None:
+                            sg.popup(
+                                'Install engine first! in Engine/Manage/Install',
+                                icon=ico_path[platform]['pecg'],
+                                title='Mode Play')
+                            continue
+                        self.is_user_white = not board.turn
+                        self.update_labels_and_game_tags(
+                            window, human=self.username)
+                        # Put the user's color at the bottom (they can still
+                        # flip back at any time).
+                        if self.is_white_at_bottom != self.is_user_white:
+                            window = self.flip_play_window(
+                                window, board, human_timer, engine_timer)
+                        is_human_stm = False
                         is_engine_ready = True
+                        is_game_started = True
+                        # Re-map the clock labels to the swapped colors.
+                        human_timer = self.define_timer(window)
+                        engine_timer = self.define_timer(window, 'engine')
+                        self.set_menu_state(window, True)
                         window.find_element('_gamestatus_').Update(
                                 'Mode     Play, Engine is thinking ...')
                         break
@@ -3490,7 +3653,9 @@ class EasyChessGui:
 
                         self.fen_to_psg_board(window)
 
-                        is_human_stm = True if board.turn else False
+                        # The human plays their color, the engine the other;
+                        # wait for Engine->Go when it is the engine's turn.
+                        is_human_stm = (board.turn == self.is_user_white)
                         is_engine_ready = True if is_human_stm else False
 
                         window.find_element('_gamestatus_').Update(
@@ -3499,6 +3664,45 @@ class EasyChessGui:
 
                         self.game.headers['FEN'] = self.fen
                         break
+
+                    # Mode: Play, stm: User, idle setup (game not started):
+                    # engine, time, book, user, settings, color and theme
+                    # dialogs plus Review mode entry.
+                    if (not is_game_started and isinstance(button, str)
+                            and button != sg.TIMEOUT_KEY):
+                        if button == 'Review':
+                            prev_orientation = self.is_white_at_bottom
+                            self.start_review_mode(window)
+                            if prev_orientation != self.is_white_at_bottom:
+                                window = self.create_new_window(window)
+                            self.board_to_psg_board(board)
+                            self.redraw_board(window)
+                            human_timer = self.define_timer(window)
+                            engine_timer = self.define_timer(window, 'engine')
+                            window.find_element('_gamestatus_').Update(
+                                'Mode     Play')
+                            break
+                        is_handled, window = self.handle_setup_event(
+                            button, window)
+                        if is_handled:
+                            # The window may have been rebuilt (theme/colors):
+                            # restore the position display and re-map clocks.
+                            self.board_to_psg_board(board)
+                            self.redraw_board(window)
+                            human_timer = self.define_timer(window)
+                            engine_timer = self.define_timer(window, 'engine')
+                            window.find_element('_gamestatus_').Update(
+                                'Mode     Play')
+                            break
+
+                    # Moves are not allowed until an engine opponent is set.
+                    if (button == '__drag_move__' or type(button) is tuple) \
+                            and self.opp_path_and_file is None:
+                        sg.popup(
+                            'Install engine first! in Engine/Manage/Install',
+                            icon=ico_path[platform]['pecg'],
+                            title='Mode Play')
+                        continue
 
                     # Mode: Play, stm: User, handle drag-and-drop move
                     if button == '__drag_move__':
@@ -3612,6 +3816,13 @@ class EasyChessGui:
                                 board.push(user_move)
                                 move_cnt += 1
 
+                                # The user's first move starts the game:
+                                # clocks begin to run and the setup menu
+                                # items are disabled.
+                                if not is_game_started:
+                                    is_game_started = True
+                                    self.set_menu_state(window, True)
+
                                 # Update clock, reset elapse to zero
                                 human_timer.update_base()
 
@@ -3664,7 +3875,7 @@ class EasyChessGui:
                                 button_square.Update(button_color=('white', color))
                                 continue
 
-                if (is_new_game or is_exit_game or is_exit_app or
+                if (is_new_game or is_exit_app or
                         is_user_resigns or is_user_wins or is_user_draws or
                         is_user_time_forfeit):
                     break
@@ -3773,10 +3984,11 @@ class EasyChessGui:
                         if button == 'Move Now':
                             search.stop()
 
-                        # Mode: Play, Computer is thinking
-                        if button == 'Neutral':
-                            search.stop()
-                            is_search_stop_for_neutral = True
+                        # Mode: Play, Computer is thinking, flip board view
+                        if button == 'Flip':
+                            window = self.flip_play_window(
+                                window, board, human_timer, engine_timer)
+                            continue
 
                         if button == 'Resign::resign_game_k':
                             search.stop()
@@ -3890,7 +4102,7 @@ class EasyChessGui:
         logging.info('Saving game automatically')
 
         # Quit the persistent engine now that the game is over or
-        # the user is exiting play mode (e.g. neutral, new game, resign).
+        # the user is exiting play mode (e.g. new game, resign).
         if persistent_engine is not None:
             logging.info('Quitting persistent engine at end of game')
             try:
@@ -3945,7 +4157,11 @@ class EasyChessGui:
                                                         str(inc_e)
             elif self.engine_tc_type == 'timepermove':
                 self.game.headers['WhiteTimeControl'] = str(1) + '/' + str(base_e)
-        self.save_game()
+
+        # Do not auto-save games that never started (idle quit or Game->New
+        # before the first move).
+        if is_game_started:
+            self.save_game()
 
         if board.is_game_over(claim_draw=True):
             sg.popup('Game is over.', title=BOX_TITLE,
@@ -3957,7 +4173,7 @@ class EasyChessGui:
 
         self.clear_elements(window)
 
-        return False if is_exit_game else is_new_game
+        return is_new_game, window
 
     def save_game(self):
         """ Save game in append mode """
@@ -4920,18 +5136,18 @@ class EasyChessGui:
         """Return an invisible element that forces a minimum right-panel width.
 
         Used so the right-hand control column has the same right edge in
-        Neutral/Play and Review modes.
+        Play and Review modes.
         """
         bg = sg.theme_background_color()
         return sg.Text('', size=(width, 1), text_color=bg,
                        background_color=bg, pad=(0, 0))
 
-    def build_review_layout(self, is_user_white=True):
+    def build_review_layout(self, is_white_at_bottom=True):
         """Create review mode layout with navigation controls."""
         sg.change_look_and_feel(self.gui_theme)
         sg.set_options(margins=(0, 3), border_width=1, font=FONT_BASE)
 
-        board_layout = self.create_board(is_user_white)
+        board_layout = self.create_board(is_white_at_bottom)
         board_controls = [
             [sg.Text('Mode     Review', size=(36, 1), font=FONT_BASE,
                      key='_gamestatus_', expand_x=True)],
@@ -5015,7 +5231,7 @@ class EasyChessGui:
 
     def create_review_window(self, location=None):
         """Create a review window."""
-        layout = self.build_review_layout(self.is_user_white)
+        layout = self.build_review_layout(self.is_white_at_bottom)
         window = sg.Window(
             '{} {}'.format(APP_NAME, APP_VERSION),
             layout,
@@ -5102,8 +5318,6 @@ class EasyChessGui:
             else:
                 self.prepare_review_game(chess.pgn.Game())
 
-        saved_orientation = self.is_user_white
-
         location = window.CurrentLocation()
         window.Hide()
         review_window = self.create_review_window(location=location)
@@ -5142,7 +5356,7 @@ class EasyChessGui:
                 self.review_window = None
                 sys.exit(0)
 
-            if button == 'Neutral':
+            if button == 'Play':
                 self.cancel_auto_analysis(review_window)
                 break
 
@@ -5195,7 +5409,7 @@ class EasyChessGui:
                 self.stop_review_analysis()
                 self.stop_review_threat()
                 review_window.Close()
-                self.is_user_white = not self.is_user_white
+                self.is_white_at_bottom = not self.is_white_at_bottom
                 review_window = self.create_review_window(location=review_location)
                 self.review_window = review_window
                 self.render_review_movelist(review_window)
@@ -5307,7 +5521,6 @@ class EasyChessGui:
         review_window.Close()
         self.review_window = None
         self.reset_review_run_state()
-        self.is_user_white = saved_orientation
         window.UnHide()
 
     def get_engines(self):
@@ -5328,12 +5541,11 @@ class EasyChessGui:
 
         return engine_list
 
-    def create_board(self, is_user_white=True):
+    def create_board(self, is_white_at_bottom=True):
         """
-        Returns board layout based on color of user. If user is white,
-        the white pieces will be at the bottom, otherwise at the top.
+        Returns board layout for the given orientation.
 
-        :param is_user_white: user has handling the white pieces
+        :param is_white_at_bottom: white pieces drawn at the bottom
         :return: board layout
         """
         file_char_name = 'abcdefgh'
@@ -5341,7 +5553,7 @@ class EasyChessGui:
 
         board_layout = []
 
-        if is_user_white:
+        if is_white_at_bottom:
             # Save the board with black at the top.
             start = 0
             end = 8
@@ -5363,22 +5575,22 @@ class EasyChessGui:
 
         return board_layout
 
-    def build_main_layout(self, is_user_white=True):
+    def build_main_layout(self, is_white_at_bottom=True):
         """
         Creates all elements for the GUI, icluding the board layout.
 
-        :param is_user_white: if user is white, the white pieces are
-        oriented such that the white pieces are at the bottom.
+        :param is_white_at_bottom: board orientation, white pieces at
+        the bottom when True.
         :return: GUI layout
         """
         sg.change_look_and_feel(self.gui_theme)
         sg.set_options(margins=(0, 3), border_width=1, font=FONT_BASE)
 
         # Define board
-        board_layout = self.create_board(is_user_white)
+        board_layout = self.create_board(is_white_at_bottom)
 
         board_controls = [
-            [sg.Text('Mode     Neutral', size=(36, 1), font=FONT_BASE,
+            [sg.Text('Mode     Play', size=(36, 1), font=FONT_BASE,
                      key='_gamestatus_', expand_x=True)],
             [sg.Text('White', size=(7, 1), font=FONT_BASE),
              sg.Text('Human', font=FONT_BASE, key='_White_',
@@ -5434,13 +5646,14 @@ class EasyChessGui:
             [self._right_panel_spacer()],
         ]
 
-        self.menu_elem = sg.Menu(menu_def_neutral, tearoff=False, font=MENU_FONT)
+        self.menu_elem = sg.Menu(self.current_menu_def, tearoff=False,
+                                 font=MENU_FONT)
 
         board_column = [
             [sg.Column(board_layout, pad=(0, 0))]
         ]
 
-        # White board layout, mode: Neutral
+        # White board layout, mode: Play
         layout = [
                 [self.menu_elem],
                 [sg.Column(board_column, vertical_alignment='top'),
@@ -5496,69 +5709,18 @@ class EasyChessGui:
 
         return engine_id_name
 
-    def main_loop(self):
+    def handle_setup_event(self, button, window):
+        """Handle an idle-state (game not started) setup menu event.
+
+        These handlers are shared by the Play mode loops; most open a modal
+        dialog, while theme and board color changes rebuild the main window.
+
+        :return: (is_handled, window) - window is the (possibly rebuilt)
+            main window.
         """
-        Build GUI, read user and engine config files and take user inputs.
-
-        :return:
-        """
-        engine_id_name = None
-        layout = self.build_main_layout(True)
-
-        # Use white layout as default window
-        window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
-                           layout, default_button_element_size=(12, 1),
-                           auto_size_buttons=False,
-                           finalize=True,
-                           icon=ico_path[platform]['pecg'])
-
-        # Read user config file, if missing create and new one
-        self.check_user_config_file()
-
-        # Load persisted Settings/Game values (checkboxes, review times).
-        self.load_settings()
-
-        # If engine config file (pecg_engines.json) is missing, then create it.
-        self.check_engine_config_file()
-        self.engine_id_name_list = self.get_engine_id_name_list()
-
-        # Define default opponent engine, user can change this later.
-        engine_id_name = self.get_default_engine_opponent()
-
-        # Define default adviser engine, user can change this later.
-        self.set_default_adviser_engine()
-
-        # Define default analysis engine for Review mode.
-        self.set_default_analysis_engine()
-
-        # Define default threat engine for Review mode.
-        self.set_default_threat_engine()
-
-        # Override defaults with any persisted per-role engine selections.
-        self.restore_engine_roles()
-
-        self.init_game()
-
-        # Initialize White and black boxes
-        self.update_labels_and_game_tags(window, human=self.username)
-
-        # Set up drag-and-drop bindings for board squares
-        self.setup_board_drag_drop(window)
-        self.redraw_board(window)
-
-        # Match the Linux menubar font to Windows (no-op on Windows/macOS).
-        self.apply_menu_font(window)
-
-        # Mode: Neutral, main loop starts here
+        is_handled = True
         while True:
-            button, value = window.Read(timeout=50)
-
-            # Mode: Neutral
-            if button is None:
-                logging.info('Quit app from main loop, X is pressed.')
-                break
-
-            # Mode: Neutral, Delete player
+            # Idle setup, Delete player
             if button == 'Delete Player::delete_player_k':
                 win_title = 'Tools/Delete Player'
                 player_list = []
@@ -5667,9 +5829,9 @@ class EasyChessGui:
 
                 w.Close()
                 window.UnHide()
-                continue
+                break
 
-            # Mode: Neutral, Set User time control
+            # Idle setup, Set User time control
             if button == 'User::tc_k':
                 win_title = 'Time/User'
                 layout = [
@@ -5716,9 +5878,9 @@ class EasyChessGui:
                         break
                 w.Close()
                 window.UnHide()
-                continue
+                break
 
-            # Mode: Neutral, Set engine time control
+            # Idle setup, Set engine time control
             if button == 'Engine::tc_k':
                 win_title = 'Time/Engine'
                 layout = [
@@ -5772,9 +5934,9 @@ class EasyChessGui:
                         break
                 w.Close()
                 window.UnHide()
-                continue
+                break
 
-            # Mode: Neutral, manage player names
+            # Idle setup, manage player names
             if button == 'Set Name::user_name_k':
                 win_title = 'User/Player'
                 names = self.get_usernames() or [self.username]
@@ -5860,9 +6022,9 @@ class EasyChessGui:
                 w.Close()
                 window.UnHide()
                 self.update_labels_and_game_tags(window, human=self.username)
-                continue
+                break
 
-            # Mode: Neutral
+            # Idle setup
             if button == 'Install':
                 button_title = 'Engine/Manage/' + button
                 new_engine_path_file, new_engine_id_name = None, None
@@ -6015,19 +6177,21 @@ class EasyChessGui:
                 install_win.Close()
                 window.UnHide()
 
-                # Define default engine opponent and adviser
-                if engine_id_name is None:
-                    engine_id_name = self.get_default_engine_opponent()
+                # Define default engine opponent, adviser, analysis, threat
+                if self.opp_id_name is None:
+                    self.get_default_engine_opponent()
                 if self.adviser_id_name is None:
                     self.set_default_adviser_engine()
                 if self.analysis_id_name is None:
                     self.set_default_analysis_engine()
+                if self.threat_id_name is None:
+                    self.set_default_threat_engine()
 
                 self.update_labels_and_game_tags(window, human=self.username)
 
-                continue
+                break
 
-            # Mode: Neutral
+            # Idle setup
             if button == 'Edit':
                 button_title = 'Engine/Manage/' + button
                 opt_name = []
@@ -6125,9 +6289,9 @@ class EasyChessGui:
 
                 edit_win.Close()
                 window.UnHide()
-                continue
+                break
 
-            # Mode: Neutral
+            # Idle setup
             if button == 'Delete':
                 button_title = 'Engine/Manage/' + button
                 delete_layout = [
@@ -6176,34 +6340,59 @@ class EasyChessGui:
                 if not is_cancel:
                     self.engine_id_name_list = self.get_engine_id_name_list()
 
+                    # Refresh role engines in case a deleted engine was active.
+                    if self.opp_id_name not in self.engine_id_name_list:
+                        self.opp_id_name = None
+                        self.opp_file = None
+                        self.opp_path_and_file = None
+                        self.get_default_engine_opponent()
+                    if self.adviser_id_name not in self.engine_id_name_list:
+                        self.adviser_id_name = None
+                        self.adviser_file = None
+                        self.adviser_path_and_file = None
+                        self.set_default_adviser_engine()
+                    if self.analysis_id_name not in self.engine_id_name_list:
+                        self.analysis_id_name = None
+                        self.analysis_file = None
+                        self.analysis_path_and_file = None
+                        self.set_default_analysis_engine()
+                    if self.threat_id_name not in self.engine_id_name_list:
+                        self.threat_id_name = None
+                        self.threat_file = None
+                        self.threat_path_and_file = None
+                        self.set_default_threat_engine()
+
+                    self.update_labels_and_game_tags(window, human=self.username)
+
                 delete_win.Close()
                 window.UnHide()
 
-                continue
+                break
 
-            # Mode: Neutral, engine role managers (configure options + select).
+            # Idle setup, engine role managers (configure options + select).
             if button == 'Set Engine Opponent':
                 self.manage_role_engine(window, 'opponent')
-                continue
+                self.update_labels_and_game_tags(window, human=self.username)
+                break
 
             if button == 'Set Engine Adviser':
                 self.manage_role_engine(window, 'adviser')
-                continue
+                break
 
             if button == 'Set Engine Analysis':
                 self.manage_role_engine(window, 'analysis')
-                continue
+                break
 
             if button == 'Set Engine Threat':
                 self.manage_role_engine(window, 'threat')
-                continue
+                break
 
-            # Mode: Neutral
+            # Idle setup
             if button == 'Set Depth':
                 self.set_depth_limit()
-                continue
+                break
 
-            # Mode: Neutral, Allow user to change book settings
+            # Idle setup, Allow user to change book settings
             if button == 'Set Book::book_set_k':
                 # Backup current values, we will restore these value in case
                 # the user presses cancel or X button
@@ -6260,9 +6449,9 @@ class EasyChessGui:
 
                 window.UnHide()
                 w.Close()
-                continue
+                break
 
-            # Mode: Neutral, Settings menu
+            # Idle setup, Settings menu
             if button == 'Game::settings_game_k':
                 win_title = 'Settings/Game'
                 layout = [
@@ -6319,112 +6508,127 @@ class EasyChessGui:
 
                 window.UnHide()
                 w.Close()
-                continue
+                break
 
-            # Mode: Neutral, Change theme
+            # Idle setup, Change theme
             if button in GUI_THEME:
                 self.gui_theme = button
                 window = self.create_new_window(window)
-                continue
+                break
 
-            # Mode: Neutral, Change board to gray
+            # Idle setup, Change board to gray
             if button == 'Gray::board_color_k':
                 self.sq_light_color = '#D8D8D8'
                 self.sq_dark_color = '#808080'
                 self.move_sq_light_color = '#e0e0ad'
                 self.move_sq_dark_color = '#999966'
-                self.redraw_board(window)
                 window = self.create_new_window(window)
-                continue
+                break
 
-            # Mode: Neutral, Change board to green
+            # Idle setup, Change board to green
             if button == 'Green::board_color_k':
                 self.sq_light_color = '#daf1e3'
                 self.sq_dark_color = '#3a7859'
                 self.move_sq_light_color = '#bae58f'
                 self.move_sq_dark_color = '#6fbc55'
-                self.redraw_board(window)
                 window = self.create_new_window(window)
-                continue
+                break
 
-            # Mode: Neutral, Change board to blue
+            # Idle setup, Change board to blue
             if button == 'Blue::board_color_k':
                 self.sq_light_color = '#b9d6e8'
                 self.sq_dark_color = '#4790c0'
                 self.move_sq_light_color = '#d2e4ba'
                 self.move_sq_dark_color = '#91bc9c'
-                self.redraw_board(window)
                 window = self.create_new_window(window)
-                continue
+                break
 
-            # Mode: Neutral, Change board to brown, default
+            # Idle setup, Change board to brown, default
             if button == 'Brown::board_color_k':
                 self.sq_light_color = '#F0D9B5'
                 self.sq_dark_color = '#B58863'
                 self.move_sq_light_color = '#E8E18E'
                 self.move_sq_dark_color = '#B8AF4E'
-                self.redraw_board(window)
                 window = self.create_new_window(window)
-                continue
+                break
 
-            # Mode: Neutral
-            if button == 'Flip':
-                window.find_element('_gamestatus_').Update('Mode     Neutral')
-                self.clear_elements(window)
-                window = self.create_new_window(window, True)
-                continue
+            is_handled = False
+            break
 
-            # Mode: Neutral
-            if isinstance(button, str) and '::help_' in button:
-                self.show_help_topic(button)
-                continue
+        return is_handled, window
 
-            # Mode: Neutral
-            if button == 'Review':
-                self.start_review_mode(window)
-                continue
+    def main_loop(self):
+        """
+        Build GUI, read user and engine config files and take user inputs.
 
-            # Mode: Neutral
-            if button == 'Play':
-                if engine_id_name is None:
-                    logging.warning('Install engine first!')
-                    sg.popup('Install engine first! in Engine/Manage/Install',
-                             icon=ico_path[platform]['pecg'], title='Mode')
-                    continue
+        The GUI runs directly in Play mode: each loop iteration is one game.
+        Setup (engine, time control, book, theme ...) is done through the
+        same menubar while no game is running; play_game() delegates those
+        events to handle_setup_event(). The app exits from inside play_game
+        (window X) via sys.exit.
+        """
+        layout = self.build_main_layout(self.is_white_at_bottom)
 
-                # Change menu from Neutral to Play
-                self.menu_elem.Update(menu_def_play)
-                self.apply_menu_font(window)
-                self.psg_board = copy.deepcopy(initial_board)
-                board = chess.Board()
+        # Use white layout as default window
+        window = sg.Window('{} {}'.format(APP_NAME, APP_VERSION),
+                           layout, default_button_element_size=(12, 1),
+                           auto_size_buttons=False,
+                           finalize=True,
+                           icon=ico_path[platform]['pecg'])
 
-                while True:
-                    button, value = window.Read(timeout=100)
+        # Read user config file, if missing create and new one
+        self.check_user_config_file()
 
-                    window.find_element('_gamestatus_').Update('Mode     Play')
-                    window.find_element('_movelist_').Update(disabled=False)
-                    window.find_element('_movelist_').Update('', disabled=True)
+        # Load persisted Settings/Game values (checkboxes, review times).
+        self.load_settings()
 
-                    start_new_game = self.play_game(window, board)
-                    window.find_element('_gamestatus_').Update('Mode     Neutral')
+        # If engine config file (pecg_engines.json) is missing, then create it.
+        self.check_engine_config_file()
+        self.engine_id_name_list = self.get_engine_id_name_list()
 
-                    self.psg_board = copy.deepcopy(initial_board)
-                    self.redraw_board(window)
-                    board = chess.Board()
-                    self.set_new_game()
+        # Define default opponent engine, user can change this later.
+        self.get_default_engine_opponent()
 
-                    if not start_new_game:
-                        break
+        # Define default adviser engine, user can change this later.
+        self.set_default_adviser_engine()
 
-                # Restore Neutral menu
-                self.menu_elem.Update(menu_def_neutral)
-                self.apply_menu_font(window)
-                self.psg_board = copy.deepcopy(initial_board)
-                board = chess.Board()
-                self.set_new_game()
-                continue
+        # Define default analysis engine for Review mode.
+        self.set_default_analysis_engine()
 
-        window.Close()
+        # Define default threat engine for Review mode.
+        self.set_default_threat_engine()
+
+        # Override defaults with any persisted per-role engine selections.
+        self.restore_engine_roles()
+
+        self.init_game()
+
+        # Initialize White and black boxes
+        self.update_labels_and_game_tags(window, human=self.username)
+
+        # Set up drag-and-drop bindings for board squares
+        self.setup_board_drag_drop(window)
+        self.redraw_board(window)
+
+        # Match the Linux menubar font to Windows (no-op on Windows/macOS).
+        self.apply_menu_font(window)
+
+        # Mode: Play. One game per loop iteration.
+        while True:
+            self.psg_board = copy.deepcopy(initial_board)
+            board = chess.Board()
+
+            # Each new game defaults to the user playing white; pressing
+            # Engine->Go before the first move switches to black.
+            self.is_user_white = True
+            self.update_labels_and_game_tags(window, human=self.username)
+            self.set_menu_state(window, in_game=False)
+            self.redraw_board(window)
+            window.find_element('_gamestatus_').Update('Mode     Play')
+
+            start_new_game, window = self.play_game(window, board)
+
+            self.set_new_game()
 
 
 def main():
