@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.16.0'
+APP_VERSION = 'v2.17.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -85,6 +85,8 @@ REVIEW_THREAT_BOX_HEIGHT = 1
 REVIEW_THREAT_PV_PLIES = 5
 # Output file for games annotated by the Review-mode auto-analyzer.
 AUTO_ANALYSIS_OUTPUT_FILE = 'pecg_analyzed_games.pgn'
+# How many recently opened review PGN paths to remember in the settings.
+MAX_RECENT_PGN_FILES = 10
 # Number of plies to include when adding an engine PV as a sub-variation.
 AUTO_ANALYSIS_PV_PLIES = 9
 # Time caps (seconds) for Review-mode searches. Without a cap these run
@@ -310,12 +312,14 @@ HELP_TOPICS = {
         'toggled in Settings -> General.'),
     'help_review_open': (
         'Open a Game to Review',
-        'Mode -> Review, choose a PGN file, select a game and press OK.\n'
-        'Use Game -> Select Game to change games later.'),
+        'Mode -> Review, choose a PGN file (or pick one from Recent),\n'
+        'select a game and press OK or double-click it. Click a column\n'
+        'heading to sort. Use Game -> Select Game to change games later.'),
     'help_review_nav': (
         'Navigate Moves',
         'Use the First, Previous, Next and Last buttons below the board,\n'
-        'or click a move in the move list to jump to that position.'),
+        'the Left / Right arrow keys (Home / End for first / last), or\n'
+        'click a move in the move list to jump to that position.'),
     'help_review_engine': (
         'Analysis and Threat (Review)',
         'Analysis button: evaluate the position with the analysis engine.\n'
@@ -1349,6 +1353,8 @@ class EasyChessGui:
         self.threat_file = None
         self.threat_path_and_file = None
         self.threat_id_name = None
+        # Recently opened review PGN files, most recent first (persisted).
+        self.recent_pgn_files = []
         self.review_queue = queue.Queue()
         self.threat_queue = queue.Queue()
         self.auto_analysis_queue = queue.Queue()
@@ -2007,6 +2013,10 @@ class EasyChessGui:
         # later by restore_engine_roles, once the engine list exists).
         if isinstance(data.get('role_engine_options'), dict):
             self.role_engine_options = data['role_engine_options']
+        if isinstance(data.get('recent_pgn_files'), list):
+            self.recent_pgn_files = [
+                p for p in data['recent_pgn_files'] if isinstance(p, str)
+            ][:MAX_RECENT_PGN_FILES]
         if 'review_pgn_file' in data:
             self.review_pgn_file = data['review_pgn_file']
             if self.review_pgn_file and os.path.isfile(self.review_pgn_file):
@@ -2030,6 +2040,7 @@ class EasyChessGui:
             'auto_analysis_engine_id_name': self.auto_analysis_engine_id_name,
             'auto_analysis_time_sec': self.auto_analysis_time_sec,
             'role_engine_options': self.role_engine_options,
+            'recent_pgn_files': self.recent_pgn_files,
             'review_pgn_file': self.review_pgn_file,
         }
         try:
@@ -4242,62 +4253,124 @@ class EasyChessGui:
             h.seek(game_entry['offset'])
             return chess.pgn.read_game(h)
 
-    def get_review_game_text(self, game, index):
-        """Return one-line summary of a game for review list."""
+    def add_recent_pgn(self, path):
+        """Move a PGN path to the front of the recent-files list and persist."""
+        path = os.path.normpath(path)
+        files = [p for p in self.recent_pgn_files
+                 if os.path.normpath(p) != path]
+        self.recent_pgn_files = ([path] + files)[:MAX_RECENT_PGN_FILES]
+        self.save_settings()
+
+    def get_review_game_row(self, game, index):
+        """Return one table row [no, white, black, result, date, event]."""
         headers = game.headers if hasattr(game, 'headers') else game['headers']
-        white = headers.get('White', '?')
-        black = headers.get('Black', '?')
-        result = headers.get('Result', '*')
-        event = headers.get('Event', '?')
-        date = headers.get('Date', '?')
-        return f'{index + 1:>3}. {white} vs {black} | {result} | {event} | {date}'
+        return [index + 1,
+                headers.get('White', '?'),
+                headers.get('Black', '?'),
+                headers.get('Result', '*'),
+                headers.get('Date', '?'),
+                headers.get('Event', '?')]
 
     def select_review_game(self, pgn_file=None, games=None):
-        """Ask user to select a game from a pgn file."""
+        """Ask user to select a game from a pgn file.
+
+        The games are shown in a table (White/Black/Result/Date/Event)
+        sortable by clicking a column heading; a Recent drop-down reopens
+        previously used PGN files. Double-clicking a row is the same as OK.
+        """
         if games is None:
             games = []
 
+        headings = ['#', 'White', 'Black', 'Result', 'Date', 'Event']
+        col_widths = [5, 16, 16, 7, 10, 18]
         selected_games = games
         selected_pgn = pgn_file or ''
         is_truncated = False
+        # rows[i] belongs to game row_map[i] in selected_games; sorting the
+        # table only reorders rows/row_map, never selected_games itself.
+        rows, row_map = [], []
+        sort_state = {'col': None, 'reverse': False}
 
-        # Auto-load games if a valid PGN file path is passed but no games are loaded yet
+        def build_rows():
+            rows_, map_ = [], []
+            for index, game in enumerate(selected_games):
+                rows_.append(self.get_review_game_row(game, index))
+                map_.append(index)
+            return rows_, map_
+
+        def status_text():
+            if not selected_games:
+                return 'Status: Load a PGN, select a game, then press OK.'
+            if is_truncated:
+                return ('Status: Showing first {} games only. '
+                        'Select one and press OK.'.format(len(selected_games)))
+            return ('Status: Loaded {} game(s). Click a heading to sort; '
+                    'double-click a game to open it.'.format(
+                        len(selected_games)))
+
+        # Auto-load games if a valid PGN file path is passed but no games
+        # are loaded yet.
         if selected_pgn and not selected_games:
             if os.path.isfile(selected_pgn):
                 try:
                     selected_games, is_truncated = self.load_pgn_games(selected_pgn)
                 except Exception:
                     logging.exception(f'Failed to auto-load PGN games from {selected_pgn}')
-
-        selection_list = [
-            self.get_review_game_text(game, index)
-            for index, game in enumerate(selected_games)
-        ]
+        rows, row_map = build_rows()
 
         layout = [
-            [sg.Text('PGN', size=(4, 1)),
-             sg.Input(default_text=selected_pgn, key='pgn_k', expand_x=True, enable_events=True),
+            [sg.Text('PGN', size=(6, 1)),
+             sg.Input(default_text=selected_pgn, key='pgn_k', expand_x=True,
+                      enable_events=True),
              sg.FileBrowse()],
-            [sg.Button('Display Games', expand_x=True)],
-            [sg.Text('Status: Load a PGN, select a game, then press OK.',
-                     key='status_k', relief='sunken', expand_x=True)],
-            [sg.Listbox(selection_list, size=(74, 12), key='game_k',
-                        expand_x=True)],
+            [sg.Text('Recent', size=(6, 1)),
+             sg.Combo(list(self.recent_pgn_files), key='recent_k',
+                      readonly=True, enable_events=True, expand_x=True)],
+            [sg.Text(status_text(), key='status_k', relief='sunken',
+                     expand_x=True)],
+            [sg.Table(values=rows, headings=headings, key='game_table_k',
+                      auto_size_columns=False, col_widths=col_widths,
+                      justification='left', num_rows=15,
+                      enable_click_events=True,
+                      select_mode=sg.TABLE_SELECT_MODE_BROWSE,
+                      expand_x=True, expand_y=True, font=FONT_BASE)],
             [sg.Button('OK'), sg.Cancel()]
         ]
 
         w = sg.Window('Review/Select Game', layout,
-                      icon=ico_path[platform]['pecg'], finalize=True)
+                      icon=ico_path[platform]['pecg'], finalize=True,
+                      resizable=True)
 
-        # Update initial selection and status message if games are loaded
-        if selected_games:
-            w['game_k'].Update(selection_list, set_to_index=[0])
-            if is_truncated:
-                w['status_k'].Update(
-                    f'Status: Showing first {len(selected_games)} games only. Select one and press OK.')
-            else:
-                w['status_k'].Update(
-                    f'Status: Loaded {len(selected_games)} game(s). Select one and press OK.')
+        # Double-click on a row confirms the selection like OK.
+        try:
+            w['game_table_k'].Widget.bind(
+                '<Double-Button-1>',
+                lambda e: w.write_event_value('table_dclick_k', True),
+                add='+')
+        except Exception:
+            logging.exception('Failed to bind table double-click.')
+
+        def refresh_table(select_first=True):
+            w['game_table_k'].Update(values=rows)
+            if rows and select_first:
+                w['game_table_k'].Update(select_rows=[0])
+            w['status_k'].Update(status_text())
+
+        if rows:
+            refresh_table()
+
+        def sort_by(col):
+            """Sort rows by table column, toggling the direction."""
+            reverse = (not sort_state['reverse']
+                       if sort_state['col'] == col else False)
+            sort_state['col'] = col
+            sort_state['reverse'] = reverse
+            paired = sorted(
+                zip(rows, row_map),
+                key=lambda rm: (rm[0][col] if col == 0
+                                else str(rm[0][col]).lower()),
+                reverse=reverse)
+            return [list(t) for t in zip(*paired)] if paired else ([], [])
 
         selected_game = None
 
@@ -4306,14 +4379,34 @@ class EasyChessGui:
             if e is None or e == 'Cancel':
                 break
 
+            # Heading click -> sort by that column.
+            if (isinstance(e, tuple) and e[0] == 'game_table_k'
+                    and e[1] == '+CLICKED+'):
+                clicked_row, clicked_col = e[2]
+                if (clicked_row == -1 and clicked_col is not None
+                        and clicked_col >= 0 and rows):
+                    rows, row_map = sort_by(clicked_col)
+                    refresh_table()
+                continue
+
+            if e == 'recent_k':
+                recent = v['recent_k']
+                if recent:
+                    w['pgn_k'].Update(recent)
+                    e, new_pgn = 'Display Games', recent
+                else:
+                    continue
+            else:
+                new_pgn = v.get('pgn_k', '') if isinstance(v, dict) else ''
+
             if e == 'Display Games' or e == 'pgn_k':
-                new_pgn = v['pgn_k']
                 if not new_pgn:
                     if e == 'Display Games':
                         w['status_k'].Update('Status: Please choose a PGN file.')
                     continue
 
-                # For auto-loading via typing/browsing event, only proceed if it exists as a file
+                # For auto-loading via typing/browsing event, only proceed
+                # if it exists as a file.
                 if e == 'pgn_k' and not os.path.isfile(new_pgn):
                     continue
 
@@ -4326,42 +4419,38 @@ class EasyChessGui:
                     w['status_k'].Update(
                         'Status: Failed to read PGN file. Check the file path and encoding.')
                     selected_games = []
-                    w['game_k'].Update([])
+                    rows, row_map = [], []
+                    refresh_table()
                     continue
 
                 if not selected_games:
                     w['status_k'].Update('Status: No games found in PGN file.')
-                    w['game_k'].Update([])
+                    rows, row_map = [], []
+                    w['game_table_k'].Update(values=[])
                     continue
 
-                selection_list = [
-                    self.get_review_game_text(game, index)
-                    for index, game in enumerate(selected_games)
-                ]
-                w['game_k'].Update(selection_list, set_to_index=[0])
-                if is_truncated:
-                    w['status_k'].Update(
-                        f'Status: Showing first {len(selected_games)} games only. Select one and press OK.')
-                else:
-                    w['status_k'].Update(
-                        f'Status: Loaded {len(selected_games)} game(s). Select one and press OK.')
+                sort_state['col'] = None
+                rows, row_map = build_rows()
+                refresh_table()
+                self.add_recent_pgn(selected_pgn)
+                w['recent_k'].Update(values=list(self.recent_pgn_files),
+                                     value=self.recent_pgn_files[0])
                 continue
 
-            if e == 'OK':
+            if e == 'OK' or e == 'table_dclick_k':
+                if e == 'table_dclick_k':
+                    # Ignore double-clicks on the heading row.
+                    last = getattr(w['game_table_k'],
+                                   'last_clicked_position', (None, None))
+                    if last[0] is None or last[0] == -1:
+                        continue
                 try:
-                    selected_text = v['game_k'][0]
-                except IndexError:
+                    view_row = v['game_table_k'][0]
+                    selected_index = row_map[view_row]
+                except (IndexError, KeyError, TypeError):
                     w['status_k'].Update('Status: Please select a game.')
                     continue
 
-                try:
-                    selected_index = int(selected_text.split('.', 1)[0]) - 1
-                except (IndexError, ValueError):
-                    w['status_k'].Update('Status: Please select a valid game.')
-                    continue
-                if not 0 <= selected_index < len(selected_games):
-                    w['status_k'].Update('Status: Please select a valid game.')
-                    continue
                 selected_game_obj = self.load_review_game(
                     selected_pgn, selected_games[selected_index])
                 if selected_game_obj is None:
@@ -5290,10 +5379,14 @@ class EasyChessGui:
         return window
 
     def bind_review_shortcuts(self, window):
-        """Bind Alt+A and Alt+T to the Review window's toggle buttons.
+        """Bind keyboard shortcuts on the Review window.
 
-        The bindings write the same event keys used by the Analysis and Threat
-        buttons, so the existing event-loop handlers take over.
+        Alt+A / Alt+T toggle analysis and threat; Left / Right step through
+        the moves and Home / End jump to the first / last position. The
+        bindings write the same event keys used by the buttons, so the
+        existing event-loop handlers take over. Binding on the toplevel is
+        safe: the review window has no editable text fields that need the
+        arrow keys.
         """
         try:
             root = window.TKroot
@@ -5303,6 +5396,14 @@ class EasyChessGui:
             root.bind('<Alt-Key-t>',
                       lambda e: window.write_event_value(
                           'review_toggle_threat_k', True))
+            root.bind('<Left>',
+                      lambda e: window.write_event_value('Previous', True))
+            root.bind('<Right>',
+                      lambda e: window.write_event_value('Next', True))
+            root.bind('<Home>',
+                      lambda e: window.write_event_value('First', True))
+            root.bind('<End>',
+                      lambda e: window.write_event_value('Last', True))
         except Exception:
             logging.exception('Failed to bind review window shortcuts.')
 

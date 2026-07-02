@@ -108,8 +108,8 @@ Only **UCI** engines are supported. All engine actions are available **before a 
 * **Search depth:** `Engine → Set Depth` caps the depth of the playing and adviser engines. Review analysis/threat are limited by **time** instead (see Settings).
 
 #### Review mode — replay and analyse
-* **Open a game:** `Mode → Review`, choose a PGN file, select a game and press **OK**. Switch games later with `Game → Select Game`.
-* **Navigate:** use **First / Previous / Next / Last** below the board, or click a move in the move list to jump to that position.
+* **Open a game:** `Mode → Review`, choose a PGN file (or pick one from the **Recent** drop-down), then select a game and press **OK** — or double-click it. Click a column heading (White, Black, Result, Date, Event) to sort the game list.
+* **Navigate:** use **First / Previous / Next / Last** below the board, the **Left / Right** arrow keys (**Home / End** for first/last position), or click a move in the move list to jump to that position.
 * **Analysis:** press the **Analysis** button to evaluate the current position (multi-line principal variations). The search stops after the *analysis time* (default 60s) and restarts automatically when you change position.
 * **Threat:** press the **Threat** button to see what the opponent would play if the side to move passed (a null move). It is unavailable when the side to move is in check, and stops after the *threat time* (default 30s).
 * **Flip the board:** `Board → Flip` within Review mode.
