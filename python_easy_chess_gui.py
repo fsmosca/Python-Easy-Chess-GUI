@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.17.0'
+APP_VERSION = 'v2.18.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -144,6 +144,9 @@ elif platform == 'darwin':
 else:
     FONT_BASE = (FONT_NAME, 9)
     FONT_SMALL = (FONT_NAME, 8)
+
+# Small font for the board coordinate labels drawn on the canvas.
+COORD_FONT = (FONT_NAME, 7, 'bold')
 
 
 # The top menu BAR font can't be set through FreeSimpleGUI (its font= only styles
@@ -1302,13 +1305,16 @@ class EasyChessGui:
         self.psg_board = None
         self.menu_elem = None
 
-        # Drag-and-drop state
-        self._drag_source = None
-        self._widget_to_square = {}
-        self._drag_window = None
-        self._drag_piece = None    # piece code currently being dragged
-        self._drag_ghost = None    # floating Toplevel showing the dragged piece
-        self._drag_photo = None    # PhotoImage ref kept alive during the drag
+        # Board canvas state (one sg.Graph per window, key '_board_graph_k')
+        self._board_square_fig = {}   # (row,col) -> rect figure id
+        self._board_piece_fig = {}    # (row,col) -> piece image figure id
+        self._board_label_fig = {}    # (row,col) -> [coordinate label ids]
+        # Mouse input state on the board canvas
+        self._drag_window = None      # sg.Window that owns the bound canvas
+        self._drag_source = None      # (row,col) of the mouse press
+        self._drag_piece = None       # piece code being dragged
+        self._drag_started = False    # True once the piece has been lifted
+        self._drag_fig = None         # figure id of the floating piece
         self.engine_id_name_list = []
         self.engine_file_list = []
         self.username = 'Human'
@@ -1672,12 +1678,10 @@ class EasyChessGui:
                 rem_time = self.get_time_h_mm_ss(time_left, False)
                 self.node.comment = '[%clk {}]'.format(rem_time)
 
-    def create_new_window(self, window, flip=False):
+    def create_new_window(self, window):
         """Hide current window and creates a new window."""
         loc = window.CurrentLocation()
         window.Hide()
-        if flip:
-            self.is_white_at_bottom = not self.is_white_at_bottom
 
         layout = self.build_main_layout(self.is_white_at_bottom)
 
@@ -2729,14 +2733,87 @@ class EasyChessGui:
 
         self.psg_board = psgboard
 
+    def board_graph(self, window):
+        """Return the board sg.Graph element of a window, or None."""
+        graph = window.AllKeysDict.get('_board_graph_k')
+        if graph is None or graph.Widget is None:
+            return None
+        return graph
+
+    def square_to_xy(self, row, col):
+        """Top-left graph coords (== pixels) of a logical square for the
+        current orientation."""
+        if self.is_white_at_bottom:
+            return col * SQUARE_PX, row * SQUARE_PX
+        return (7 - col) * SQUARE_PX, (7 - row) * SQUARE_PX
+
+    def xy_to_square(self, x, y):
+        """Map graph coords to a logical (row, col), or None if off-board."""
+        d_col = int(x) // SQUARE_PX
+        d_row = int(y) // SQUARE_PX
+        if not (0 <= d_col <= 7 and 0 <= d_row <= 7):
+            return None
+        if self.is_white_at_bottom:
+            return d_row, d_col
+        return 7 - d_row, 7 - d_col
+
+    def paint_square(self, graph, row, col, highlight=False):
+        """Draw one square (rect, piece, edge coordinate labels) on the
+        board canvas, replacing that square's existing figures."""
+        old_rect = self._board_square_fig.pop((row, col), None)
+        if old_rect is not None:
+            graph.delete_figure(old_rect)
+        old_piece = self._board_piece_fig.pop((row, col), None)
+        if old_piece is not None:
+            graph.delete_figure(old_piece)
+        for fig in self._board_label_fig.pop((row, col), []):
+            graph.delete_figure(fig)
+
+        is_dark = (row + col) % 2
+        if highlight:
+            color = self.move_sq_dark_color if is_dark \
+                else self.move_sq_light_color
+        else:
+            color = self.sq_dark_color if is_dark else self.sq_light_color
+        x, y = self.square_to_xy(row, col)
+        self._board_square_fig[(row, col)] = graph.draw_rectangle(
+            (x, y), (x + SQUARE_PX, y + SQUARE_PX),
+            fill_color=color, line_color=color)
+
+        piece = self.psg_board[row][col]
+        if piece != BLANK:
+            self._board_piece_fig[(row, col)] = graph.draw_image(
+                filename=images[piece], location=(x, y))
+
+        # Board coordinates on the display edges: file letter in the
+        # bottom-right corner of the bottom row, rank number in the
+        # top-left corner of the left column, in the opposite square color.
+        label_color = self.sq_light_color if is_dark else self.sq_dark_color
+        labels = []
+        if y == BOARD_PX - SQUARE_PX:
+            labels.append(graph.draw_text(
+                'abcdefgh'[col], (x + SQUARE_PX - 3, y + SQUARE_PX - 2),
+                color=label_color, font=COORD_FONT,
+                text_location=sg.TEXT_LOCATION_BOTTOM_RIGHT))
+        if x == 0:
+            labels.append(graph.draw_text(
+                str(8 - row), (x + 3, y + 2),
+                color=label_color, font=COORD_FONT,
+                text_location=sg.TEXT_LOCATION_TOP_LEFT))
+        if labels:
+            self._board_label_fig[(row, col)] = labels
+
     def change_square_color(self, window, row, col):
-        """
-        Change the color of a square based on square row and col.
-        """
-        btn_sq = window.find_element(key=(row, col))
-        is_dark_square = True if (row + col) % 2 else False
-        bd_sq_color = self.move_sq_dark_color if is_dark_square else self.move_sq_light_color
-        btn_sq.Update(button_color=('white', bd_sq_color))
+        """Highlight a square (selected piece or move from/to square)."""
+        graph = self.board_graph(window)
+        if graph is not None:
+            self.paint_square(graph, row, col, highlight=True)
+
+    def restore_square_color(self, window, row, col):
+        """Repaint a square in its normal color (clears a highlight)."""
+        graph = self.board_graph(window)
+        if graph is not None:
+            self.paint_square(graph, row, col, highlight=False)
 
     def relative_row(self, s, stm):
         """
@@ -2767,176 +2844,124 @@ class EasyChessGui:
         return chess.square_file(s)
 
     def redraw_board(self, window):
-        """
-        Redraw board at start and afte a move.
+        """Redraw the whole board on the Graph canvas from psg_board.
 
-        :param window:
-        :return:
+        Orientation (is_white_at_bottom) is applied here at draw time, so
+        flipping the board is just another redraw - no window rebuild.
         """
+        graph = self.board_graph(window)
+        if graph is None:
+            return
+        graph.erase()
+        self._board_square_fig = {}
+        self._board_piece_fig = {}
+        self._board_label_fig = {}
         for i in range(8):
             for j in range(8):
-                color = self.sq_dark_color if (i + j) % 2 else \
-                        self.sq_light_color
-                piece_image = images[self.psg_board[i][j]]
-                elem = window.find_element(key=(i, j))
-                elem.Update(button_color=('white', color),
-                            image_filename=piece_image, )
-        self.configure_board_widgets(window)
-
-    def configure_board_widgets(self, window):
-        """Configure board square Tkinter buttons to ensure no gaps or borders."""
-        configured_count = 0
-        for i in range(8):
-            for j in range(8):
-                elem = window.find_element(key=(i, j), silent_on_error=True)
-                if elem is not None and elem.Widget is not None:
-                    try:
-                        if platform == 'linux':
-                            elem.Widget.configure(borderwidth=0, bd=0, highlightthickness=0, padx=0, pady=0, relief='flat', width=58, height=58)
-                        else:
-                            elem.Widget.configure(borderwidth=0, bd=0, highlightthickness=0, padx=0, pady=0, relief='flat')
-                        configured_count += 1
-                    except Exception as e:
-                        logging.warning('Failed to configure board square widget (%d, %d): %s', i, j, e)
-        logging.info('Successfully configured %d board square widgets.', configured_count)
+                self.paint_square(graph, i, j)
 
     def setup_board_drag_drop(self, window):
-        """Bind drag-and-drop events to board square buttons.
+        """Bind mouse input on the board canvas.
 
-        After window finalization, this binds mouse press/release events
-        to each board square so that pieces can be moved by dragging.
+        Emits the same events the play loop always consumed: a (row, col)
+        tuple event for a click and '__drag_move__' with (from_sq, to_sq)
+        for a completed drag, via window.write_event_value.
         """
-        self._widget_to_square = {}
         self._drag_window = window
-        window.refresh()
-        self.configure_board_widgets(window)
-        for i in range(8):
-            for j in range(8):
-                elem = window.find_element(key=(i, j))
-                widget = elem.Widget
-                self._widget_to_square[widget] = (i, j)
-                widget.bind('<ButtonPress-1>',
-                            self._on_drag_press, add='+')
-                widget.bind('<B1-Motion>',
-                            self._on_drag_motion, add='+')
-                widget.bind('<ButtonRelease-1>',
-                            self._on_drag_release, add='+')
+        self._drag_source = None
+        self._drag_piece = None
+        self._drag_started = False
+        self._drag_fig = None
+        graph = self.board_graph(window)
+        if graph is None:
+            return
+        graph.Widget.bind('<ButtonPress-1>', self._on_board_press, add='+')
+        graph.Widget.bind('<B1-Motion>', self._on_board_motion, add='+')
+        graph.Widget.bind('<ButtonRelease-1>', self._on_board_release, add='+')
 
-    def _on_drag_press(self, event):
+    def _on_board_press(self, event):
         """Record the source square (and its piece) on mouse press."""
-        self._drag_source = self._widget_to_square.get(event.widget)
+        self._drag_started = False
+        self._drag_fig = None
+        graph = self.board_graph(self._drag_window)
+        if graph is None:
+            self._drag_source = None
+            self._drag_piece = None
+            return
+        x, y = graph._convert_canvas_xy_to_xy(event.x, event.y)
+        self._drag_source = self.xy_to_square(x, y)
         if self._drag_source is not None:
             row, col = self._drag_source
             self._drag_piece = self.psg_board[row][col]
         else:
             self._drag_piece = None
 
-    def _on_drag_motion(self, event):
-        """Show a floating piece that follows the cursor while dragging.
+    def _on_board_motion(self, event):
+        """Float the dragged piece under the cursor.
 
-        The ghost is created lazily on the first motion, so a plain click
-        (press + release without movement) shows no ghost. Only the source
-        square's button image is blanked here; ``self.psg_board`` (the move
-        data) is left untouched so move validation stays correct.
+        The floating piece is created lazily on the first motion, so a
+        plain click shows nothing. Only the source square's piece figure
+        is lifted; ``self.psg_board`` (the move data) is left untouched so
+        move validation stays correct.
         """
         if self._drag_source is None or self._drag_piece in (None, BLANK):
             return
-
-        if self._drag_ghost is None:
-            row, col = self._drag_source
-            try:
-                root = self._drag_window.TKroot
-                # Lift the piece: blank the source square image only.
-                self._drag_window.find_element(key=(row, col)).Update(
-                    image_filename=images[BLANK])
-                self._drag_photo = tk.PhotoImage(
-                    file=images[self._drag_piece], master=root)
-                ghost = tk.Toplevel(root)
-                ghost.overrideredirect(True)
-                ghost.attributes('-topmost', True)
-                label_bg = None
-                try:
-                    # Windows: transparent background so only the piece shows.
-                    transparent = 'magenta'
-                    ghost.configure(bg=transparent)
-                    ghost.attributes('-transparentcolor', transparent)
-                    label_bg = transparent
-                except Exception:
-                    label_bg = None
-                lbl = tk.Label(ghost, image=self._drag_photo,
-                               borderwidth=0, highlightthickness=0)
-                if label_bg is not None:
-                    lbl.configure(bg=label_bg)
-                lbl.pack()
-                self._drag_ghost = ghost
-            except Exception:
-                logging.exception('Failed to create drag ghost.')
-                self._destroy_drag_ghost()
-                return
-
-        try:
-            self._drag_ghost.geometry(
-                '+{}+{}'.format(event.x_root - 30, event.y_root - 30))
-        except Exception:
-            self._destroy_drag_ghost()
-
-    def _destroy_drag_ghost(self):
-        """Destroy the floating drag piece and release its image reference."""
-        if self._drag_ghost is not None:
-            try:
-                self._drag_ghost.destroy()
-            except Exception:
-                pass
-            self._drag_ghost = None
-        self._drag_photo = None
-
-    def _on_drag_release(self, event):
-        """Handle mouse release for drag-and-drop moves.
-
-        Uses winfo_containing to find which board square the cursor is
-        over when the mouse button is released. If the target is a
-        different square from the source, injects a drag move event
-        into the FreeSimpleGUI event queue.
-        """
-        had_ghost = self._drag_ghost is not None
-        self._destroy_drag_ghost()
-
-        if self._drag_source is None:
-            self._drag_piece = None
+        graph = self.board_graph(self._drag_window)
+        if graph is None:
             return
+        x, y = graph._convert_canvas_xy_to_xy(event.x, event.y)
+        half = SQUARE_PX // 2
+        if not self._drag_started:
+            self._drag_started = True
+            # Lift the piece off its source square (display only).
+            fig = self._board_piece_fig.pop(self._drag_source, None)
+            if fig is not None:
+                graph.delete_figure(fig)
+            self._drag_fig = graph.draw_image(
+                filename=images[self._drag_piece],
+                location=(x - half, y - half))
+            graph.bring_figure_to_front(self._drag_fig)
+        elif self._drag_fig is not None:
+            graph.relocate_figure(self._drag_fig, x - half, y - half)
+
+    def _on_board_release(self, event):
+        """Emit a click or drag-move event on mouse release.
+
+        Release on the press square (with or without a small drag) is a
+        click and emits that square's (row, col) tuple event; a drag
+        released on another square emits '__drag_move__'. The play loop
+        consumes both exactly as it did with the old button board.
+        """
         source = self._drag_source
-        drag_piece = self._drag_piece
+        started = self._drag_started
+        drag_fig = self._drag_fig
         self._drag_source = None
         self._drag_piece = None
+        self._drag_started = False
+        self._drag_fig = None
 
-        # If the piece was lifted, restore the source square image. A legal
-        # move is redrawn by the __drag_move__ handler; an illegal or
-        # cancelled drag keeps the piece on its origin square.
-        if had_ghost and drag_piece is not None:
-            try:
-                self._drag_window.find_element(key=source).Update(
-                    image_filename=images[drag_piece])
-            except Exception:
-                logging.exception('Failed to restore dragged piece image.')
+        graph = self.board_graph(self._drag_window)
+        if graph is None:
+            return
+        if drag_fig is not None:
+            graph.delete_figure(drag_fig)
+        if source is None:
+            return
+        if started:
+            # Put the lifted piece back; a legal move repaints right after
+            # via the __drag_move__ handler, an illegal or cancelled drag
+            # keeps the piece on its origin square.
+            self.paint_square(graph, source[0], source[1])
 
-        # Find the widget under the cursor at release position
-        target_widget = event.widget.winfo_containing(
-            event.x_root, event.y_root)
-
-        # Check directly first, then walk up the widget hierarchy
-        target_square = self._widget_to_square.get(target_widget)
-        if target_square is None:
-            w = getattr(target_widget, 'master', None) \
-                if target_widget is not None else None
-            while w is not None:
-                target_square = self._widget_to_square.get(w)
-                if target_square is not None:
-                    break
-                w = getattr(w, 'master', None)
-
-        if target_square is not None and target_square != source:
+        x, y = graph._convert_canvas_xy_to_xy(event.x, event.y)
+        target = self.xy_to_square(x, y)
+        if target is None:
+            return
+        if target == source:
+            self._drag_window.write_event_value(source, True)
+        elif started:
             self._drag_window.write_event_value(
-                '__drag_move__', (source, target_square))
+                '__drag_move__', (source, target))
 
     def render_square(self, image, key, location):
         """ Returns an RButton (Read Button) with image image """
@@ -3185,60 +3210,18 @@ class EasyChessGui:
             msg = '{} to play'.format(stm)
         element.Update(msg)
 
-    def flip_play_window(self, window, board, human_timer=None,
-                         engine_timer=None):
-        """Flip the board orientation during Play without touching the game.
+    def flip_play_window(self, window, board):
+        """Flip the board orientation during Play.
 
-        The orientation is baked into the board layout, so the window is
-        rebuilt; the position, move list, status, comment and clock displays
-        are then restored from the current game state. Safe while the engine
-        is thinking: the engine talks only through self.queue, and psg_board
-        is restored before this returns, i.e. before any buffered bestmove
-        is processed.
+        The board is drawn on a canvas with orientation applied at draw
+        time, so flipping is just a redraw of the same window; the game,
+        clocks, move list and a thinking engine are untouched.
 
-        :return: the new window.
+        :return: the same window (kept for call-site symmetry).
         """
-        status = ''
-        comment = ''
-        try:
-            status = window.find_element('_gamestatus_').get()
-            comment = window.find_element('comment_k').get()
-        except Exception:
-            logging.exception('Failed to read status/comment before flip.')
-
-        window = self.create_new_window(window, flip=True)
-
-        # create_new_window resets psg_board to the initial position; put the
-        # actual game position back before anything else reads psg_board.
+        self.is_white_at_bottom = not self.is_white_at_bottom
         self.board_to_psg_board(board)
         self.redraw_board(window)
-        self.update_play_turn_status(window, board)
-
-        if status:
-            window.find_element('_gamestatus_').Update(status)
-        if comment:
-            window.find_element('comment_k').Update(comment)
-        if len(self.game.variations):
-            window.find_element('_movelist_').Update(disabled=False)
-            window.find_element('_movelist_').Update('')
-            window.find_element('_movelist_').Update(
-                self.game.variations[0], append=True, disabled=True)
-
-        if human_timer is not None:
-            k1 = 'w_elapse_k' if self.is_user_white else 'b_elapse_k'
-            k2 = 'w_base_time_k' if self.is_user_white else 'b_base_time_k'
-            window.Element(k1).Update(
-                self.get_time_mm_ss_ms(human_timer.elapse))
-            window.Element(k2).Update(
-                self.get_time_h_mm_ss(human_timer.base))
-        if engine_timer is not None:
-            k1 = 'b_elapse_k' if self.is_user_white else 'w_elapse_k'
-            k2 = 'b_base_time_k' if self.is_user_white else 'w_base_time_k'
-            window.Element(k1).Update(
-                self.get_time_mm_ss_ms(engine_timer.elapse))
-            window.Element(k2).Update(
-                self.get_time_h_mm_ss(engine_timer.base))
-
         return window
 
     def play_game(self, window: sg.Window, board: chess.Board):
@@ -3344,8 +3327,7 @@ class EasyChessGui:
                         continue
 
                     if button == 'Flip':
-                        window = self.flip_play_window(
-                            window, board, human_timer, engine_timer)
+                        window = self.flip_play_window(window, board)
                         continue
 
                     if button == 'Paste FEN':
@@ -3398,10 +3380,9 @@ class EasyChessGui:
                     if (not is_game_started and isinstance(button, str)
                             and button != sg.TIMEOUT_KEY):
                         if button == 'Review':
-                            prev_orientation = self.is_white_at_bottom
                             self.start_review_mode(window)
-                            if prev_orientation != self.is_white_at_bottom:
-                                window = self.create_new_window(window)
+                            # A flip done inside Review persists; the redraw
+                            # below repaints in the current orientation.
                             self.board_to_psg_board(board)
                             self.redraw_board(window)
                             self.update_play_turn_status(window, board)
@@ -3644,8 +3625,7 @@ class EasyChessGui:
 
                     # Mode: Play, stm: User, flip the board view anytime
                     if button == 'Flip':
-                        window = self.flip_play_window(
-                            window, board, human_timer, engine_timer)
+                        window = self.flip_play_window(window, board)
                         break
 
                     # Mode: Play, stm: User. Engine->Go before the first move:
@@ -3668,8 +3648,7 @@ class EasyChessGui:
                         # Put the user's color at the bottom (they can still
                         # flip back at any time).
                         if self.is_white_at_bottom != self.is_user_white:
-                            window = self.flip_play_window(
-                                window, board, human_timer, engine_timer)
+                            window = self.flip_play_window(window, board)
                         is_human_stm = False
                         is_engine_ready = True
                         is_game_started = True
@@ -3717,10 +3696,9 @@ class EasyChessGui:
                     if (not is_game_started and isinstance(button, str)
                             and button != sg.TIMEOUT_KEY):
                         if button == 'Review':
-                            prev_orientation = self.is_white_at_bottom
                             self.start_review_mode(window)
-                            if prev_orientation != self.is_white_at_bottom:
-                                window = self.create_new_window(window)
+                            # A flip done inside Review persists; the redraw
+                            # below repaints in the current orientation.
                             self.board_to_psg_board(board)
                             self.redraw_board(window)
                             self.update_play_turn_status(window, board)
@@ -3764,11 +3742,8 @@ class EasyChessGui:
                             # If a click-based move was in progress, restore
                             # the color of the previously selected square
                             if move_state == 1:
-                                prev_color = self.sq_dark_color \
-                                    if (move_from[0] + move_from[1]) % 2 \
-                                    else self.sq_light_color
-                                window.find_element(key=move_from).Update(
-                                    button_color=('white', prev_color))
+                                self.restore_square_color(
+                                    window, move_from[0], move_from[1])
 
                             # Set up state as if source square was clicked
                             move_from = drag_from
@@ -3806,15 +3781,12 @@ class EasyChessGui:
                             is_promote = False
                             move_to = button
                             to_row, to_col = move_to
-                            button_square = window.find_element(key=(fr_row, fr_col))
 
                             # If move is cancelled, pressing same button twice
                             if move_to == move_from:
-                                # Restore the color of the pressed board square
-                                color = self.sq_dark_color if (to_row + to_col) % 2 else self.sq_light_color
-
                                 # Restore the color of the fr square
-                                button_square.Update(button_color=('white', color))
+                                self.restore_square_color(
+                                    window, fr_row, fr_col)
                                 move_state = 0
                                 continue
 
@@ -3917,11 +3889,9 @@ class EasyChessGui:
                             # Else if move is illegal
                             else:
                                 move_state = 0
-                                color = self.sq_dark_color \
-                                    if (move_from[0] + move_from[1]) % 2 else self.sq_light_color
-
                                 # Restore the color of the fr square
-                                button_square.Update(button_color=('white', color))
+                                self.restore_square_color(
+                                    window, move_from[0], move_from[1])
                                 continue
 
                 if (is_new_game or is_exit_app or
@@ -4035,8 +4005,7 @@ class EasyChessGui:
 
                         # Mode: Play, Computer is thinking, flip board view
                         if button == 'Flip':
-                            window = self.flip_play_window(
-                                window, board, human_timer, engine_timer)
+                            window = self.flip_play_window(window, board)
                             continue
 
                         if button == 'Resign::resign_game_k':
@@ -5372,7 +5341,6 @@ class EasyChessGui:
             location=location,
             icon=ico_path[platform]['pecg']
         )
-        self.configure_board_widgets(window)
         self.compact_review_buttons(window)
         self.apply_menu_font(window)
         self.bind_review_shortcuts(window)
@@ -5532,27 +5500,10 @@ class EasyChessGui:
                 continue
 
             if button == 'Flip':
-                review_location = review_window.CurrentLocation()
-                self.stop_review_analysis()
-                self.stop_review_threat()
-                review_window.Close()
+                # The board is a canvas and orientation is applied at draw
+                # time: flipping is just a redraw, so the window and any
+                # running analysis/threat searches are kept as they are.
                 self.is_white_at_bottom = not self.is_white_at_bottom
-                review_window = self.create_review_window(location=review_location)
-                self.review_window = review_window
-                self.render_review_movelist(review_window)
-                # Restart via the debounce path so the engines (parked in the
-                # stale lists by stop_review_* above) are reaped and reused
-                # instead of cold-starting new processes for the flipped board.
-                if self.review_analysis_enabled:
-                    self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
-                    self.review_analysis_status = 'Waiting...'
-                    self.review_analysis_stale = True
-                if self.review_threat_enabled:
-                    self.review_threat_line = ''
-                    self.review_threat_status = 'Waiting...'
-                    self.review_threat_stale = True
-                if self.review_analysis_enabled or self.review_threat_enabled:
-                    self.review_nav_last_time = time.time()
                 self.update_review_window(review_window)
                 continue
 
@@ -5670,37 +5621,19 @@ class EasyChessGui:
 
     def create_board(self, is_white_at_bottom=True):
         """
-        Returns board layout for the given orientation.
+        Returns the board layout: a single Graph canvas.
 
-        :param is_white_at_bottom: white pieces drawn at the bottom
-        :return: board layout
+        Orientation is no longer baked into the layout - it is applied at
+        draw time by redraw_board/paint_square, which is what makes
+        flipping a redraw instead of a window rebuild. The parameter is
+        kept for call-site compatibility.
         """
-        file_char_name = 'abcdefgh'
         self.psg_board = copy.deepcopy(initial_board)
-
-        board_layout = []
-
-        if is_white_at_bottom:
-            # Save the board with black at the top.
-            start = 0
-            end = 8
-            step = 1
-        else:
-            start = 7
-            end = -1
-            step = -1
-            file_char_name = file_char_name[::-1]
-
-        # Loop through the board and create buttons with images
-        for i in range(start, end, step):
-            # Row numbers at left of board is blank
-            row = []
-            for j in range(start, end, step):
-                piece_image = images[self.psg_board[i][j]]
-                row.append(self.render_square(piece_image, key=(i, j), location=(i, j)))
-            board_layout.append(row)
-
-        return board_layout
+        return [[sg.Graph(canvas_size=(BOARD_PX, BOARD_PX),
+                          graph_bottom_left=(0, BOARD_PX),
+                          graph_top_right=(BOARD_PX, 0),
+                          pad=(0, 0), key='_board_graph_k',
+                          enable_events=False, drag_submits=False)]]
 
     def build_main_layout(self, is_white_at_bottom=True):
         """
