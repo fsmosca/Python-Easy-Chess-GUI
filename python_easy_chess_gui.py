@@ -309,7 +309,7 @@ HELP_TOPICS = {
     'help_review_open': (
         'Open a Game to Review',
         'Mode -> Review, choose a PGN file, select a game and press OK.\n'
-        'Use Game -> Load PGN / Select Game to change games later.'),
+        'Use Game -> Select Game to change games later.'),
     'help_review_nav': (
         'Navigate Moves',
         'Use the First, Previous, Next and Last buttons below the board,\n'
@@ -471,8 +471,7 @@ def build_play_menu(in_game=False):
 # (2) Mode: Review
 menu_def_review = [
         ['&Mode', ['Play']],
-        ['&Game', ['Load PGN::review_load_pgn_k',
-                   'Select Game::review_select_game_k',
+        ['&Game', ['Select Game::review_select_game_k',
                    'Auto-Analyze Game::review_auto_analyze_k',
                    'Cancel Analysis::review_cancel_analysis_k']],
         ['Boar&d', ['Flip']],
@@ -4247,7 +4246,7 @@ class EasyChessGui:
             [sg.Button('OK'), sg.Cancel()]
         ]
 
-        w = sg.Window('Review/Load PGN', layout,
+        w = sg.Window('Review/Select Game', layout,
                       icon=ico_path[platform]['pecg'], finalize=True)
 
         # Update initial selection and status message if games are loaded
@@ -5362,22 +5361,6 @@ class EasyChessGui:
 
             if isinstance(button, str) and '::help_' in button:
                 self.show_help_topic(button)
-                continue
-
-            if button == 'Load PGN::review_load_pgn_k':
-                selected_game = self.select_review_game(
-                    self.review_pgn_file, self.review_games)
-                if selected_game is None:
-                    continue
-
-                self.review_pgn_file = selected_game['pgn_file']
-                self.review_games = selected_game['games']
-                self.prepare_review_game(
-                    selected_game['game'], selected_game['game_index'])
-                self.render_review_movelist(review_window)
-                self.update_review_window(review_window)
-                self.reset_review_engines_for_new_game(review_window)
-                self.save_settings()
                 continue
 
             if button == 'Select Game::review_select_game_k':
