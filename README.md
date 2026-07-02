@@ -91,10 +91,10 @@ The GUI opens directly in **Play** mode, ready to play. There are two modes:
 * **Flip the board:** `Board → Flip`, at any time — before, during or after a game. The game is not affected.
 * **Force the engine to move now:** `Engine → Move Now`.
 * **Start a new game:** `Game → New`.
-* **Paste a position (FEN):** `FEN → Paste` (before a game starts). If the side to move is not yours, press `Engine → Go`.
+* **Paste a position (FEN):** `Game → Paste FEN` (before a game starts). If the side to move is not yours, press `Engine → Go`.
 * **End a game manually:** `Game → Resign`, `User Wins`, or `User Draws`.
 * **Save games:** every game auto-saves to `pecg_auto_save_games.pgn`. During a game the `Game` menu also offers *Save to My Games* and *Save to White / Black Repertoire*.
-* **Time control:** `Time → User` (your clock) and `Time → Engine` (opponent clock), set before a game starts.
+* **Time control:** `Settings → Time → User` (your clock) and `Settings → Time → Engine` (opponent clock), set before a game starts.
 
 #### Engine setup and management
 Only **UCI** engines are supported. All engine actions are available **before a game starts**.
@@ -117,14 +117,14 @@ Only **UCI** engines are supported. All engine actions are available **before a 
 Both analysis and threat run their engines for at most their configured time and then go idle, so they do not keep the CPU busy after a position has been evaluated.
 
 #### Settings / Game
-Open with `Settings → Game` (before a game starts). **All values are saved to `pecg_settings.json` and restored on the next startup.**
+Open with `Settings → General` (before a game starts). **All values are saved to `pecg_settings.json` and restored on the next startup.**
 * **Save time left in game notation** — adds `[%clk h:mm:ss]` move comments, shown in the move list and saved to the PGN.
 * **Adjudicate game on time forfeit** — ends the game when a player runs out of time.
 * **Review analysis time (sec)** — time cap for the Review **Analysis** engine. Default **60**, range 1–3600.
 * **Review threat time (sec)** — time cap for the Review **Threat** engine. Default **30**, range 1–3600.
 
 #### Opponent book
-* `Book → Set Book` (before a game starts) sets the opponent's polyglot book. It is named `pecg_book.bin` and lives in the `Book` folder. Build your own polyglot book, name it `pecg_book.bin` and replace the default to change it.
+* `Settings → Set Book` (before a game starts) sets the opponent's polyglot book. It is named `pecg_book.bin` and lives in the `Book` folder. Build your own polyglot book, name it `pecg_book.bin` and replace the default to change it.
 
 #### Show / hide info panels
 These work in **Play** mode by right-clicking the panel's label:

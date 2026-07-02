@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.15.0'
+APP_VERSION = 'v2.16.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -258,7 +258,8 @@ HELP_TOPICS = {
         'Set Engine Opponent',
         'Engine -> Set Engine Opponent (before a game starts).\n\n'
         'This is the engine you play against; the list shows the engines\n'
-        'you have installed. Set its clock under Time -> Engine.'),
+        'you have installed. Set its clock under Settings -> Time ->\n'
+        'Engine.'),
     'help_eng_adviser': (
         'Engine Adviser',
         'Select it with  Engine -> Set Engine Adviser.\n\n'
@@ -269,13 +270,13 @@ HELP_TOPICS = {
         'Select it with  Engine -> Set Engine Analysis.\n\n'
         'In Review mode press the Analysis button to evaluate the current\n'
         'position (multiple lines). The search stops after the analysis\n'
-        'time in Settings -> Game (default 60s).'),
+        'time in Settings -> General (default 60s).'),
     'help_eng_threat': (
         'Review Threat Engine',
         'Select it with  Engine -> Set Engine Threat.\n\n'
         'In Review mode press the Threat button to see what the opponent\n'
         'would play if the side to move passed (null move). Unavailable\n'
-        'while in check. Time limit: Settings -> Game (default 30s).'),
+        'while in check. Time limit: Settings -> General (default 30s).'),
     'help_eng_depth': (
         'Search Depth',
         'Engine -> Set Depth caps the search depth of the playing and\n'
@@ -294,7 +295,7 @@ HELP_TOPICS = {
         'the bottom. Game -> New returns you to White.'),
     'help_game_fen': (
         'Paste a FEN',
-        'FEN -> Paste sets up a position from the clipboard (only\n'
+        'Game -> Paste FEN sets up a position from the clipboard (only\n'
         'before a game starts). If the side to move is not yours,\n'
         'press Engine -> Go.'),
     'help_game_save': (
@@ -304,8 +305,9 @@ HELP_TOPICS = {
         'Save to White / Black Repertoire.'),
     'help_game_time': (
         'Time Control',
-        'Time -> User sets your clock; Time -> Engine sets the opponent\n'
-        'clock. Adjudication on flag-fall is toggled in Settings -> Game.'),
+        'Settings -> Time -> User sets your clock; Settings -> Time ->\n'
+        'Engine sets the opponent clock. Adjudication on flag-fall is\n'
+        'toggled in Settings -> General.'),
     'help_review_open': (
         'Open a Game to Review',
         'Mode -> Review, choose a PGN file, select a game and press OK.\n'
@@ -318,7 +320,7 @@ HELP_TOPICS = {
         'Analysis and Threat (Review)',
         'Analysis button: evaluate the position with the analysis engine.\n'
         'Threat button: show the opponent threat (null move).\n'
-        'Both stop after their time limits in Settings -> Game (analysis\n'
+        'Both stop after their time limits in Settings -> General (analysis\n'
         '60s, threat 30s) and restart automatically when you change move.'),
     'help_review_auto': (
         'Auto-Analyze Game',
@@ -438,18 +440,23 @@ def build_play_menu(in_game=False):
     return [
         ['&Mode', [g(idle, 'Review')]],
         ['&Game', ['&New::new_game_k',
-                   g(in_game, 'Save to My Games::save_game_k'),
-                   g(in_game, 'Save to White Repertoire'),
-                   g(in_game, 'Save to Black Repertoire'),
+                   '---',
+                   g(idle, 'Paste FEN'),
+                   '---',
                    g(in_game, 'Resign::resign_game_k'),
                    g(in_game, 'User Wins::user_wins_k'),
-                   g(in_game, 'User Draws::user_draws_k')]],
-        ['FEN', [g(idle, 'Paste')]],
+                   g(in_game, 'User Draws::user_draws_k'),
+                   '---',
+                   g(in_game, 'Save'), ['Save to My Games::save_game_k',
+                                        'Save to White Repertoire',
+                                        'Save to Black Repertoire']]],
         ['&Engine', [g(idle, 'Go'), g(in_game, 'Move Now'),
+                     '---',
                      g(idle, 'Set Engine Opponent'),
                      g(idle, 'Set Engine Adviser'),
                      g(idle, 'Set Engine Analysis'),
                      g(idle, 'Set Engine Threat'),
+                     '---',
                      g(idle, 'Set Depth'),
                      g(idle, 'Manage'), ['Install', 'Edit', 'Delete']]],
         ['Boar&d', ['Flip',
@@ -458,11 +465,13 @@ def build_play_menu(in_game=False):
                                        'Green::board_color_k',
                                        'Gray::board_color_k'],
                     g(idle, 'Theme'), list(GUI_THEME)]],
-        ['&Time', [g(idle, 'User::tc_k'), g(idle, 'Engine::tc_k')]],
-        ['&Book', [g(idle, 'Set Book::book_set_k')]],
-        ['&User', [g(idle, 'Set Name::user_name_k')]],
-        ['Tools', [g(idle, 'PGN'), ['Delete Player::delete_player_k']]],
-        ['&Settings', [g(idle, 'Game::settings_game_k')]],
+        ['&Settings', [g(idle, 'General::settings_game_k'),
+                       g(idle, 'Time'), [g(idle, 'User::tc_k'),
+                                         g(idle, 'Engine::tc_k')],
+                       g(idle, 'Set Book::book_set_k'),
+                       g(idle, 'User Name::user_name_k'),
+                       '---',
+                       g(idle, 'PGN'), ['Delete Player::delete_player_k']]],
         make_help_menu(HELP_GAME_MENU, HELP_ENGINE_MENU,
                        HELP_REVIEW_MENU, HELP_BOARD_MENU),
     ]
@@ -3143,6 +3152,28 @@ class EasyChessGui:
         self.menu_elem.Update(self.current_menu_def)
         self.apply_menu_font(window)
 
+    def update_play_turn_status(self, window, board):
+        """Update the under-board turn line from the board state.
+
+        Shows e.g. "Black to play, White's last move is Nf3", or just
+        "White to play" when there is no move yet (new game or pasted FEN).
+        """
+        element = window.find_element('play_turn_status_k',
+                                      silent_on_error=True)
+        if element is None:
+            return
+        stm = 'White' if board.turn else 'Black'
+        if board.move_stack:
+            move = board.pop()
+            last_san = board.san(move)
+            board.push(move)
+            opponent = 'Black' if board.turn else 'White'
+            msg = "{} to play, {}'s last move is {}".format(
+                stm, opponent, last_san)
+        else:
+            msg = '{} to play'.format(stm)
+        element.Update(msg)
+
     def flip_play_window(self, window, board, human_timer=None,
                          engine_timer=None):
         """Flip the board orientation during Play without touching the game.
@@ -3170,6 +3201,7 @@ class EasyChessGui:
         # actual game position back before anything else reads psg_board.
         self.board_to_psg_board(board)
         self.redraw_board(window)
+        self.update_play_turn_status(window, board)
 
         if status:
             window.find_element('_gamestatus_').Update(status)
@@ -3305,7 +3337,7 @@ class EasyChessGui:
                             window, board, human_timer, engine_timer)
                         continue
 
-                    if button == 'Paste':
+                    if button == 'Paste FEN':
                         try:
                             self.get_fen()
                             self.set_new_game()
@@ -3315,6 +3347,7 @@ class EasyChessGui:
                             continue
 
                         self.fen_to_psg_board(window)
+                        self.update_play_turn_status(window, board)
 
                         # The human plays their color, the engine the other;
                         # wait for Engine->Go when it is the engine's turn.
@@ -3360,6 +3393,7 @@ class EasyChessGui:
                                 window = self.create_new_window(window)
                             self.board_to_psg_board(board)
                             self.redraw_board(window)
+                            self.update_play_turn_status(window, board)
                             human_timer = self.define_timer(window)
                             engine_timer = self.define_timer(window, 'engine')
                             window.find_element('_gamestatus_').Update(
@@ -3372,6 +3406,7 @@ class EasyChessGui:
                             # restore the position display and re-map clocks.
                             self.board_to_psg_board(board)
                             self.redraw_board(window)
+                            self.update_play_turn_status(window, board)
                             human_timer = self.define_timer(window)
                             engine_timer = self.define_timer(window, 'engine')
                             window.find_element('_gamestatus_').Update(
@@ -3636,7 +3671,7 @@ class EasyChessGui:
                         break
 
                     # Mode: Play, stm: User
-                    if button == 'Paste':
+                    if button == 'Paste FEN':
                         # Pasting fen is only allowed before the game starts.
                         if len(self.game.variations):
                             sg.popup('Press Game->New then paste your fen.',
@@ -3651,6 +3686,7 @@ class EasyChessGui:
                             continue
 
                         self.fen_to_psg_board(window)
+                        self.update_play_turn_status(window, board)
 
                         # The human plays their color, the engine the other;
                         # wait for Engine->Go when it is the engine's turn.
@@ -3676,6 +3712,7 @@ class EasyChessGui:
                                 window = self.create_new_window(window)
                             self.board_to_psg_board(board)
                             self.redraw_board(window)
+                            self.update_play_turn_status(window, board)
                             human_timer = self.define_timer(window)
                             engine_timer = self.define_timer(window, 'engine')
                             window.find_element('_gamestatus_').Update(
@@ -3688,6 +3725,7 @@ class EasyChessGui:
                             # restore the position display and re-map clocks.
                             self.board_to_psg_board(board)
                             self.redraw_board(window)
+                            self.update_play_turn_status(window, board)
                             human_timer = self.define_timer(window)
                             engine_timer = self.define_timer(window, 'engine')
                             window.find_element('_gamestatus_').Update(
@@ -3814,6 +3852,7 @@ class EasyChessGui:
 
                                 board.push(user_move)
                                 move_cnt += 1
+                                self.update_play_turn_status(window, board)
 
                                 # The user's first move starts the game:
                                 # clocks begin to run and the setup menu
@@ -4057,6 +4096,7 @@ class EasyChessGui:
 
                 board.push(best_move)
                 move_cnt += 1
+                self.update_play_turn_status(window, board)
 
                 # Update timer
                 engine_timer.update_base()
@@ -5131,15 +5171,16 @@ class EasyChessGui:
         self.update_review_analysis_panel(window)
         self.update_review_threat_panel(window)
 
-    def _right_panel_spacer(self, width=60):
+    def _right_panel_spacer(self, width=60, pad_y=0):
         """Return an invisible element that forces a minimum right-panel width.
 
         Used so the right-hand control column has the same right edge in
-        Play and Review modes.
+        Play and Review modes. ``pad_y`` tunes the spacer height so the last
+        visible box above it ends level with the board's bottom edge.
         """
         bg = sg.theme_background_color()
         return sg.Text('', size=(width, 1), text_color=bg,
-                       background_color=bg, pad=(0, 0))
+                       background_color=bg, pad=(0, pad_y))
 
     def build_review_layout(self, is_white_at_bottom=True):
         """Create review mode layout with navigation controls."""
@@ -5184,7 +5225,9 @@ class EasyChessGui:
                           font=FONT_BASE, key='review_analysis_k',
                           disabled=True, wrap_lines=False,
                           expand_x=True)],
-            [self._right_panel_spacer()],
+            # pad_y=4 grows the spacer to the under-board button bar's
+            # height so the analysis box ends level with the board bottom.
+            [self._right_panel_spacer(pad_y=4)],
         ]
 
         nav_buttons = sg.Column(
@@ -5624,8 +5667,11 @@ class EasyChessGui:
                      expand_x=True,
                      right_click_menu=['Right',
                                        ['Show::right_search_info_k', 'Hide::right_search_info_k']])],
+            # Top pad 6 (+3 over the default) drops the box 3 px so its
+            # bottom edge ends level with the board's bottom edge.
             [sg.Text('', key='search_info_all_k', size=(55, 1),
-                     font=FONT_BASE, relief='sunken', expand_x=True)],
+                     font=FONT_BASE, relief='sunken', expand_x=True,
+                     pad=((5, 5), (6, 3)))],
             [self._right_panel_spacer()],
         ]
 
@@ -5633,7 +5679,11 @@ class EasyChessGui:
                                  font=MENU_FONT)
 
         board_column = [
-            [sg.Column(board_layout, pad=(0, 0))]
+            [sg.Column(board_layout, pad=(0, 0))],
+            # One-line turn indicator under the board, mirroring the Review
+            # window's under-board button bar so both modes end the same way.
+            [sg.Text('White to play', key='play_turn_status_k',
+                     font=FONT_BASE, pad=(1, 3), expand_x=True)]
         ]
 
         # White board layout, mode: Play
@@ -5705,7 +5755,7 @@ class EasyChessGui:
         while True:
             # Idle setup, Delete player
             if button == 'Delete Player::delete_player_k':
-                win_title = 'Tools/Delete Player'
+                win_title = 'Settings/PGN/Delete Player'
                 player_list = []
                 sum_games = 0
                 layout = [
@@ -5816,7 +5866,7 @@ class EasyChessGui:
 
             # Idle setup, Set User time control
             if button == 'User::tc_k':
-                win_title = 'Time/User'
+                win_title = 'Settings/Time/User'
                 layout = [
                     [sg.T('Base time (minute)', size=(16, 1)),
                      sg.Input(self.human_base_time_ms/60/1000,
@@ -5865,7 +5915,7 @@ class EasyChessGui:
 
             # Idle setup, Set engine time control
             if button == 'Engine::tc_k':
-                win_title = 'Time/Engine'
+                win_title = 'Settings/Time/Engine'
                 layout = [
                     [sg.T('Base time (minute)', size=(16, 1)),
                      sg.Input(self.engine_base_time_ms / 60 / 1000,
@@ -5920,8 +5970,8 @@ class EasyChessGui:
                 break
 
             # Idle setup, manage player names
-            if button == 'Set Name::user_name_k':
-                win_title = 'User/Player'
+            if button == 'User Name::user_name_k':
+                win_title = 'Settings/User Name'
                 names = self.get_usernames() or [self.username]
                 preselect = [self.username] if self.username in names else []
                 layout = [
@@ -6435,8 +6485,8 @@ class EasyChessGui:
                 break
 
             # Idle setup, Settings menu
-            if button == 'Game::settings_game_k':
-                win_title = 'Settings/Game'
+            if button == 'General::settings_game_k':
+                win_title = 'Settings/General'
                 layout = [
                     [sg.CBox('Save time left in game notation',
                              key='save_time_left_k',
@@ -6608,6 +6658,7 @@ class EasyChessGui:
             self.set_menu_state(window, in_game=False)
             self.redraw_board(window)
             window.find_element('_gamestatus_').Update('Mode     Play')
+            self.update_play_turn_status(window, board)
 
             start_new_game, window = self.play_game(window, board)
 
