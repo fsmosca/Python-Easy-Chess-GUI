@@ -134,6 +134,8 @@ These work in **Play** mode by right-clicking the panel's label:
 
 #### Board appearance
 * **Flip:** `Board → Flip`, at any time — including while a game is running or the engine is thinking. The game is not affected.
+* **Size:** `Board → Size` picks a board scale preset — Small (360), Medium (480), Large (600) or X-Large (720) pixels — at any time, like Flip. On first start the largest board that fits the screen is chosen automatically; the size is saved and restored.
+* **Resizable windows:** the Play and Review windows can be maximized or drag-resized. The board continuously rescales to fill the available height and the side panels absorb the remaining width.
 * **Colors / theme:** `Board → Color` for square colors and `Board → Theme` for the overall GUI theme (before a game starts).
 
 #### Files the app writes

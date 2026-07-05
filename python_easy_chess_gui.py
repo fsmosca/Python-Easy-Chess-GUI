@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.19.0'
+APP_VERSION = 'v2.20.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -165,7 +165,8 @@ else:
     FONT_SMALL = (FONT_NAME, 8)
 
 # Small font for the board coordinate labels drawn on the canvas.
-COORD_FONT = (FONT_NAME, 7, 'bold')
+# Board edge coordinate labels use FONT_NAME at a size scaled with the
+# board (see paint_square).
 
 
 # The top menu BAR font can't be set through FreeSimpleGUI (its font= only styles
@@ -207,8 +208,23 @@ GUI_THEME = [
 ]
 
 IMAGE_PATH = 'Images/60'  # path to the chess pieces
-SQUARE_PX = 60            # piece images are 60x60, so the board is 8 * 60 wide
-BOARD_PX = 8 * SQUARE_PX
+BASE_SQUARE_PX = 60       # native piece image size (Images/60 is 60x60)
+# The board scale is continuous: any square size in this range (the board
+# is 8 squares wide). Non-60px scales are produced by resizing the 60px
+# images with Pillow; without Pillow only the native 60px scale is usable.
+BOARD_SQUARE_MIN_PX = 45
+BOARD_SQUARE_MAX_PX = 200
+# Board -> Size menu presets: label to square size (labels show the board
+# width). Resizing the window fits the board continuously in between.
+BOARD_SIZE_LABELS = {
+    'Small (360)': 45,
+    'Medium (480)': 60,
+    'Large (600)': 75,
+    'X-Large (720)': 90,
+}
+# Fallback vertical window space that is not board (menubar, under-board
+# status bar, margins) when it cannot be measured from the live window.
+BOARD_V_OVERHEAD_PX = 90
 
 
 BLANK = 0  # piece names
@@ -364,6 +380,15 @@ HELP_TOPICS = {
         'Board -> Flip swaps the side shown at the bottom. It works at\n'
         'any time: before, during and after a game, and in Review mode.\n'
         'The game itself is not affected.'),
+    'help_board_size': (
+        'Board Size',
+        'Board -> Size picks a board scale preset: Small (360), Medium\n'
+        '(480), Large (600) or X-Large (720) pixels. On first start the\n'
+        'largest board that fits the screen is chosen automatically, and\n'
+        'the size is saved for the next session. The windows are also\n'
+        'resizable: maximize or drag-resize them and the board rescales\n'
+        'continuously to fill the height while the side panels absorb\n'
+        'the leftover width. Like Flip, resizing works at any time.'),
     'help_board_color': (
         'Board Colors and Themes',
         'Board -> Color changes the square colors and Board -> Theme\n'
@@ -392,6 +417,7 @@ HELP_REVIEW_MENU = ['Review', ['Open a Game::help_review_open',
                                'Analysis and Threat::help_review_engine',
                                'Auto-Analyze Game::help_review_auto']]
 HELP_BOARD_MENU = ['Board', ['Flip::help_board_flip',
+                             'Size::help_board_size',
                              'Colors and Themes::help_board_color']]
 
 
@@ -489,6 +515,8 @@ def build_play_menu(in_game=False):
                      g(idle, 'Set Depth'),
                      g(idle, 'Manage'), ['Install', 'Edit', 'Delete']]],
         ['Boar&d', ['Flip',
+                    'Size', ['{}::board_size_k'.format(label)
+                             for label in BOARD_SIZE_LABELS],
                     g(idle, 'Color'), ['Brown::board_color_k',
                                        'Blue::board_color_k',
                                        'Green::board_color_k',
@@ -524,7 +552,9 @@ def build_review_menu(analyzing=False):
         ['&Game', ['Select Game::review_select_game_k',
                    g(idle, 'Auto-Analyze Game::review_auto_analyze_k'),
                    'Cancel Analysis::review_cancel_analysis_k']],
-        ['Boar&d', ['Flip']],
+        ['Boar&d', ['Flip',
+                    'Size', ['{}::board_size_k'.format(label)
+                             for label in BOARD_SIZE_LABELS]]],
         make_help_menu(HELP_REVIEW_MENU, HELP_ENGINE_MENU, HELP_BOARD_MENU),
     ]
 
@@ -1497,6 +1527,23 @@ class EasyChessGui:
         self.menu_elem = None
         self.review_menu_elem = None
 
+        # Board scale: square size in px within BOARD_SQUARE_MIN/MAX_PX.
+        # Loaded from settings, or auto-fitted to the screen on first start.
+        self.square_px = BASE_SQUARE_PX
+        # Effective lower bound for the active window. The Review window
+        # raises it so the board is never narrower than its under-board
+        # button bar (measured after the window is built).
+        self.min_square_px = BOARD_SQUARE_MIN_PX
+        self._board_size_from_settings = False
+        # square_px -> {piece: scaled PNG bytes}, built lazily via Pillow.
+        self._piece_image_cache = {}
+        # Debounced window-resize handling.
+        self._resize_after_id = None
+        # Root size right after our own board-size changes; <Configure>
+        # events matching it are content re-hugs, not user resizes, and
+        # must not trigger a re-fit (they would override menu picks).
+        self._expected_root_size = None
+
         # Board canvas state (one sg.Graph per window, key '_board_graph_k')
         self._board_square_fig = {}   # (row,col) -> rect figure id
         self._board_piece_fig = {}    # (row,col) -> piece image figure id
@@ -1885,6 +1932,7 @@ class EasyChessGui:
             auto_size_buttons=False,
             location=(loc[0], loc[1]),
             finalize=True,
+            resizable=True,
             icon=ico_path[platform]['pecg']
         )
 
@@ -1894,6 +1942,7 @@ class EasyChessGui:
         # Re-bind drag-and-drop on the new window's board squares
         self.setup_board_drag_drop(w)
         self.redraw_board(w)
+        self.install_resize_handler(w, 'play_turn_status_k')
 
         # Match the Linux menubar font to Windows (no-op on Windows/macOS).
         self.apply_menu_font(w)
@@ -2210,6 +2259,14 @@ class EasyChessGui:
                     int(data['auto_analysis_multipv'])))
             except (TypeError, ValueError):
                 pass
+        if 'board_square_px' in data:
+            try:
+                self.square_px = max(BOARD_SQUARE_MIN_PX,
+                                     min(BOARD_SQUARE_MAX_PX,
+                                         int(data['board_square_px'])))
+                self._board_size_from_settings = True
+            except (TypeError, ValueError):
+                pass
         if 'auto_analysis_time_ms' in data:
             try:
                 self.auto_analysis_time_ms = min(
@@ -2259,6 +2316,7 @@ class EasyChessGui:
             'auto_analysis_engine_id_name': self.auto_analysis_engine_id_name,
             'auto_analysis_multipv': self.auto_analysis_multipv,
             'auto_analysis_time_ms': self.auto_analysis_time_ms,
+            'board_square_px': self.square_px,
             'role_engine_options': self.role_engine_options,
             'recent_pgn_files': self.recent_pgn_files,
             'review_pgn_file': self.review_pgn_file,
@@ -2956,17 +3014,22 @@ class EasyChessGui:
             return None
         return graph
 
+    @property
+    def board_px(self):
+        """Board edge length in px at the current scale."""
+        return 8 * self.square_px
+
     def square_to_xy(self, row, col):
         """Top-left graph coords (== pixels) of a logical square for the
         current orientation."""
         if self.is_white_at_bottom:
-            return col * SQUARE_PX, row * SQUARE_PX
-        return (7 - col) * SQUARE_PX, (7 - row) * SQUARE_PX
+            return col * self.square_px, row * self.square_px
+        return (7 - col) * self.square_px, (7 - row) * self.square_px
 
     def xy_to_square(self, x, y):
         """Map graph coords to a logical (row, col), or None if off-board."""
-        d_col = int(x) // SQUARE_PX
-        d_row = int(y) // SQUARE_PX
+        d_col = int(x) // self.square_px
+        d_row = int(y) // self.square_px
         if not (0 <= d_col <= 7 and 0 <= d_row <= 7):
             return None
         if self.is_white_at_bottom:
@@ -2991,30 +3054,33 @@ class EasyChessGui:
                 else self.move_sq_light_color
         else:
             color = self.sq_dark_color if is_dark else self.sq_light_color
+        sq = self.square_px
         x, y = self.square_to_xy(row, col)
         self._board_square_fig[(row, col)] = graph.draw_rectangle(
-            (x, y), (x + SQUARE_PX, y + SQUARE_PX),
+            (x, y), (x + sq, y + sq),
             fill_color=color, line_color=color)
 
         piece = self.psg_board[row][col]
         if piece != BLANK:
             self._board_piece_fig[(row, col)] = graph.draw_image(
-                filename=images[piece], location=(x, y))
+                location=(x, y), **self.piece_image_source(piece))
 
         # Board coordinates on the display edges: file letter in the
         # bottom-right corner of the bottom row, rank number in the
         # top-left corner of the left column, in the opposite square color.
         label_color = self.sq_light_color if is_dark else self.sq_dark_color
+        coord_font = (FONT_NAME, max(7, round(7 * sq / BASE_SQUARE_PX)),
+                      'bold')
         labels = []
-        if y == BOARD_PX - SQUARE_PX:
+        if y == self.board_px - sq:
             labels.append(graph.draw_text(
-                'abcdefgh'[col], (x + SQUARE_PX - 3, y + SQUARE_PX - 2),
-                color=label_color, font=COORD_FONT,
+                'abcdefgh'[col], (x + sq - 3, y + sq - 2),
+                color=label_color, font=coord_font,
                 text_location=sg.TEXT_LOCATION_BOTTOM_RIGHT))
         if x == 0:
             labels.append(graph.draw_text(
                 str(8 - row), (x + 3, y + 2),
-                color=label_color, font=COORD_FONT,
+                color=label_color, font=coord_font,
                 text_location=sg.TEXT_LOCATION_TOP_LEFT))
         if labels:
             self._board_label_fig[(row, col)] = labels
@@ -3076,6 +3142,224 @@ class EasyChessGui:
             for j in range(8):
                 self.paint_square(graph, i, j)
 
+    def piece_image_source(self, piece):
+        """draw_image kwargs for a piece at the current board scale.
+
+        The native 60px files are used directly; other scales get PNGs
+        resized once with Pillow and cached. If Pillow is unavailable the
+        native file is used (pieces then sit off-center on non-60 squares,
+        but the app keeps working).
+        """
+        if self.square_px == BASE_SQUARE_PX:
+            return {'filename': images[piece]}
+        cache = self._piece_image_cache.get(self.square_px)
+        if cache is None:
+            cache = self._build_piece_images(self.square_px)
+            self._piece_image_cache[self.square_px] = cache
+        data = cache.get(piece)
+        if data is None:
+            return {'filename': images[piece]}
+        return {'data': data}
+
+    def _build_piece_images(self, square_px):
+        """Return {piece: PNG bytes} resized from Images/60 via Pillow."""
+        result = {}
+        try:
+            from PIL import Image
+        except ImportError:
+            logging.warning(
+                'Pillow is not installed; using native 60px piece images.')
+            return result
+        import io
+        for piece, filename in images.items():
+            try:
+                with Image.open(filename) as im:
+                    im = im.convert('RGBA').resize(
+                        (square_px, square_px), Image.LANCZOS)
+                    buf = io.BytesIO()
+                    im.save(buf, format='PNG')
+                    result[piece] = buf.getvalue()
+            except Exception:
+                logging.exception('Failed to scale piece image %s', filename)
+        return result
+
+    def set_board_size(self, window, square_px, persist=True):
+        """Switch the board to another scale by resizing the canvas in
+        place and redrawing - no window rebuild, so it is safe at any
+        time (like Board->Flip). Returns True if the scale changed.
+        """
+        try:
+            square_px = max(self.min_square_px,
+                            min(BOARD_SQUARE_MAX_PX, int(square_px)))
+        except (TypeError, ValueError):
+            return False
+        if square_px == self.square_px:
+            return False
+        if self.board_graph(window) is None:
+            return False
+        self.square_px = square_px
+        self._apply_board_scale(window)
+        if persist:
+            self.save_settings()
+        return True
+
+    def _apply_board_scale(self, window):
+        """Sync the window's board canvas to the current square_px.
+
+        Also used when returning to a window that was hidden while the
+        scale changed elsewhere (Play <-> Review), whose canvas is stale.
+        """
+        graph = self.board_graph(window)
+        if graph is None:
+            return
+        # Keep graph coords == pixels: the widget size and the Graph
+        # element's coordinate system must be updated together, otherwise
+        # _convert_canvas_xy_to_xy would scale mouse coords wrongly.
+        graph.Widget.config(width=self.board_px, height=self.board_px)
+        graph.CanvasSize = (self.board_px, self.board_px)
+        graph.BottomLeft = (0, self.board_px)
+        graph.TopRight = (self.board_px, 0)
+        self.redraw_board(window)
+        # Record the resulting root size so the follow-up <Configure> of a
+        # content-hugging window is recognized as our own change.
+        try:
+            root = window.TKroot
+            root.update_idletasks()
+            self._expected_root_size = (root.winfo_width(),
+                                        root.winfo_height())
+        except Exception:
+            self._expected_root_size = None
+
+    def _is_window_maximized(self, window):
+        """True if the window is maximized ('zoomed' on Windows/some WMs,
+        the '-zoomed' attribute elsewhere on Linux)."""
+        try:
+            if window.TKroot.state() == 'zoomed':
+                return True
+        except Exception:
+            pass
+        try:
+            return bool(window.TKroot.wm_attributes('-zoomed'))
+        except Exception:
+            return False
+
+    def _set_window_maximized(self, window):
+        """Maximize the window (best effort across platforms)."""
+        try:
+            window.TKroot.state('zoomed')
+            return
+        except Exception:
+            pass
+        try:
+            window.TKroot.wm_attributes('-zoomed', 1)
+        except Exception:
+            logging.exception('Failed to maximize the window.')
+
+    def handle_board_size_event(self, window, button):
+        """Apply a Board -> Size menu selection ('<label>::board_size_k')."""
+        label = str(button).split('::')[0]
+        square_px = BOARD_SIZE_LABELS.get(label)
+        if square_px:
+            self.set_board_size(window, square_px)
+
+    def _measure_review_min_square(self, window):
+        """Smallest square size whose board is at least as wide as the
+        Review window's under-board button bar. Below it the bar (six
+        buttons ending with Threat) would stick out past the board's
+        right edge."""
+        try:
+            window.TKroot.update_idletasks()
+            total = 0
+            for key in ('First', 'Previous', 'Next', 'Last',
+                        'review_toggle_analysis_k', 'review_toggle_threat_k'):
+                elem = window.find_element(key, silent_on_error=True)
+                if elem is None or elem.Widget is None:
+                    return BOARD_SQUARE_MIN_PX
+                total += elem.Widget.winfo_width() + 4   # pad + slack
+            return max(BOARD_SQUARE_MIN_PX, -(-total // 8))
+        except Exception:
+            logging.exception('Failed to measure the review button bar.')
+            return BOARD_SQUARE_MIN_PX
+
+    def auto_fit_board_size(self):
+        """Pick the largest board scale that fits the screen (first start
+        only; afterwards the persisted size wins)."""
+        try:
+            screen_w, screen_h = sg.Window.get_screen_size()
+        except Exception:
+            logging.exception('Failed to read the screen size.')
+            return
+        # Reserve room for the side panel (width) and for the title bar,
+        # menubar, status bar and taskbar (height).
+        avail = min(screen_w - 560, screen_h - 200)
+        self.square_px = max(BOARD_SQUARE_MIN_PX,
+                             min(BOARD_SQUARE_MAX_PX, avail // 8))
+
+    def install_resize_handler(self, window, bottom_key):
+        """Fit the board scale to the window size on resize/maximize.
+
+        The fit is continuous (any square size in range), so the board
+        tracks the window height to within one square of rounding.
+        Bound on the toplevel; child <Configure> events are filtered out,
+        and events matching the size our own board changes produced are
+        ignored so menu size picks are not overridden. The actual fitting
+        runs debounced so a drag-resize only triggers one redraw.
+
+        :param bottom_key: key of the widget at the bottom of the board
+            column (status/button bar); used to measure the vertical
+            space the board column needs besides the board itself.
+        """
+        root = window.TKroot
+
+        # Overheads are measured once while the window still hugs its
+        # natural size. They cannot be measured at event time: the
+        # expand_x/expand_y panels absorb any extra space, which would
+        # make the board's available space always look equal to its
+        # current size.
+        root.update_idletasks()
+        graph = self.board_graph(window)
+        if graph is None:
+            return
+        gw = graph.Widget
+        overhead_w = max(0, root.winfo_width() - gw.winfo_width())
+        # Vertical overhead of the board column: space above the board
+        # (top margin, Linux in-window menubar) plus the status/button
+        # bar below it, plus a small bottom margin.
+        overhead_h = BOARD_V_OVERHEAD_PX
+        bottom_elem = window.AllKeysDict.get(bottom_key)
+        if bottom_elem is not None and bottom_elem.Widget is not None:
+            bw = bottom_elem.Widget
+            top = gw.winfo_rooty() - root.winfo_rooty()
+            below = (bw.winfo_rooty() + bw.winfo_height()) \
+                - (gw.winfo_rooty() + gw.winfo_height())
+            if top >= 0 and below >= 0:
+                overhead_h = top + below + 8
+
+        def apply_fit():
+            self._resize_after_id = None
+            if self.board_graph(window) is None or not root.winfo_exists():
+                return
+            if root.state() in ('iconic', 'withdrawn'):
+                return
+            square = min((root.winfo_width() - overhead_w) // 8,
+                         (root.winfo_height() - overhead_h) // 8)
+            self.set_board_size(window, square)
+
+        def on_configure(event):
+            if event.widget is not root:
+                return
+            if (event.width, event.height) == self._expected_root_size:
+                return
+            if self._resize_after_id is not None:
+                try:
+                    root.after_cancel(self._resize_after_id)
+                except Exception:
+                    pass
+            self._resize_after_id = root.after(250, apply_fit)
+
+        self._expected_root_size = (root.winfo_width(), root.winfo_height())
+        root.bind('<Configure>', on_configure, add='+')
+
     def setup_board_drag_drop(self, window):
         """Bind mouse input on the board canvas.
 
@@ -3126,7 +3410,7 @@ class EasyChessGui:
         if graph is None:
             return
         x, y = graph._convert_canvas_xy_to_xy(event.x, event.y)
-        half = SQUARE_PX // 2
+        half = self.square_px // 2
         if not self._drag_started:
             self._drag_started = True
             # Lift the piece off its source square (display only).
@@ -3134,8 +3418,8 @@ class EasyChessGui:
             if fig is not None:
                 graph.delete_figure(fig)
             self._drag_fig = graph.draw_image(
-                filename=images[self._drag_piece],
-                location=(x - half, y - half))
+                location=(x - half, y - half),
+                **self.piece_image_source(self._drag_piece))
             graph.bring_figure_to_front(self._drag_fig)
         elif self._drag_fig is not None:
             graph.relocate_figure(self._drag_fig, x - half, y - half)
@@ -3551,6 +3835,10 @@ class EasyChessGui:
                         window = self.flip_play_window(window, board)
                         continue
 
+                    if isinstance(button, str) and '::board_size_k' in button:
+                        self.handle_board_size_event(window, button)
+                        continue
+
                     if button == 'Paste FEN':
                         try:
                             self.get_fen()
@@ -3847,6 +4135,10 @@ class EasyChessGui:
                     # Mode: Play, stm: User, flip the board view anytime
                     if button == 'Flip':
                         window = self.flip_play_window(window, board)
+                        break
+
+                    if isinstance(button, str) and '::board_size_k' in button:
+                        self.handle_board_size_event(window, button)
                         break
 
                     # Mode: Play, stm: User. Engine->Go before the first move:
@@ -4227,6 +4519,11 @@ class EasyChessGui:
                         # Mode: Play, Computer is thinking, flip board view
                         if button == 'Flip':
                             window = self.flip_play_window(window, board)
+                            continue
+
+                        if isinstance(button, str) and \
+                                '::board_size_k' in button:
+                            self.handle_board_size_event(window, button)
                             continue
 
                         if button == 'Resign::resign_game_k':
@@ -5559,7 +5856,8 @@ class EasyChessGui:
         layout = [
             [self.review_menu_elem],
             [sg.Column(board_column, vertical_alignment='top'),
-             sg.Column(board_controls, vertical_alignment='top', expand_y=True)]
+             sg.Column(board_controls, vertical_alignment='top',
+                       expand_x=True, expand_y=True)]
         ]
 
         return layout
@@ -5573,12 +5871,19 @@ class EasyChessGui:
             default_button_element_size=(12, 1),
             auto_size_buttons=False,
             finalize=True,
+            resizable=True,
             location=location,
             icon=ico_path[platform]['pecg']
         )
         self.compact_review_buttons(window)
         self.apply_menu_font(window)
         self.bind_review_shortcuts(window)
+        # The board must stay at least as wide as the under-board button
+        # bar, or the Threat button ends past the board's right edge.
+        self.min_square_px = self._measure_review_min_square(window)
+        if self.square_px < self.min_square_px:
+            self.set_board_size(window, self.min_square_px)
+        self.install_resize_handler(window, 'review_toggle_threat_k')
         return window
 
     def bind_review_shortcuts(self, window):
@@ -5665,8 +5970,13 @@ class EasyChessGui:
                 self.prepare_review_game(chess.pgn.Game())
 
         location = window.CurrentLocation()
+        # Carry the maximized state over to the Review window; its resize
+        # handler then fits the board to the maximized size.
+        was_maximized = self._is_window_maximized(window)
         window.Hide()
         review_window = self.create_review_window(location=location)
+        if was_maximized:
+            self._set_window_maximized(review_window)
         self.review_window = review_window
         self.render_review_movelist(review_window)
         self.update_review_window(review_window)
@@ -5739,6 +6049,11 @@ class EasyChessGui:
                 # time: flipping is just a redraw, so the window and any
                 # running analysis/threat searches are kept as they are.
                 self.is_white_at_bottom = not self.is_white_at_bottom
+                self.update_review_window(review_window)
+                continue
+
+            if isinstance(button, str) and '::board_size_k' in button:
+                self.handle_board_size_event(review_window, button)
                 self.update_review_window(review_window)
                 continue
 
@@ -5831,10 +6146,20 @@ class EasyChessGui:
 
         self.close_review_analysis()
         self.close_review_threat()
+        # Carry the maximized state back to the Play window.
+        was_maximized = self._is_window_maximized(review_window)
         review_window.Close()
         self.review_window = None
         self.reset_review_run_state()
+        # The Play window has no under-board button bar, so its board may
+        # shrink to the global minimum again.
+        self.min_square_px = BOARD_SQUARE_MIN_PX
         window.UnHide()
+        # The board scale may have changed while this window was hidden
+        # (Review resize or Board->Size); its canvas is stale until synced.
+        self._apply_board_scale(window)
+        if was_maximized:
+            self._set_window_maximized(window)
 
     def get_engines(self):
         """
@@ -5864,9 +6189,9 @@ class EasyChessGui:
         kept for call-site compatibility.
         """
         self.psg_board = copy.deepcopy(initial_board)
-        return [[sg.Graph(canvas_size=(BOARD_PX, BOARD_PX),
-                          graph_bottom_left=(0, BOARD_PX),
-                          graph_top_right=(BOARD_PX, 0),
+        return [[sg.Graph(canvas_size=(self.board_px, self.board_px),
+                          graph_bottom_left=(0, self.board_px),
+                          graph_top_right=(self.board_px, 0),
                           pad=(0, 0), key='_board_graph_k',
                           enable_events=False, drag_submits=False)]]
 
@@ -5914,7 +6239,7 @@ class EasyChessGui:
             [sg.Text('Move list', size=(16, 1), font=FONT_BASE)],
             [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(52, 8),
                           font=FONT_BASE, key='_movelist_', disabled=True,
-                          expand_x=True)],
+                          expand_x=True, expand_y=True)],
 
             [sg.Text('Comment', size=(7, 1), font=FONT_BASE)],
             [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(52, 3),
@@ -5955,11 +6280,14 @@ class EasyChessGui:
                      font=FONT_BASE, pad=(1, 3), expand_x=True)]
         ]
 
-        # White board layout, mode: Play
+        # White board layout, mode: Play. The right panel column expands in
+        # both directions so a maximized/resized window is filled: the board
+        # column keeps its natural size, the panels absorb the leftovers.
         layout = [
                 [self.menu_elem],
                 [sg.Column(board_column, vertical_alignment='top'),
-                 sg.Column(board_controls, vertical_alignment='top', expand_y=True)]
+                 sg.Column(board_controls, vertical_alignment='top',
+                           expand_x=True, expand_y=True)]
         ]
 
         return layout
@@ -6869,6 +7197,14 @@ class EasyChessGui:
         events to handle_setup_event(). The app exits from inside play_game
         (window X) via sys.exit.
         """
+        # Load persisted Settings/Game values (checkboxes, review times,
+        # board scale) before the first layout is built so the window opens
+        # at the right board size. On a first start (no saved size) pick
+        # the largest board that fits the screen.
+        self.load_settings()
+        if not self._board_size_from_settings:
+            self.auto_fit_board_size()
+
         layout = self.build_main_layout(self.is_white_at_bottom)
 
         # Use white layout as default window
@@ -6876,13 +7212,11 @@ class EasyChessGui:
                            layout, default_button_element_size=(12, 1),
                            auto_size_buttons=False,
                            finalize=True,
+                           resizable=True,
                            icon=ico_path[platform]['pecg'])
 
         # Read user config file, if missing create and new one
         self.check_user_config_file()
-
-        # Load persisted Settings/Game values (checkboxes, review times).
-        self.load_settings()
 
         # If engine config file (pecg_engines.json) is missing, then create it.
         self.check_engine_config_file()
@@ -6911,6 +7245,7 @@ class EasyChessGui:
         # Set up drag-and-drop bindings for board squares
         self.setup_board_drag_drop(window)
         self.redraw_board(window)
+        self.install_resize_handler(window, 'play_turn_status_k')
 
         # Match the Linux menubar font to Windows (no-op on Windows/macOS).
         self.apply_menu_font(window)
