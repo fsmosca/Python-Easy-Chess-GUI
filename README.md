@@ -112,6 +112,7 @@ Only **UCI** engines are supported. All engine actions are available **before a 
 * **Navigate:** use **First / Previous / Next / Last** below the board, the **Left / Right** arrow keys (**Home / End** for first/last position), or click a move in the move list to jump to that position.
 * **Analysis:** press the **Analysis** button to evaluate the current position (multi-line principal variations). The search stops after the *analysis time* (default 60s) and restarts automatically when you change position.
 * **Threat:** press the **Threat** button to see what the opponent would play if the side to move passed (a null move). It is unavailable when the side to move is in check, and stops after the *threat time* (default 30s).
+* **Auto-Analyze Game:** `Game → Auto-Analyze Game` annotates every move with the engine and time per move you choose. Each move gets an evaluation comment; bad moves are marked `?!` `?` `??`. When the engine's move is at least 25cp better than the game move (and its own score stays within ±300cp), the better line is replayed engine-vs-engine for up to 5 plies and added as a *Better is* variation labeled with the evaluation after the line's last move. The annotated game is appended to `pecg_analyzed_games.pgn` and replaces the current review game. `Game → Cancel Analysis` stops early.
 * **Flip the board:** `Board → Flip` within Review mode.
 
 Both analysis and threat run their engines for at most their configured time and then go idle, so they do not keep the CPU busy after a position has been evaluated.
@@ -137,6 +138,7 @@ These work in **Play** mode by right-clicking the panel's label:
 
 #### Files the app writes
 * `pecg_auto_save_games.pgn` — every game played.
+* `pecg_analyzed_games.pgn` — games annotated by Review mode's Auto-Analyze.
 * `pecg_engines.json` — installed engines and their options.
 * `pecg_user.json` — user name(s).
 * `pecg_settings.json` — Settings/Game values (checkboxes and review times).

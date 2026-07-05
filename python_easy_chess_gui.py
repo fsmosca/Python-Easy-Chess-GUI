@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.18.0'
+APP_VERSION = 'v2.19.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -87,8 +87,27 @@ REVIEW_THREAT_PV_PLIES = 5
 AUTO_ANALYSIS_OUTPUT_FILE = 'pecg_analyzed_games.pgn'
 # How many recently opened review PGN paths to remember in the settings.
 MAX_RECENT_PGN_FILES = 10
-# Number of plies to include when adding an engine PV as a sub-variation.
-AUTO_ANALYSIS_PV_PLIES = 9
+# Engine variations are rebuilt by replaying the line engine vs engine for
+# up to this many plies - a search PV can be as short as a single move, so
+# the reported PV is not trusted for the variation moves.
+AUTO_ANALYSIS_REPLAY_PLIES = 5
+# Number of engine lines (MultiPV) per analyzed move. Disabled (kept at 1)
+# for now; praise NAGs and Alt: lines need MultiPV >= 2 to reappear.
+AUTO_ANALYSIS_MULTIPV = 1
+AUTO_ANALYSIS_MULTIPV_MAX = 5
+# A "Better is" variation is only added when the engine's move beats the
+# game move by at least this many centipawns (mover POV)...
+AUTO_ANALYSIS_BETTER_MIN_CP = 25
+# ...and only when the engine's own score is within this many centipawns
+# of equal (mover POV) - skip variations in already-decided positions.
+AUTO_ANALYSIS_BETTER_MAX_ABS_CP = 300
+# Auto-analysis time per move, in milliseconds. UCI engines are fine with
+# very short searches, so the floor is 100 ms; the value is handed to the
+# engine as a seconds float via chess.engine.Limit.
+AUTO_ANALYSIS_TIME_MS = 1000
+AUTO_ANALYSIS_TIME_MS_MIN = 100
+AUTO_ANALYSIS_TIME_MS_MAX = 60000
+AUTO_ANALYSIS_TIME_MS_STEP = 100
 # Time caps (seconds) for Review-mode searches. Without a cap these run
 # "go infinite" and peg the CPU until the user navigates away. Editable via
 # Settings/Game and persisted in the settings file.
@@ -332,11 +351,14 @@ HELP_TOPICS = {
     'help_review_auto': (
         'Auto-Analyze Game',
         'Game -> Auto-Analyze Game annotates every move of the loaded game\n'
-        'with an engine and time per move that you choose. Each move gets an\n'
-        'evaluation comment and engine-best lines are added as variations.\n'
-        'Results are appended to pecg_analyzed_games.pgn and the annotated\n'
-        'game replaces the current review game. Use Game -> Cancel Analysis\n'
-        'to stop early.'),
+        'with the engine and time per move that you choose. Each move gets\n'
+        'an evaluation comment; bad moves are marked ?! ? ??. When the\n'
+        'engine move is at least 25cp better (and its score stays within\n'
+        '+/-300cp) the better line is replayed engine vs engine for up to\n'
+        '5 plies and added as a "Better is" variation scored at the end of\n'
+        'the line. Results are appended to pecg_analyzed_games.pgn and the\n'
+        'annotated game replaces the current review game. Use Game ->\n'
+        'Cancel Analysis to stop early.'),
     'help_board_flip': (
         'Flip Board',
         'Board -> Flip swaps the side shown at the bottom. It works at\n'
@@ -484,15 +506,27 @@ def build_play_menu(in_game=False):
     ]
 
 
-# (2) Mode: Review
-menu_def_review = [
-        ['&Mode', ['Play']],
+# (2) Mode: Review. Mode->Play and Game->Auto-Analyze Game are disabled
+# (leading '!') while an auto-analysis is running, since switching modes or
+# starting a second analysis would race the background thread.
+def build_review_menu(analyzing=False):
+    """Return the Review-mode menubar definition for the given state.
+
+    :param analyzing: True while an auto-analysis thread is running.
+    """
+    def g(enabled, label):
+        return label if enabled else '!' + label
+
+    idle = not analyzing
+
+    return [
+        ['&Mode', [g(idle, 'Play')]],
         ['&Game', ['Select Game::review_select_game_k',
-                   'Auto-Analyze Game::review_auto_analyze_k',
+                   g(idle, 'Auto-Analyze Game::review_auto_analyze_k'),
                    'Cancel Analysis::review_cancel_analysis_k']],
         ['Boar&d', ['Flip']],
         make_help_menu(HELP_REVIEW_MENU, HELP_ENGINE_MENU, HELP_BOARD_MENU),
-]
+    ]
 
 
 class Timer:
@@ -1019,16 +1053,23 @@ class RunEngine(threading.Thread):
 class AutoAnalyzeGame(threading.Thread):
     """Background thread that annotates a game with engine analysis.
 
-    Walks the mainline of the supplied game, evaluates each position with the
-    configured analysis engine, writes the evaluation as a comment from White's
-    point of view, and adds the engine's PV as a sub-variation when it disagrees
-    with the move played in the game.
+    Walks the mainline of the supplied game, evaluating each position with
+    the engine. Each played move gets a comment with its evaluation
+    (White's POV). Bad moves get ?!/?/?? NAGs. When the engine's move beats
+    the game move by at least AUTO_ANALYSIS_BETTER_MIN_CP and its own score
+    is within AUTO_ANALYSIS_BETTER_MAX_ABS_CP of equal, the better line is
+    not taken from the search PV (which can be a single move) but replayed
+    engine vs engine for up to AUTO_ANALYSIS_REPLAY_PLIES plies and added
+    as a "Better is"-labeled sub-variation whose comment carries the score
+    after the line's last move. (Praise NAGs !/!! and Alt: lines need a
+    MultiPV >= 2 search, currently disabled.)
     """
 
     def __init__(self, game, engine_config_file, engine_path_and_file,
                  engine_id_name, time_sec, output_queue, cancel_event,
                  max_depth=MAX_DEPTH, option_overrides=None,
-                 output_file=AUTO_ANALYSIS_OUTPUT_FILE):
+                 output_file=AUTO_ANALYSIS_OUTPUT_FILE,
+                 multipv=AUTO_ANALYSIS_MULTIPV):
         threading.Thread.__init__(self)
         self.game = game
         self.engine_config_file = engine_config_file
@@ -1040,32 +1081,129 @@ class AutoAnalyzeGame(threading.Thread):
         self.max_depth = max_depth
         self.option_overrides = option_overrides or {}
         self.output_file = output_file
+        try:
+            self.multipv = max(1, min(AUTO_ANALYSIS_MULTIPV_MAX, int(multipv)))
+        except (TypeError, ValueError):
+            self.multipv = AUTO_ANALYSIS_MULTIPV
         self.engine = None
         self.daemon = True
 
     def _format_score(self, score):
-        """Return a human-readable score string from White's POV."""
-        white_score = score.white()
-        if white_score.is_mate():
-            mate = white_score.mate()
+        """Return a human-readable score string.
+
+        Centipawn scores read from White's POV. Mate scores instead read
+        from the point of view of the side to move in the scored position
+        (score.relative) - "Mate in n" when that side forces mate, "Mated
+        in n" when that side is the one being mated - matching how engines
+        report mate counts natively.
+        """
+        if score.relative.is_mate():
+            mate = score.relative.mate()
             return 'Mate in {}'.format(mate) if mate > 0 \
                 else 'Mated in {}'.format(abs(mate))
-        cp = white_score.score(mate_score=32000)
+        cp = score.white().score(mate_score=32000)
         return '{:+.2f}'.format(cp / 100.0)
 
-    def _build_engine_variation(self, node, best_move, pv, board, score):
-        """Add best_move and the rest of the PV as a variation on node."""
-        if best_move not in board.legal_moves:
-            return
-        comment = self._format_score(score) if score is not None else ''
+    def _replay_variation(self, board, first_move, limit):
+        """Rebuild an engine line by playing the engine against itself.
+
+        A search PV is sometimes truncated to a single move, so instead of
+        trusting it the line is replayed move by move (engine vs engine)
+        for up to AUTO_ANALYSIS_REPLAY_PLIES plies, starting from board
+        with first_move. Returns (moves, score) where score is the engine
+        evaluation of the position after the line's last move (a PovScore
+        of the side to move there; None if the engine reported none). A
+        line that reaches a finished game stops there and keeps the last
+        search score - for a mate that reads 'Mate in N', which is the
+        clearer label anyway.
+        """
         var_board = board.copy()
-        var_node = node.add_variation(best_move, comment=comment)
-        var_board.push(best_move)
-        for move in pv[1:AUTO_ANALYSIS_PV_PLIES]:
+        var_board.push(first_move)
+        moves = [first_move]
+        score = None
+        while not self.cancel_event.is_set():
+            if var_board.is_game_over():
+                break
+            info = self.engine.analyse(var_board, limit)
+            if isinstance(info, list):
+                info = info[0]
+            if info.get('score') is not None:
+                score = info['score']
+            if len(moves) >= AUTO_ANALYSIS_REPLAY_PLIES:
+                break
+            pv = info.get('pv') or []
+            if not pv or pv[0] not in var_board.legal_moves:
+                break
+            var_board.push(pv[0])
+            moves.append(pv[0])
+        return moves, score
+
+    def _build_engine_variation(self, node, moves, board, score):
+        """Add a replayed engine line as a variation on node.
+
+        Reads e.g. "({Better is} 9...Qe6 {+1.53} 10. Re1)": a "Better is"
+        pre-comment on the first variation move, followed by the engine's
+        evaluation of the position the replayed line ended on.
+        """
+        if not moves or moves[0] not in board.legal_moves:
+            return
+        score_text = self._format_score(score) if score is not None else ''
+        var_board = board.copy()
+        var_node = node.add_variation(
+            moves[0], starting_comment='Better is', comment=score_text)
+        var_board.push(moves[0])
+        for move in moves[1:]:
             if move not in var_board.legal_moves:
                 break
             var_node = var_node.add_variation(move)
             var_board.push(move)
+
+    def _build_move_comment(self, game_move_score, delta_cp, is_only_move,
+                            allows_mate):
+        """Return the annotation comment for a played move.
+
+        Base is the score text: centipawns from White's POV, but mate
+        wording from the mover's POV ('Mate in n' when the game move wins
+        with mate, 'Mated in n' when the mover is the one getting mated) -
+        the caller passes game_move_score anchored to the mover for this
+        reason. A move that walks into a forced mate
+        while a better move existed is marked 'allows mate'; a move that
+        earned a praise NAG is marked as the only good move (same criterion
+        as the NAG, so text and glyph never disagree). The better move and
+        its price are not spelled out here - the replayed variation carries
+        them. Kept brace-free: PGN comments cannot contain '{' or '}'.
+        """
+        text = self._format_score(game_move_score)
+        if delta_cp is not None and delta_cp >= 30 and allows_mate:
+            text += ', allows mate'
+        elif is_only_move:
+            text += ', only good move'
+        return text
+
+    def _classify_good_nag(self, engine_cp, second_cp, best_score,
+                           second_score):
+        """Return a praise NAG when the played best move stands out.
+
+        Both centipawn values are from the mover's POV, taken from the same
+        pre-move MultiPV search. Positions with a single reply return one
+        line (second_cp is None), so forced moves never earn praise; and no
+        praise is given when even the second-best line keeps a clear
+        advantage (finding a move among many good ones is routine).
+        """
+        if second_cp is None or second_cp > 100:
+            return None
+        best_is_mate = (best_score is not None
+                        and best_score.relative.is_mate()
+                        and best_score.relative.mate() > 0)
+        second_is_mate = (second_score is not None
+                          and second_score.relative.is_mate()
+                          and second_score.relative.mate() > 0)
+        gap = engine_cp - second_cp
+        if gap >= 400 or (best_is_mate and not second_is_mate):
+            return 3   # !! the move wins where everything else fails
+        if gap >= 150:
+            return 1   # ! the only move that keeps the position
+        return None
 
     def _configure_engine(self):
         """Apply UCI options from the engine config and per-role overrides."""
@@ -1193,43 +1331,96 @@ class AutoAnalyzeGame(threading.Thread):
                 limit = chess.engine.Limit(
                     time=self.time_sec,
                     depth=self.max_depth if self.max_depth != MAX_DEPTH else None)
-                infos = self.engine.analyse(board, limit, multipv=1)
-                info = infos[0] if isinstance(infos, list) else infos
+                infos = self.engine.analyse(board, limit, multipv=self.multipv)
+                if not isinstance(infos, list):
+                    infos = [infos]
 
+                info = infos[0]
                 score = info.get('score')
                 pv = info.get('pv', [])
                 best_move = pv[0] if pv else None
                 engine_cp = self._centipawns(score) if score is not None else None
+                is_best = best_move is not None and best_move == child.move
 
-                # Determine the actual evaluation of the move played in the game.
-                if score is not None and best_move == child.move:
-                    game_move_score = score
-                elif score is not None:
-                    after_board = board.copy()
-                    after_board.push(child.move)
-                    after_infos = self.engine.analyse(
-                        after_board, limit, multipv=1)
-                    after_info = after_infos[0] if isinstance(
-                        after_infos, list) else after_infos
-                    game_move_score = after_info.get('score')
-                else:
-                    game_move_score = None
+                second_info = infos[1] if len(infos) > 1 else None
+                second_score = second_info.get('score') if second_info else None
+                second_cp = self._centipawns(second_score) \
+                    if second_score is not None else None
+
+                # Evaluation of the move actually played, always anchored to
+                # the mover's POV so the comment's mate wording reads from
+                # the side that played the move ('Mate in n' when the game
+                # move wins with mate, 'Mated in n' when it runs into one).
+                # If the move appears in one of the MultiPV lines its
+                # pre-move score is reused (already mover POV, no extra
+                # search); only a move outside the top lines needs a search
+                # of the position after it, whose opponent-POV score is
+                # re-anchored back to the mover.
+                game_move_score = None
+                game_move_cp = None
+                if score is not None:
+                    played_info = next(
+                        (i for i in infos
+                         if i.get('pv') and i['pv'][0] == child.move), None)
+                    if played_info is not None:
+                        game_move_score = played_info.get('score')
+                        if game_move_score is not None:
+                            game_move_cp = self._centipawns(game_move_score)
+                    else:
+                        after_board = board.copy()
+                        after_board.push(child.move)
+                        after_infos = self.engine.analyse(
+                            after_board, limit, multipv=1)
+                        after_info = after_infos[0] if isinstance(
+                            after_infos, list) else after_infos
+                        after_score = after_info.get('score')
+                        if after_score is not None:
+                            game_move_score = chess.engine.PovScore(
+                                after_score.pov(board.turn), board.turn)
+                            game_move_cp = self._centipawns(game_move_score)
+
+                # How much the played move lost vs the engine's best
+                # (mover POV).
+                delta_cp = None
+                if engine_cp is not None and game_move_cp is not None:
+                    delta_cp = engine_cp - game_move_cp
+
+                # Rebuild the engine's better line by replaying it engine
+                # vs engine; its final score labels the variation. Only
+                # worth showing when the engine move clearly beats the
+                # game move and the position is not already decided.
+                var_moves = None
+                var_score = None
+                if (not is_best and best_move is not None
+                        and delta_cp is not None
+                        and delta_cp >= AUTO_ANALYSIS_BETTER_MIN_CP
+                        and engine_cp is not None
+                        and abs(engine_cp) <= AUTO_ANALYSIS_BETTER_MAX_ABS_CP):
+                    var_moves, var_score = self._replay_variation(
+                        board, best_move, limit)
+                    if var_score is None:
+                        var_score = score
 
                 if game_move_score is not None:
-                    score_text = self._format_score(game_move_score)
-                    child.comment = score_text
-
-                    if engine_cp is not None:
-                        if best_move == child.move:
-                            game_move_cp = engine_cp
+                    nag = None
+                    if engine_cp is not None and game_move_cp is not None:
+                        if is_best:
+                            nag = self._classify_good_nag(
+                                engine_cp, second_cp, score, second_score)
                         else:
-                            game_move_cp = -self._centipawns(game_move_score)
-                        nag = self._classify_nag(engine_cp, game_move_cp)
+                            nag = self._classify_nag(engine_cp, game_move_cp)
                         if nag is not None:
                             child.nags.add(nag)
 
-                if best_move is not None and best_move != child.move:
-                    self._build_engine_variation(node, best_move, pv, board, score)
+                    allows_mate = (game_move_cp is not None
+                                   and game_move_cp <= -31000)
+                    child.comment = self._build_move_comment(
+                        game_move_score, None if is_best else delta_cp,
+                        nag in (1, 3), allows_mate)
+
+                if var_moves:
+                    self._build_engine_variation(
+                        node, var_moves, board, var_score)
 
                 self.output_queue.put({
                     'type': 'progress',
@@ -1304,6 +1495,7 @@ class EasyChessGui:
         self.fen = None
         self.psg_board = None
         self.menu_elem = None
+        self.review_menu_elem = None
 
         # Board canvas state (one sg.Graph per window, key '_board_graph_k')
         self._board_square_fig = {}   # (row,col) -> rect figure id
@@ -1346,10 +1538,11 @@ class EasyChessGui:
         # user-configurable via Settings/Game and persisted in the settings file.
         self.review_analysis_time_sec = REVIEW_ANALYSIS_TIME_SEC
         self.review_threat_time_sec = REVIEW_THREAT_TIME_SEC
-        # Auto-analysis defaults to the analysis engine/time, but the user can
-        # pick any installed engine and a separate time cap per move.
+        # Auto-analysis defaults to the analysis engine, but the user can
+        # pick any installed engine and a per-move time in milliseconds.
         self.auto_analysis_engine_id_name = None
-        self.auto_analysis_time_sec = REVIEW_ANALYSIS_TIME_SEC
+        self.auto_analysis_time_ms = AUTO_ANALYSIS_TIME_MS
+        self.auto_analysis_multipv = AUTO_ANALYSIS_MULTIPV
         # Per-(role, engine) UCI option overrides:
         # {role: {engine_id_name: {option_name: value}}}, deltas vs base.
         self.role_engine_options = {}
@@ -2010,9 +2203,31 @@ class EasyChessGui:
                 data['adviser_movetime_sec'], self.adviser_movetime_sec)
         if 'auto_analysis_engine_id_name' in data:
             self.auto_analysis_engine_id_name = data['auto_analysis_engine_id_name']
-        if 'auto_analysis_time_sec' in data:
-            self.auto_analysis_time_sec = self._read_review_time(
-                data['auto_analysis_time_sec'], self.auto_analysis_time_sec)
+        if 'auto_analysis_multipv' in data:
+            try:
+                self.auto_analysis_multipv = max(1, min(
+                    AUTO_ANALYSIS_MULTIPV_MAX,
+                    int(data['auto_analysis_multipv'])))
+            except (TypeError, ValueError):
+                pass
+        if 'auto_analysis_time_ms' in data:
+            try:
+                self.auto_analysis_time_ms = min(
+                    AUTO_ANALYSIS_TIME_MS_MAX,
+                    max(AUTO_ANALYSIS_TIME_MS_MIN,
+                        int(data['auto_analysis_time_ms'])))
+            except (TypeError, ValueError):
+                pass
+        elif 'auto_analysis_time_sec' in data:
+            # Settings written before v2.19.0 stored seconds; convert once
+            # to milliseconds (the file is rewritten on the next save).
+            try:
+                self.auto_analysis_time_ms = min(
+                    AUTO_ANALYSIS_TIME_MS_MAX,
+                    max(AUTO_ANALYSIS_TIME_MS_MIN,
+                        int(data['auto_analysis_time_sec']) * 1000))
+            except (TypeError, ValueError):
+                pass
         # Per-role engine option overrides (the active role ids are applied
         # later by restore_engine_roles, once the engine list exists).
         if isinstance(data.get('role_engine_options'), dict):
@@ -2042,7 +2257,8 @@ class EasyChessGui:
             'threat_id_name': self.threat_id_name,
             'adviser_movetime_sec': self.adviser_movetime_sec,
             'auto_analysis_engine_id_name': self.auto_analysis_engine_id_name,
-            'auto_analysis_time_sec': self.auto_analysis_time_sec,
+            'auto_analysis_multipv': self.auto_analysis_multipv,
+            'auto_analysis_time_ms': self.auto_analysis_time_ms,
             'role_engine_options': self.role_engine_options,
             'recent_pgn_files': self.recent_pgn_files,
             'review_pgn_file': self.review_pgn_file,
@@ -3186,6 +3402,11 @@ class EasyChessGui:
         """Swap the menubar between the idle and in-game states."""
         self.current_menu_def = build_play_menu(in_game)
         self.menu_elem.Update(self.current_menu_def)
+        self.apply_menu_font(window)
+
+    def set_review_menu_state(self, window, analyzing):
+        """Swap the Review menubar between the idle and analyzing states."""
+        self.review_menu_elem.Update(build_review_menu(analyzing))
         self.apply_menu_font(window)
 
     def update_play_turn_status(self, window, board):
@@ -4701,10 +4922,11 @@ class EasyChessGui:
         self.update_review_threat_panel(window)
 
     def confirm_auto_analysis(self, window):
-        """Ask the user to pick an engine/time and confirm auto-analysis.
+        """Ask the user to pick engine/time and confirm auto-analysis.
 
-        Returns a dict with engine_id_name, engine_path_and_file and time_sec
-        if the user confirms, otherwise False.
+        Returns a dict with engine_id_name, engine_path_and_file and
+        time_ms (milliseconds per move) if the user confirms, otherwise
+        False.
         """
         if self.review_game is None:
             sg.popup('Load a game first.', title='Auto-Analyze',
@@ -4730,12 +4952,13 @@ class EasyChessGui:
         if default_engine not in self.engine_id_name_list:
             default_engine = self.engine_id_name_list[0]
 
-        default_time = self.auto_analysis_time_sec
-        if not isinstance(default_time, int) or default_time < REVIEW_ANALYSIS_TIME_MIN:
-            default_time = REVIEW_ANALYSIS_TIME_SEC
+        default_time = self.auto_analysis_time_ms
+        if not isinstance(default_time, int) \
+                or default_time < AUTO_ANALYSIS_TIME_MS_MIN:
+            default_time = AUTO_ANALYSIS_TIME_MS
 
-        def format_est(time_sec):
-            approx = move_count * time_sec
+        def format_est(time_ms):
+            approx = move_count * time_ms / 1000.0
             minutes, seconds = divmod(approx, 60)
             return '{:d}m {:d}s'.format(int(minutes), int(seconds))
 
@@ -4745,12 +4968,16 @@ class EasyChessGui:
              sg.Listbox(values=self.engine_id_name_list, size=(40, 6),
                         key='auto_engine_k',
                         default_values=[default_engine])],
-            [sg.Text('Seconds per move:', size=(16, 1)),
-             sg.Spin([t for t in range(REVIEW_ANALYSIS_TIME_MIN,
-                                       REVIEW_ANALYSIS_TIME_MAX + 1)],
+            [sg.Text('Millisec per move:', size=(16, 1)),
+             sg.Spin([t for t in range(AUTO_ANALYSIS_TIME_MS_MIN,
+                                       AUTO_ANALYSIS_TIME_MS_MAX + 1,
+                                       AUTO_ANALYSIS_TIME_MS_STEP)],
                      initial_value=default_time, size=(8, 1),
                      key='auto_time_k'),
-             sg.Text('Estimated:', size=(10, 1)),
+             sg.Text('At least:', size=(10, 1),
+                     tooltip='Bad moves take extra time: the better line\n'
+                             'is replayed engine vs engine for up to {}\n'
+                             'plies.'.format(AUTO_ANALYSIS_REPLAY_PLIES)),
              sg.Text(format_est(default_time), size=(20, 1),
                      key='auto_est_k')],
             [sg.Text('Moves to analyze:', size=(16, 1)),
@@ -4796,13 +5023,14 @@ class EasyChessGui:
                              icon=ico_path[platform]['pecg'])
                     continue
                 try:
-                    time_sec = int(v['auto_time_k'])
+                    time_ms = int(v['auto_time_k'])
                 except (TypeError, ValueError):
-                    sg.popup('Invalid seconds per move.', title='Auto-Analyze',
+                    sg.popup('Invalid milliseconds per move.',
+                             title='Auto-Analyze',
                              icon=ico_path[platform]['pecg'])
                     continue
-                time_sec = min(REVIEW_ANALYSIS_TIME_MAX,
-                               max(REVIEW_ANALYSIS_TIME_MIN, time_sec))
+                time_ms = min(AUTO_ANALYSIS_TIME_MS_MAX,
+                              max(AUTO_ANALYSIS_TIME_MS_MIN, time_ms))
                 try:
                     eng_file, eng_path = self.get_engine_file(engine_id_name)
                 except Exception:
@@ -4812,12 +5040,12 @@ class EasyChessGui:
                              icon=ico_path[platform]['pecg'])
                     break
                 self.auto_analysis_engine_id_name = engine_id_name
-                self.auto_analysis_time_sec = time_sec
+                self.auto_analysis_time_ms = time_ms
                 self.save_settings()
                 result = {
                     'engine_id_name': engine_id_name,
                     'engine_path_and_file': eng_path,
-                    'time_sec': time_sec,
+                    'time_ms': time_ms,
                 }
                 break
         w.Close()
@@ -4844,7 +5072,9 @@ class EasyChessGui:
             self.engine_config_file,
             config['engine_path_and_file'],
             config['engine_id_name'],
-            config['time_sec'],
+            # The dialog collects milliseconds; the engine Limit wants
+            # a seconds float.
+            config['time_ms'] / 1000.0,
             self.auto_analysis_queue,
             self.auto_analysis_cancel,
             self.max_depth,
@@ -4852,6 +5082,7 @@ class EasyChessGui:
                 'auto_analysis', config['engine_id_name'])
         )
         self.auto_analysis_thread.start()
+        self.set_review_menu_state(window, analyzing=True)
         window['_gamestatus_'].Update(
             'Auto-analyzing move 1/{}...'.format(
                 self._count_mainline_moves(self.review_game)))
@@ -4920,6 +5151,7 @@ class EasyChessGui:
 
         if done or cancelled:
             self.auto_analysis_thread = None
+            self.set_review_menu_state(window, analyzing=False)
 
     def poll_review_analysis(self, window):
         """Consume engine messages for Review mode analysis."""
@@ -5321,8 +5553,11 @@ class EasyChessGui:
             [button_bar]
         ]
 
+        self.review_menu_elem = sg.Menu(
+            build_review_menu(analyzing=False), tearoff=False, font=MENU_FONT)
+
         layout = [
-            [sg.Menu(menu_def_review, tearoff=False, font=MENU_FONT)],
+            [self.review_menu_elem],
             [sg.Column(board_column, vertical_alignment='top'),
              sg.Column(board_controls, vertical_alignment='top', expand_y=True)]
         ]
