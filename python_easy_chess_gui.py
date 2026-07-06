@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.21.0'
+APP_VERSION = 'v2.22.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -89,17 +89,25 @@ AUTO_ANALYSIS_OUTPUT_FILE = 'pecg_analyzed_games.pgn'
 MAX_RECENT_PGN_FILES = 10
 # Engine variations are rebuilt by replaying the line engine vs engine for
 # up to this many plies - a search PV can be as short as a single move, so
-# the reported PV is not trusted for the variation moves.
+# the reported PV is not trusted for the variation moves. The replay always
+# searches with MultiPV 1 (best line only); user-settable in the dialog.
 AUTO_ANALYSIS_REPLAY_PLIES = 5
+AUTO_ANALYSIS_REPLAY_PLIES_MIN = 1
+AUTO_ANALYSIS_REPLAY_PLIES_MAX = 20
 # Number of engine lines (MultiPV) per analyzed move. Disabled (kept at 1)
 # for now; praise NAGs and Alt: lines need MultiPV >= 2 to reappear.
 AUTO_ANALYSIS_MULTIPV = 1
 AUTO_ANALYSIS_MULTIPV_MAX = 5
-# A "Better is" variation is only added when the engine's move beats the
-# game move by at least this many centipawns (mover POV)...
-AUTO_ANALYSIS_BETTER_MIN_CP = 25
-# ...and only when the engine's own score is within this many centipawns
-# of equal (mover POV) - skip variations in already-decided positions.
+# The engine's line is added as a variation when its score beats the game
+# move by at least this many centipawns (mover POV). Below this gap the
+# variation is skipped entirely.
+AUTO_ANALYSIS_ALT_MIN_CP = 5
+# At or above this gap the variation gets the "Better is" pre-comment; a
+# gap between ALT_MIN and this is written as a bare line (no pre-comment).
+AUTO_ANALYSIS_BETTER_MIN_CP = 15
+# Variations are only added when the engine's own score is within this many
+# centipawns of equal (mover POV) - skip variations in already-decided
+# positions.
 AUTO_ANALYSIS_BETTER_MAX_ABS_CP = 300
 # Auto-analysis time per move, in milliseconds. UCI engines are fine with
 # very short searches, so the floor is 100 ms; the value is handed to the
@@ -1086,20 +1094,23 @@ class AutoAnalyzeGame(threading.Thread):
     Walks the mainline of the supplied game, evaluating each position with
     the engine. Each played move gets a comment with its evaluation
     (White's POV). Bad moves get ?!/?/?? NAGs. When the engine's move beats
-    the game move by at least AUTO_ANALYSIS_BETTER_MIN_CP and its own score
-    is within AUTO_ANALYSIS_BETTER_MAX_ABS_CP of equal, the better line is
-    not taken from the search PV (which can be a single move) but replayed
-    engine vs engine for up to AUTO_ANALYSIS_REPLAY_PLIES plies and added
-    as a "Better is"-labeled sub-variation whose comment carries the score
-    after the line's last move. (Praise NAGs !/!! and Alt: lines need a
-    MultiPV >= 2 search, currently disabled.)
+    the game move by at least AUTO_ANALYSIS_ALT_MIN_CP and its own score is
+    within AUTO_ANALYSIS_BETTER_MAX_ABS_CP of equal, the better line is not
+    taken from the search PV (which can be a single move) but replayed engine
+    vs engine (at MultiPV 1) for up to self.replay_plies plies and added as a
+    sub-variation whose comment carries the score after the line's last move.
+    When that final line score beats the game move by at least
+    AUTO_ANALYSIS_BETTER_MIN_CP the variation earns the "Better is"
+    pre-comment; a smaller gap is written as a bare line. Praise NAGs !/!! and
+    Alt: lines need a MultiPV >= 2 search, controlled by self.multipv.
     """
 
     def __init__(self, game, engine_config_file, engine_path_and_file,
                  engine_id_name, time_sec, output_queue, cancel_event,
                  max_depth=MAX_DEPTH, option_overrides=None,
                  output_file=AUTO_ANALYSIS_OUTPUT_FILE,
-                 multipv=AUTO_ANALYSIS_MULTIPV):
+                 multipv=AUTO_ANALYSIS_MULTIPV,
+                 replay_plies=AUTO_ANALYSIS_REPLAY_PLIES):
         threading.Thread.__init__(self)
         self.game = game
         self.engine_config_file = engine_config_file
@@ -1115,6 +1126,12 @@ class AutoAnalyzeGame(threading.Thread):
             self.multipv = max(1, min(AUTO_ANALYSIS_MULTIPV_MAX, int(multipv)))
         except (TypeError, ValueError):
             self.multipv = AUTO_ANALYSIS_MULTIPV
+        try:
+            self.replay_plies = max(AUTO_ANALYSIS_REPLAY_PLIES_MIN,
+                                    min(AUTO_ANALYSIS_REPLAY_PLIES_MAX,
+                                        int(replay_plies)))
+        except (TypeError, ValueError):
+            self.replay_plies = AUTO_ANALYSIS_REPLAY_PLIES
         self.engine = None
         self.daemon = True
 
@@ -1139,13 +1156,14 @@ class AutoAnalyzeGame(threading.Thread):
 
         A search PV is sometimes truncated to a single move, so instead of
         trusting it the line is replayed move by move (engine vs engine)
-        for up to AUTO_ANALYSIS_REPLAY_PLIES plies, starting from board
-        with first_move. Returns (moves, score) where score is the engine
-        evaluation of the position after the line's last move (a PovScore
-        of the side to move there; None if the engine reported none). A
-        line that reaches a finished game stops there and keeps the last
-        search score - for a mate that reads 'Mate in N', which is the
-        clearer label anyway.
+        for up to self.replay_plies plies, starting from board with
+        first_move. Each replay search uses MultiPV 1 (best line only),
+        independent of the per-move MultiPV used for the main analysis.
+        Returns (moves, score) where score is the engine evaluation of the
+        position after the line's last move (a PovScore of the side to move
+        there; None if the engine reported none). A line that reaches a
+        finished game stops there and keeps the last search score - for a
+        mate that reads 'Mate in N', which is the clearer label anyway.
         """
         var_board = board.copy()
         var_board.push(first_move)
@@ -1154,12 +1172,12 @@ class AutoAnalyzeGame(threading.Thread):
         while not self.cancel_event.is_set():
             if var_board.is_game_over():
                 break
-            info = self.engine.analyse(var_board, limit)
+            info = self.engine.analyse(var_board, limit, multipv=1)
             if isinstance(info, list):
                 info = info[0]
             if info.get('score') is not None:
                 score = info['score']
-            if len(moves) >= AUTO_ANALYSIS_REPLAY_PLIES:
+            if len(moves) >= self.replay_plies:
                 break
             pv = info.get('pv') or []
             if not pv or pv[0] not in var_board.legal_moves:
@@ -1168,19 +1186,23 @@ class AutoAnalyzeGame(threading.Thread):
             moves.append(pv[0])
         return moves, score
 
-    def _build_engine_variation(self, node, moves, board, score):
+    def _build_engine_variation(self, node, moves, board, score,
+                                label_better=True):
         """Add a replayed engine line as a variation on node.
 
-        Reads e.g. "({Better is} 9...Qe6 {+1.53} 10. Re1)": a "Better is"
-        pre-comment on the first variation move, followed by the engine's
-        evaluation of the position the replayed line ended on.
+        With label_better, reads e.g. "({Better is} 9...Qe6 {+1.53} 10. Re1)":
+        a "Better is" pre-comment on the first variation move, followed by the
+        engine's evaluation of the position the replayed line ended on. Without
+        it the line is written bare - "(9...Qe6 {+1.53} 10. Re1)" - for a
+        smaller edge over the game move.
         """
         if not moves or moves[0] not in board.legal_moves:
             return
         score_text = self._format_score(score) if score is not None else ''
+        starting_comment = 'Better is' if label_better else ''
         var_board = board.copy()
         var_node = node.add_variation(
-            moves[0], starting_comment='Better is', comment=score_text)
+            moves[0], starting_comment=starting_comment, comment=score_text)
         var_board.push(moves[0])
         for move in moves[1:]:
             if move not in var_board.legal_moves:
@@ -1416,20 +1438,28 @@ class AutoAnalyzeGame(threading.Thread):
                     delta_cp = engine_cp - game_move_cp
 
                 # Rebuild the engine's better line by replaying it engine
-                # vs engine; its final score labels the variation. Only
-                # worth showing when the engine move clearly beats the
-                # game move and the position is not already decided.
+                # vs engine. The root gap (engine best vs game move) at least
+                # ALT_MIN_CP, plus a not-yet-decided position, is the cheap
+                # gate for replaying at all. The "Better is" label is then
+                # decided by the replayed line's final score - the eval shown
+                # on the variation - vs the game move (both mover POV): a gap
+                # of at least BETTER_MIN_CP earns the pre-comment, a smaller
+                # gap is written as a bare line.
                 var_moves = None
                 var_score = None
+                label_better = False
                 if (not is_best and best_move is not None
                         and delta_cp is not None
-                        and delta_cp >= AUTO_ANALYSIS_BETTER_MIN_CP
+                        and delta_cp >= AUTO_ANALYSIS_ALT_MIN_CP
                         and engine_cp is not None
                         and abs(engine_cp) <= AUTO_ANALYSIS_BETTER_MAX_ABS_CP):
                     var_moves, var_score = self._replay_variation(
                         board, best_move, limit)
                     if var_score is None:
                         var_score = score
+                    var_cp = var_score.pov(board.turn).score(mate_score=32000)
+                    label_better = (var_cp - game_move_cp
+                                    >= AUTO_ANALYSIS_BETTER_MIN_CP)
 
                 if game_move_score is not None:
                     nag = None
@@ -1450,7 +1480,7 @@ class AutoAnalyzeGame(threading.Thread):
 
                 if var_moves:
                     self._build_engine_variation(
-                        node, var_moves, board, var_score)
+                        node, var_moves, board, var_score, label_better)
 
                 self.output_queue.put({
                     'type': 'progress',
@@ -1589,7 +1619,8 @@ class EasyChessGui:
         # pick any installed engine and a per-move time in milliseconds.
         self.auto_analysis_engine_id_name = None
         self.auto_analysis_time_ms = AUTO_ANALYSIS_TIME_MS
-        self.auto_analysis_multipv = AUTO_ANALYSIS_MULTIPV
+        # Auto-analysis always searches one line (MultiPV 1); not user-facing.
+        self.auto_analysis_replay_plies = AUTO_ANALYSIS_REPLAY_PLIES
         # Per-(role, engine) UCI option overrides:
         # {role: {engine_id_name: {option_name: value}}}, deltas vs base.
         self.role_engine_options = {}
@@ -2274,11 +2305,12 @@ class EasyChessGui:
                 data['adviser_movetime_sec'], self.adviser_movetime_sec)
         if 'auto_analysis_engine_id_name' in data:
             self.auto_analysis_engine_id_name = data['auto_analysis_engine_id_name']
-        if 'auto_analysis_multipv' in data:
+        if 'auto_analysis_replay_plies' in data:
             try:
-                self.auto_analysis_multipv = max(1, min(
-                    AUTO_ANALYSIS_MULTIPV_MAX,
-                    int(data['auto_analysis_multipv'])))
+                self.auto_analysis_replay_plies = max(
+                    AUTO_ANALYSIS_REPLAY_PLIES_MIN,
+                    min(AUTO_ANALYSIS_REPLAY_PLIES_MAX,
+                        int(data['auto_analysis_replay_plies'])))
             except (TypeError, ValueError):
                 pass
         if 'board_square_px' in data:
@@ -2336,7 +2368,7 @@ class EasyChessGui:
             'threat_id_name': self.threat_id_name,
             'adviser_movetime_sec': self.adviser_movetime_sec,
             'auto_analysis_engine_id_name': self.auto_analysis_engine_id_name,
-            'auto_analysis_multipv': self.auto_analysis_multipv,
+            'auto_analysis_replay_plies': self.auto_analysis_replay_plies,
             'auto_analysis_time_ms': self.auto_analysis_time_ms,
             'board_square_px': self.square_px,
             'role_engine_options': self.role_engine_options,
@@ -5278,10 +5310,9 @@ class EasyChessGui:
                 or default_time < AUTO_ANALYSIS_TIME_MS_MIN:
             default_time = AUTO_ANALYSIS_TIME_MS
 
-        def format_est(time_ms):
-            approx = move_count * time_ms / 1000.0
-            minutes, seconds = divmod(approx, 60)
-            return '{:d}m {:d}s'.format(int(minutes), int(seconds))
+        default_plies = max(AUTO_ANALYSIS_REPLAY_PLIES_MIN,
+                            min(AUTO_ANALYSIS_REPLAY_PLIES_MAX,
+                                self.auto_analysis_replay_plies))
 
         layout = [
             [sg.Text('Select engine and time per move for auto-analysis:')],
@@ -5289,18 +5320,20 @@ class EasyChessGui:
              sg.Listbox(values=self.engine_id_name_list, size=(40, 6),
                         key='auto_engine_k',
                         default_values=[default_engine])],
-            [sg.Text('Millisec per move:', size=(16, 1)),
+            [sg.Text('MS per move:', size=(16, 1)),
              sg.Spin([t for t in range(AUTO_ANALYSIS_TIME_MS_MIN,
                                        AUTO_ANALYSIS_TIME_MS_MAX + 1,
                                        AUTO_ANALYSIS_TIME_MS_STEP)],
                      initial_value=default_time, size=(8, 1),
-                     key='auto_time_k'),
-             sg.Text('At least:', size=(10, 1),
-                     tooltip='Bad moves take extra time: the better line\n'
-                             'is replayed engine vs engine for up to {}\n'
-                             'plies.'.format(AUTO_ANALYSIS_REPLAY_PLIES)),
-             sg.Text(format_est(default_time), size=(20, 1),
-                     key='auto_est_k')],
+                     key='auto_time_k')],
+            [sg.Text('PV length:', size=(16, 1),
+                     tooltip='Length of the engine-vs-engine "Better is"\n'
+                             'variation. Each ply is one extra search, so\n'
+                             'longer lines analyze more slowly.'),
+             sg.Spin([n for n in range(AUTO_ANALYSIS_REPLAY_PLIES_MIN,
+                                       AUTO_ANALYSIS_REPLAY_PLIES_MAX + 1)],
+                     initial_value=default_plies, size=(8, 1),
+                     key='auto_plies_k')],
             [sg.Text('Moves to analyze:', size=(16, 1)),
              sg.Text(str(move_count), size=(30, 1))],
             [sg.Text('The annotated game will be saved to:')],
@@ -5319,11 +5352,6 @@ class EasyChessGui:
                 continue
             if e is None or e == 'Cancel':
                 break
-            try:
-                current_time = int(v['auto_time_k'])
-                w['auto_est_k'].Update(format_est(current_time))
-            except (TypeError, ValueError):
-                pass
             if e == 'Configure':
                 selected = v.get('auto_engine_k', [])
                 eng = selected[0] if selected else None
@@ -5355,6 +5383,13 @@ class EasyChessGui:
                 time_ms = min(AUTO_ANALYSIS_TIME_MS_MAX,
                               max(AUTO_ANALYSIS_TIME_MS_MIN, time_ms))
                 try:
+                    replay_plies = int(v['auto_plies_k'])
+                except (TypeError, ValueError):
+                    replay_plies = AUTO_ANALYSIS_REPLAY_PLIES
+                replay_plies = min(AUTO_ANALYSIS_REPLAY_PLIES_MAX,
+                                   max(AUTO_ANALYSIS_REPLAY_PLIES_MIN,
+                                       replay_plies))
+                try:
                     eng_file, eng_path = self.get_engine_file(engine_id_name)
                 except Exception:
                     logging.exception('Failed to resolve engine file.')
@@ -5364,11 +5399,13 @@ class EasyChessGui:
                     break
                 self.auto_analysis_engine_id_name = engine_id_name
                 self.auto_analysis_time_ms = time_ms
+                self.auto_analysis_replay_plies = replay_plies
                 self.save_settings()
                 result = {
                     'engine_id_name': engine_id_name,
                     'engine_path_and_file': eng_path,
                     'time_ms': time_ms,
+                    'replay_plies': replay_plies,
                 }
                 break
         w.Close()
@@ -5402,7 +5439,10 @@ class EasyChessGui:
             self.auto_analysis_cancel,
             self.max_depth,
             option_overrides=self.get_role_options(
-                'auto_analysis', config['engine_id_name'])
+                'auto_analysis', config['engine_id_name']),
+            multipv=AUTO_ANALYSIS_MULTIPV,
+            replay_plies=config.get('replay_plies',
+                                    self.auto_analysis_replay_plies),
         )
         self.auto_analysis_thread.start()
         self.set_review_menu_state(window, analyzing=True)
