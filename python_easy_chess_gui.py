@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.20.0'
+APP_VERSION = 'v2.21.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -1918,6 +1918,28 @@ class EasyChessGui:
                 rem_time = self.get_time_h_mm_ss(time_left, False)
                 self.node.comment = '[%clk {}]'.format(rem_time)
 
+    def begin_dialog(self, window):
+        """Keep window visible but non-interactive while a dialog is open.
+
+        The '-disabled' wm attribute (Windows-only) blocks all input to the
+        window, including the menubar and board canvas binds. Unlike a tk
+        grab (sg.Window modal=True), it survives nested popups closing —
+        FreeSimpleGUI never restores a parent's grab. On other platforms
+        the attribute is unsupported and the dialog's own modal grab is
+        the best-effort fallback.
+        """
+        try:
+            window.TKroot.attributes('-disabled', True)
+        except Exception:
+            pass
+
+    def end_dialog(self, window):
+        """Restore interactivity after begin_dialog()."""
+        try:
+            window.TKroot.attributes('-disabled', False)
+        except Exception:
+            pass
+
     def create_new_window(self, window):
         """Hide current window and creates a new window."""
         loc = window.CurrentLocation()
@@ -2490,7 +2512,7 @@ class EasyChessGui:
         role_label = ROLE_META[role][4] if role in ROLE_META else 'Auto-Analysis'
         title = '{} options - {}'.format(role_label, eng_id_name)
         w = sg.Window(title, layout, icon=ico_path[platform]['pecg'],
-                      resizable=True, finalize=True)
+                      resizable=True, finalize=True, modal=True)
         while True:
             e, v = w.Read()
             if e in (None, 'Cancel'):
@@ -2540,9 +2562,9 @@ class EasyChessGui:
              sg.Button('Delete Config', key='role_del_k'),
              sg.Button('Close')],
         ]
-        window.Hide()
+        self.begin_dialog(window)
         w = sg.Window('{} Manager'.format(title), layout,
-                      icon=role_icon, finalize=True)
+                      icon=role_icon, finalize=True, modal=True)
         try:
             w['role_list_k'].Widget.bind(
                 '<Double-Button-1>',
@@ -2584,16 +2606,18 @@ class EasyChessGui:
                     sg.popup('Please select an engine to configure.',
                              title=title, icon=role_icon)
                     continue
-                w.Hide()
                 self.configure_role_engine(role, sel)
-                w.UnHide()
+                try:
+                    w.make_modal()
+                except Exception:
+                    pass
                 refresh()
             elif e == 'role_del_k':
                 if sel:
                     self.delete_role_options(role, sel)
                     refresh()
         w.Close()
-        window.UnHide()
+        self.end_dialog(window)
         self.update_labels_and_game_tags(window, human=self.username)
 
     def update_engine_to_config_file(self, eng_path_file, new_name, old_name, user_opt):
@@ -5285,9 +5309,9 @@ class EasyChessGui:
             [sg.OK(), sg.Button('Configure'), sg.Cancel()],
         ]
 
-        window.Hide()
+        self.begin_dialog(window)
         w = sg.Window('Auto-Analyze Game', layout,
-                      icon=ico_path[platform]['pecg'])
+                      icon=ico_path[platform]['pecg'], modal=True)
         result = False
         while True:
             e, v = w.Read(timeout=10)
@@ -5308,9 +5332,11 @@ class EasyChessGui:
                              title='Auto-Analyze',
                              icon=ico_path[platform]['pecg'])
                     continue
-                w.Hide()
                 self.configure_role_engine('auto_analysis', eng)
-                w.UnHide()
+                try:
+                    w.make_modal()
+                except Exception:
+                    pass
                 continue
             if e == 'OK':
                 selected = v.get('auto_engine_k', [])
@@ -5346,7 +5372,7 @@ class EasyChessGui:
                 }
                 break
         w.Close()
-        window.UnHide()
+        self.end_dialog(window)
         return result
 
     def start_auto_analysis(self, window):
@@ -6343,7 +6369,9 @@ class EasyChessGui:
         """Handle an idle-state (game not started) setup menu event.
 
         These handlers are shared by the Play mode loops; most open a modal
-        dialog, while theme and board color changes rebuild the main window.
+        dialog over the still-visible main window (begin_dialog/end_dialog
+        keep it inert), while theme and board color changes rebuild the
+        main window.
 
         :return: (is_handled, window) - window is the (possibly rebuilt)
             main window.
@@ -6365,9 +6393,9 @@ class EasyChessGui:
                     [sg.Button('Delete Player'), sg.Cancel()]
                 ]
 
-                window.Hide()
+                self.begin_dialog(window)
                 w = sg.Window(win_title, layout,
-                              icon=ico_path[platform]['pecg'])
+                              icon=ico_path[platform]['pecg'], modal=True)
                 while True:
                     e, v = w.Read(timeout=10)
                     if e is None or e == 'Cancel':
@@ -6458,7 +6486,7 @@ class EasyChessGui:
                         w.Element('player_k').Update(sorted(player_list))
 
                 w.Close()
-                window.UnHide()
+                self.end_dialog(window)
                 break
 
             # Idle setup, Set User time control
@@ -6481,9 +6509,9 @@ class EasyChessGui:
                     [sg.OK(), sg.Cancel()]
                 ]
 
-                window.Hide()
+                self.begin_dialog(window)
                 w = sg.Window(win_title, layout,
-                              icon=ico_path[platform]['pecg'])
+                              icon=ico_path[platform]['pecg'], modal=True)
                 while True:
                     e, v = w.Read(timeout=10)
                     if e is None:
@@ -6507,7 +6535,7 @@ class EasyChessGui:
                         self.human_tc_type = tc_type
                         break
                 w.Close()
-                window.UnHide()
+                self.end_dialog(window)
                 break
 
             # Idle setup, Set engine time control
@@ -6536,9 +6564,9 @@ class EasyChessGui:
                     [sg.OK(), sg.Cancel()]
                 ]
 
-                window.Hide()
+                self.begin_dialog(window)
                 w = sg.Window(win_title, layout,
-                              icon=ico_path[platform]['pecg'])
+                              icon=ico_path[platform]['pecg'], modal=True)
                 while True:
                     e, v = w.Read(timeout=10)
                     if e is None:
@@ -6563,7 +6591,7 @@ class EasyChessGui:
                         self.engine_tc_type = tc_type
                         break
                 w.Close()
-                window.UnHide()
+                self.end_dialog(window)
                 break
 
             # Idle setup, manage player names
@@ -6588,9 +6616,10 @@ class EasyChessGui:
                      sg.Button('Delete', key='user_del_k'),
                      sg.Button('Close')],
                 ]
-                window.Hide()
+                self.begin_dialog(window)
                 w = sg.Window(win_title, layout,
-                              icon=ico_path[platform]['pecg'], finalize=True)
+                              icon=ico_path[platform]['pecg'], finalize=True,
+                              modal=True)
                 # Keyboard / double-click affordances bound directly on the
                 # tk widgets (the element kwargs are unavailable in this
                 # FreeSimpleGUI version).
@@ -6650,7 +6679,7 @@ class EasyChessGui:
                             self.delete_username(sel[0])
                             _refresh_users()
                 w.Close()
-                window.UnHide()
+                self.end_dialog(window)
                 self.update_labels_and_game_tags(window, human=self.username)
                 break
 
@@ -6666,10 +6695,11 @@ class EasyChessGui:
                         [sg.Button('Add'), sg.Button('Cancel')]
                 ]
 
-                window.Hide()
+                self.begin_dialog(window)
                 install_win = sg.Window(title=button_title,
                                         layout=install_layout,
-                                        icon=ico_path[platform]['pecg'])
+                                        icon=ico_path[platform]['pecg'],
+                                        modal=True)
 
                 while True:
                     e, v = install_win.Read(timeout=100)
@@ -6688,8 +6718,8 @@ class EasyChessGui:
                             [sg.OK(), sg.Cancel()]
                         ]
 
-                        install_win.Hide()
-                        add_win = sg.Window(button_title, add_layout)
+                        add_win = sg.Window(button_title, add_layout,
+                                            modal=True)
                         is_cancel_add_win = False
                         while True:
                             e1, v1 = add_win.Read(timeout=100)
@@ -6775,7 +6805,10 @@ class EasyChessGui:
 
                         # Outside add window while loop
                         add_win.Close()
-                        install_win.UnHide()
+                        try:
+                            install_win.make_modal()
+                        except Exception:
+                            pass
 
                         # Save the new configured engine to pecg_engines.json.
                         if not is_cancel_add_win:
@@ -6805,7 +6838,7 @@ class EasyChessGui:
                         break
 
                 install_win.Close()
-                window.UnHide()
+                self.end_dialog(window)
 
                 # Define default engine opponent, adviser, analysis, threat
                 if self.opp_id_name is None:
@@ -6840,11 +6873,12 @@ class EasyChessGui:
                         [sg.Button('Modify'), sg.Button('Cancel')]
                 ]
 
-                window.Hide()
+                self.begin_dialog(window)
                 edit_win = sg.Window(
                     button_title,
                     layout=edit_layout,
-                    icon=ico_path[platform]['pecg']
+                    icon=ico_path[platform]['pecg'],
+                    modal=True
                 )
                 is_cancel_edit_win = False
                 while True:
@@ -6885,11 +6919,11 @@ class EasyChessGui:
                         modify_layout = self._build_options_window_layout(
                             opt_layout, opt_layout2)
 
-                        edit_win.Hide()
                         modify_win = sg.Window(button_title,
                                                layout=modify_layout,
                                                icon=ico_path[platform]['pecg'],
-                                               resizable=True, finalize=True)
+                                               resizable=True, finalize=True,
+                                               modal=True)
                         is_cancel_modify_win = False
                         while True:
                             e1, v1 = modify_win.Read(timeout=100)
@@ -6904,8 +6938,11 @@ class EasyChessGui:
                                         v1, opt_meta).items()]
                                 break
 
-                        edit_win.UnHide()
                         modify_win.Close()
+                        try:
+                            edit_win.make_modal()
+                        except Exception:
+                            pass
                         break  # Get out of edit_win loop
 
                 # Outside edit_win while loop
@@ -6918,7 +6955,7 @@ class EasyChessGui:
                     self.engine_id_name_list = self.get_engine_id_name_list()
 
                 edit_win.Close()
-                window.UnHide()
+                self.end_dialog(window)
                 break
 
             # Idle setup
@@ -6930,11 +6967,12 @@ class EasyChessGui:
                                 key='engine_id_name_k')],
                     [sg.Button('Delete'), sg.Cancel()]
                 ]
-                window.Hide()
+                self.begin_dialog(window)
                 delete_win = sg.Window(
                     button_title,
                     layout=delete_layout,
-                    icon=ico_path[platform]['pecg']
+                    icon=ico_path[platform]['pecg'],
+                    modal=True
                 )
                 is_cancel = False
                 while True:
@@ -6995,7 +7033,7 @@ class EasyChessGui:
                     self.update_labels_and_game_tags(window, human=self.username)
 
                 delete_win.Close()
-                window.UnHide()
+                self.end_dialog(window)
 
                 break
 
@@ -7049,8 +7087,8 @@ class EasyChessGui:
                 ]
 
                 w = sg.Window(BOX_TITLE + '/Set Book', layout,
-                              icon=ico_path[platform]['pecg'])
-                window.Hide()
+                              icon=ico_path[platform]['pecg'], modal=True)
+                self.begin_dialog(window)
 
                 while True:
                     e, v = w.Read(timeout=10)
@@ -7077,7 +7115,7 @@ class EasyChessGui:
                         logging.info('Book setting is OK')
                         break
 
-                window.UnHide()
+                self.end_dialog(window)
                 w.Close()
                 break
 
@@ -7117,8 +7155,8 @@ class EasyChessGui:
                 ]
 
                 w = sg.Window(win_title, layout,
-                              icon=ico_path[platform]['pecg'])
-                window.Hide()
+                              icon=ico_path[platform]['pecg'], modal=True)
+                self.begin_dialog(window)
 
                 while True:
                     e, v = w.Read(timeout=10)
@@ -7136,7 +7174,7 @@ class EasyChessGui:
                         self.save_settings()
                         break
 
-                window.UnHide()
+                self.end_dialog(window)
                 w.Close()
                 break
 
