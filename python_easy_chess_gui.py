@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.22.0'
+APP_VERSION = 'v2.23.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -1491,7 +1491,9 @@ class AutoAnalyzeGame(threading.Thread):
                 board.push(child.move)
                 node = child
 
-            self.game.headers['Annotator'] = self.engine_id_name
+            ms_per_move = int(round(self.time_sec * 1000))
+            self.game.headers['Annotator'] = '{} ({}ms/move)'.format(
+                self.engine_id_name, ms_per_move)
             with open(self.output_file, mode='a+', encoding='utf-8') as f:
                 f.write('\n{}\n\n'.format(self.game))
 
@@ -5782,13 +5784,11 @@ class EasyChessGui:
         if self.review_game is None or not self.review_boards:
             return
 
+        # Show every PGN header, one per line; the panel scrolls when the
+        # list is long or a value is large.
         headers = self.review_game.headers
-        header_text = '\n'.join([
-            f"White: {headers.get('White', '?')}",
-            f"Black: {headers.get('Black', '?')}",
-            f"Event: {headers.get('Event', '?')}",
-            f"Date: {headers.get('Date', '?')}    Result: {headers.get('Result', '*')}"
-        ])
+        header_text = '\n'.join(
+            f"{tag}: {value}" for tag, value in headers.items())
 
         if self.review_pgn_file:
             window['review_pgn_k'].Update(self.review_pgn_file)
