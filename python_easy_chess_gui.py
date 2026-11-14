@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.33.0'
+APP_VERSION = 'v2.34.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -2177,12 +2177,16 @@ class EasyChessGui:
             q.put(None)
 
     def get_engine_id_name(self, path_and_file, q):
-        """ Returns id name of uci engine """
+        """Post ['Done', id name] of a uci engine to q (worker thread).
+
+        The name is None when the engine cannot be started, whatever the
+        reason, so the dialog waiting on q always gets an answer.
+        """
         id_name = None
-        folder = Path(path_and_file)
-        folder = folder.parents[0]
 
         try:
+            # .parent never raises, unlike .parents[0] on a drive root.
+            folder = Path(path_and_file).parent
             if sys_os == 'Windows':
                 engine = chess.engine.SimpleEngine.popen_uci(
                     path_and_file, cwd=folder,
@@ -7030,7 +7034,7 @@ class EasyChessGui:
                                 new_engine_path_file = v1['engine_path_file_k']
 
                                 # We can only get the engine id name if the engine is defined.
-                                if new_engine_path_file:
+                                if new_engine_path_file.strip():
                                     que = queue.Queue()
                                     t = threading.Thread(
                                         target=self.get_engine_id_name,
@@ -7039,12 +7043,9 @@ class EasyChessGui:
                                     )
                                     t.start()
                                     is_update_list = False
-                                    while True:
-                                        try:
-                                            msg = que.get_nowait()
-                                            break
-                                        except Exception:
-                                            pass
+                                    # The worker always answers; wait for
+                                    # it without spinning the CPU.
+                                    msg = que.get()
                                     t.join()
 
                                     if msg[0] == 'Done' and msg[1] is not None:
