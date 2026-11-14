@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.30.0'
+APP_VERSION = 'v2.31.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -2614,6 +2614,24 @@ class EasyChessGui:
             name = data.get(id_attr)
             if name and name in self.engine_id_name_list:
                 self.set_active_role(role, name)
+
+    def rename_engine_references(self, old_name, new_name):
+        """Follow an engine rename everywhere the engine is stored by name.
+
+        The roles that use the engine, the saved Auto-Analyze engine and the
+        per-role option overrides all move to the new name, and the settings
+        are saved, so a rename never leaves them pointing at a name that no
+        longer exists.
+        """
+        for id_attr, _, _, _, _ in ROLE_META.values():
+            if getattr(self, id_attr) == old_name:
+                setattr(self, id_attr, new_name)
+        if self.auto_analysis_engine_id_name == old_name:
+            self.auto_analysis_engine_id_name = new_name
+        for role_map in self.role_engine_options.values():
+            if isinstance(role_map, dict) and old_name in role_map:
+                role_map[new_name] = role_map.pop(old_name)
+        self.save_settings()
 
     def build_engine_options_layout(self, option_list, current_values=None):
         """Build editor rows for an engine's UCI options.
@@ -7192,12 +7210,30 @@ class EasyChessGui:
                                 is_cancel_modify_win = True
                                 break
                             if e1 == 'OK':
+                                # The name identifies the engine: it must
+                                # not be empty or used by another engine.
+                                new_name = v1['string_name_k'].strip()
+                                if not new_name:
+                                    sg.popup(
+                                        'Please input engine id name.',
+                                        title=button_title,
+                                        icon=ico_path[platform]['pecg'])
+                                    continue
+                                if new_name != orig_idname and \
+                                        self.is_name_exists(new_name):
+                                    sg.popup(
+                                        f'{new_name} is existing. '
+                                        'Please modify the name!',
+                                        title=button_title,
+                                        icon=ico_path[platform]['pecg'])
+                                    continue
+
                                 # Keep the window open on a bad number.
                                 if not self.check_spin_options(
                                         v1, opt_meta, button_title):
                                     continue
 
-                                engine_id_name = v1['string_name_k']
+                                engine_id_name = new_name
                                 ret_opt_name = [
                                     {n: val} for n, val in
                                     self.read_option_values(
@@ -7219,6 +7255,13 @@ class EasyChessGui:
                         engine_path_file, engine_id_name,
                         orig_idname, ret_opt_name)
                     self.engine_id_name_list = self.get_engine_id_name_list()
+
+                    # A renamed engine keeps its roles and overrides.
+                    if engine_id_name != orig_idname:
+                        self.rename_engine_references(
+                            orig_idname, engine_id_name)
+                        self.update_labels_and_game_tags(
+                            window, human=self.username)
 
                 edit_win.Close()
                 self.end_dialog(window)
