@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.26.0'
+APP_VERSION = 'v2.27.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -4277,26 +4277,19 @@ class EasyChessGui:
 
                     if button == 'Save to My Games::save_game_k':
                         logging.info('Saving game manually')
-                        with open(self.my_games, mode='a+',
-                                  encoding=PGN_ENCODING) as f:
-                            self.game.headers['Event'] = 'My Games'
-                            f.write('{}\n\n'.format(self.game))
+                        self.save_game_as(self.my_games, 'My Games')
                         break
 
                     # Mode: Play, Stm: user
                     if button == 'Save to White Repertoire':
-                        with open(self.repertoire_file['white'], mode='a+',
-                                  encoding=PGN_ENCODING) as f:
-                            self.game.headers['Event'] = 'White Repertoire'
-                            f.write('{}\n\n'.format(self.game))
+                        self.save_game_as(self.repertoire_file['white'],
+                                          'White Repertoire')
                         break
 
                     # Mode: Play, Stm: user
                     if button == 'Save to Black Repertoire':
-                        with open(self.repertoire_file['black'], mode='a+',
-                                  encoding=PGN_ENCODING) as f:
-                            self.game.headers['Event'] = 'Black Repertoire'
-                            f.write('{}\n\n'.format(self.game))
+                        self.save_game_as(self.repertoire_file['black'],
+                                          'Black Repertoire')
                         break
 
                     # Mode: Play, stm: User
@@ -4912,6 +4905,21 @@ class EasyChessGui:
         self.clear_elements(window)
 
         return is_new_game, window
+
+    def save_game_as(self, pgn_file, event):
+        """Append the current game to pgn_file, labelled with ``event``.
+
+        Only the saved copy gets the label. The game being played keeps its
+        own Event, so the auto-save and the games that follow are not
+        relabelled.
+        """
+        own_event = self.game.headers['Event']
+        self.game.headers['Event'] = event
+        try:
+            with open(pgn_file, mode='a+', encoding=PGN_ENCODING) as f:
+                f.write('{}\n\n'.format(self.game))
+        finally:
+            self.game.headers['Event'] = own_event
 
     def save_game(self):
         """ Save game in append mode """
