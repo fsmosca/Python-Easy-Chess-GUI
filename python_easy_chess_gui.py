@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.23.0'
+APP_VERSION = 'v2.24.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -2727,7 +2727,9 @@ class EasyChessGui:
         :param pname: id name of uci engine
         :return:
         """
-        folder = Path(engine_path_and_file).parents[0]
+        # .parent never raises (unlike .parents[0] on an empty or root path),
+        # so an unusable path reaches popen_uci below and reports 'Failure'.
+        folder = Path(engine_path_and_file).parent
         file = PurePath(engine_path_and_file)
         file = file.name
 
@@ -6822,6 +6824,17 @@ class EasyChessGui:
                                     new_engine_path_file = v1[
                                         'engine_path_file_k']
                                     new_engine_id_name = v1['engine_id_name_k']
+
+                                    # The engine file is required; a name
+                                    # alone cannot be installed.
+                                    if not new_engine_path_file.strip():
+                                        sg.popup(
+                                            'Please define the engine or browse to the location of the engine file first.',
+                                            title=button_title,
+                                            icon=ico_path[platform]['pecg']
+                                        )
+                                        continue
+
                                     if new_engine_id_name != '':
                                         # Check if new_engine_id_name is already existing
                                         if self.is_name_exists(new_engine_id_name):
