@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.32.0'
+APP_VERSION = 'v2.33.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -3180,13 +3180,39 @@ class EasyChessGui:
             self.game.headers['White'] = engine_id
             self.game.headers['Black'] = human
 
-    def get_fen(self):
-        """ Get fen from clipboard """
-        self.fen = pyperclip.paste()
+    def read_fen_board(self):
+        """Return a board for the FEN on the clipboard, or None.
 
-        # Remove empty char at the end of FEN
-        if self.fen.endswith(' '):
-            self.fen = self.fen[:-1]
+        None is returned, after telling the user why, when the clipboard
+        does not hold a FEN or the position cannot occur in chess (no king,
+        the side that just moved is in check, ...). self.fen is set only on
+        success, so a bad paste leaves the current position untouched.
+        """
+        title = 'Paste FEN'
+        try:
+            fen = pyperclip.paste().strip()
+            board = chess.Board(fen)
+        except Exception:
+            logging.exception('Error in parsing FEN from clipboard.')
+            sg.popup('The clipboard does not contain a FEN position.',
+                     title=title, icon=ico_path[platform]['pecg'])
+            return None
+
+        # Sloppy castling or en passant fields are harmless (python-chess
+        # ignores what cannot be used); everything else is unplayable.
+        tolerated = (chess.STATUS_BAD_CASTLING_RIGHTS
+                     | chess.STATUS_INVALID_EP_SQUARE)
+        problems = [s.name.replace('_', ' ').lower() for s in chess.Status
+                    if s.value and s & board.status() & ~tolerated]
+        if problems:
+            logging.warning('Pasted FEN %r rejected: %s', fen, problems)
+            sg.popup('The FEN on the clipboard is not a legal position '
+                     '({}).'.format(', '.join(problems)),
+                     title=title, icon=ico_path[platform]['pecg'])
+            return None
+
+        self.fen = fen
+        return board
 
     def fen_to_psg_board(self, window):
         """ Update psg_board based on FEN """
@@ -4097,13 +4123,12 @@ class EasyChessGui:
                         continue
 
                     if button == 'Paste FEN':
-                        try:
-                            self.get_fen()
-                            self.set_new_game()
-                            board = chess.Board(self.fen)
-                        except Exception:
-                            logging.exception('Error in parsing FEN from clipboard.')
+                        # A bad paste shows a message and changes nothing.
+                        pasted_board = self.read_fen_board()
+                        if pasted_board is None:
                             continue
+                        board = pasted_board
+                        self.set_new_game()
 
                         self.fen_to_psg_board(window)
                         self.update_play_turn_status(window, board)
@@ -4444,13 +4469,12 @@ class EasyChessGui:
                             sg.popup('Press Game->New then paste your fen.',
                                      title='Mode Play')
                             continue
-                        try:
-                            self.get_fen()
-                            self.set_new_game()
-                            board = chess.Board(self.fen)
-                        except Exception:
-                            logging.exception('Error in parsing FEN from clipboard.')
+                        # A bad paste shows a message and changes nothing.
+                        pasted_board = self.read_fen_board()
+                        if pasted_board is None:
                             continue
+                        board = pasted_board
+                        self.set_new_game()
 
                         self.fen_to_psg_board(window)
                         self.update_play_turn_status(window, board)
