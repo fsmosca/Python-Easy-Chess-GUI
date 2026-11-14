@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.31.0'
+APP_VERSION = 'v2.32.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -4577,9 +4577,14 @@ class EasyChessGui:
                             fr_sq = chess.square(fr_col, 7-fr_row)
                             to_sq = chess.square(to_col, 7-to_row)
 
-                            # If user move is a promote
+                            # If user move is a promote. Ask for the piece
+                            # only when the pawn move itself is legal (which
+                            # does not depend on the piece chosen); an
+                            # illegal one falls through to the check below.
                             if self.relative_row(to_sq, board.turn) == RANK_8 and \
-                                    moved_piece == chess.PAWN:
+                                    moved_piece == chess.PAWN and \
+                                    board.is_legal(chess.Move(
+                                        fr_sq, to_sq, promotion=chess.QUEEN)):
                                 is_promote = True
                                 pyc_promo, psg_promo = self.get_promo_piece(
                                         user_move, board.turn, True)
