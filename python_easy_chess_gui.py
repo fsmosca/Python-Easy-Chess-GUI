@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.29.0'
+APP_VERSION = 'v2.30.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -4696,10 +4696,15 @@ class EasyChessGui:
                     while True:
                         button, value = window.Read(timeout=100)
 
+                        # Window closed while the engine is thinking: stop
+                        # the search and leave through the normal end of
+                        # game below, which saves the game, quits the
+                        # engine and exits.
                         if button == sg.WIN_CLOSED:
                             logging.warning('User closes the window while the engine is thinking.')
                             search.stop()
-                            sys.exit(0)  # the engine is run on daemon threads so it will quit as well
+                            is_exit_app = True
+                            break
 
                         # Update elapse box in m:s format
                         elapse_str = self.get_time_mm_ss_ms(engine_timer.tick())
@@ -4748,11 +4753,6 @@ class EasyChessGui:
                             is_hide_book2 = True
                             window.Element('polyglot_book2_k').Update('')
 
-                        # Exit app while engine is thinking.
-                        if button is None:
-                            search.stop()
-                            is_search_stop_for_exit = True
-
                         # Forced engine to move now and create a new game
                         if button == 'New::new_game_k':
                             search.stop()
@@ -4796,12 +4796,15 @@ class EasyChessGui:
                             logging.info('engine msg: {}'.format(msg_str))
                             break
 
-                    search.join()
+                    # When exiting, do not wait forever on an engine that
+                    # does not answer the stop request.
+                    search.join(timeout=5.0 if is_exit_app else None)
                     # Keep engine alive for reuse; retrieve instance
                     persistent_engine = search.get_engine()
                     is_book_from_gui = False
 
-                # If engine failed to send a legal move
+                # If engine failed to send a legal move, or the window was
+                # closed before it moved (best_move is still None).
                 if best_move is None:
                     break
 
