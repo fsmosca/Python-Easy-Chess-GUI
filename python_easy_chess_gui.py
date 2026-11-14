@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.34.0'
+APP_VERSION = 'v2.35.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -910,6 +910,19 @@ class RunEngine(threading.Thread):
                 logging.exception('Failed to apply override %s.', name)
 
     def run(self):
+        """Thread entry: run the search and log an engine failure.
+
+        An engine that dies or stops answering during its search raises
+        here. The reason goes to the log file, so the user can see why the
+        engine failed.
+        """
+        try:
+            self._run()
+        except Exception:
+            logging.exception('Engine %s (%s) failed during its search.',
+                              self.engine_id_name, self.engine_path_and_file)
+
+    def _run(self):
         """Run engine to get search info and bestmove.
          
         If there is error we still send bestmove None.
@@ -7652,7 +7665,34 @@ class EasyChessGui:
             self.set_new_game()
 
 
+def install_error_logging():
+    """Send errors that nothing else handles to the log file.
+
+    Covers background threads and Tk callbacks (mouse and resize handlers),
+    whose errors would otherwise only go to a console the user may not
+    have. Errors in the main loop are logged by main().
+    """
+    default_thread_hook = threading.excepthook
+
+    def log_thread_error(args):
+        if args.exc_type is not SystemExit:
+            logging.error(
+                'Unexpected error in thread %s.',
+                args.thread.name if args.thread else '?',
+                exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+        default_thread_hook(args)
+
+    def log_tk_callback_error(self, exc_type, exc_value, exc_tb):
+        logging.error('Unexpected error in a window callback.',
+                      exc_info=(exc_type, exc_value, exc_tb))
+
+    threading.excepthook = log_thread_error
+    tk.Tk.report_callback_exception = log_tk_callback_error
+
+
 def main():
+    install_error_logging()
+
     if sys.platform == 'win32':
         try:
             import ctypes
@@ -7672,12 +7712,26 @@ def main():
     max_book_ply = 8
     theme = 'Reddit'
 
-    pecg = EasyChessGui(theme, engine_config_file, user_config_file,
-                        pecg_book, book_from_computer_games,
-                        book_from_human_games, is_use_gui_book, is_random_book,
-                        max_book_ply)
+    try:
+        pecg = EasyChessGui(theme, engine_config_file, user_config_file,
+                            pecg_book, book_from_computer_games,
+                            book_from_human_games, is_use_gui_book,
+                            is_random_book, max_book_ply)
 
-    pecg.main_loop()
+        pecg.main_loop()
+    except Exception:
+        # Anything unexpected: record it, tell the user where to look, then
+        # let it end the program as before. (A normal exit is SystemExit
+        # and does not come through here.)
+        logging.critical('Unexpected error, the program stops.',
+                         exc_info=True)
+        try:
+            sg.popup('An unexpected error occurred and the program has to '
+                     'close.\n\nThe details are in pecg_log.txt.',
+                     title=BOX_TITLE)
+        except Exception:
+            pass
+        raise
 
 
 if __name__ == "__main__":
