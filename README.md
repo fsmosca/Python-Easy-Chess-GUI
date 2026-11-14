@@ -5,10 +5,9 @@ A Chess GUI based from Python using FreeSimpleGUI and Python-Chess modules. User
 
 ### A. Requirements
 If you want to run from the python source the following are required or see the installation section below.
-* Python 3.7 and up
+* Python 3.8 and up
 * Python-chess v0.28.0 and up
 * FreeSimpleGUI 5.0.0 and up
-* Pyperclip
 * Download this repo
 
 Or you can just download the [executable file](https://github.com/fsmosca/Python-Easy-Chess-GUI/releases) along with other files such as book and images.
@@ -47,9 +46,6 @@ pip install python-chess
 * FreeSimpleGUI<br>
 https://github.com/spyoungtech/FreeSimpleGUI<br>
 pip install FreeSimpleGUI
-* Pyperclip<br>
-https://github.com/asweigart/pyperclip<br>
-pip install pyperclip
 2. If you want to run from the exe
 * Download the exe file from the release link
 
@@ -134,8 +130,8 @@ These work in **Play** mode by right-clicking the panel's label:
 
 #### Board appearance
 * **Flip:** `Board → Flip`, at any time — including while a game is running or the engine is thinking. The game is not affected.
-* **Size:** `Board → Size` picks a board scale preset — Small (360), Medium (480), Large (600) or X-Large (720) pixels — at any time, like Flip. On first start the largest board that fits the screen is chosen automatically; the size is saved and restored.
-* **Resizable windows:** the Play and Review windows can be maximized or drag-resized. The board continuously rescales to fill the available height and the side panels absorb the remaining width.
+* **Size:** `Board → Size` picks a board size — Small (360), Medium (480), Large (600), X-Large (720), XX-Large (840) or Huge (960) pixels — at any time, like Flip. On first start the largest board that fits the screen is chosen automatically; the size is saved and restored.
+* **Resizable windows:** the Play and Review windows can be maximized or drag-resized. The board switches to the largest of these sizes that fits and the side panels absorb the remaining space.
 * **Colors / theme:** `Board → Color` for square colors and `Board → Theme` for the overall GUI theme (before a game starts).
 
 #### Files the app writes
@@ -151,8 +147,6 @@ These work in **Play** mode by right-clicking the panel's label:
 https://github.com/spyoungtech/FreeSimpleGUI
 * Python-Chess<br>
 https://github.com/niklasf/python-chess
-* Pyperclip<br>
-https://github.com/asweigart/pyperclip
 * The Week in Chess<br>
 https://theweekinchess.com/
 * PyInstaller<br>

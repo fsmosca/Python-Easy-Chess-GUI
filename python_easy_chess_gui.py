@@ -3,7 +3,7 @@
 python_easy_chess_gui.py
 
 Requirements:
-    Python 3.7.3 and up
+    Python 3.8 and up
 
 PySimpleGUI Square Mapping
 board = [
@@ -46,7 +46,6 @@ import copy
 import time
 from datetime import datetime
 import json
-import pyperclip
 import chess
 import chess.pgn
 import chess.engine
@@ -73,7 +72,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.35.0'
+APP_VERSION = 'v2.36.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -261,21 +260,36 @@ GUI_THEME = [
     'BrightColors', 'NeutralBlue', 'Kayak', 'SandyBeach', 'TealMono', 'Topanga', 'Dark', 'Black', 'DarkAmber'
 ]
 
-IMAGE_PATH = 'Images/60'  # path to the chess pieces
-BASE_SQUARE_PX = 60       # native piece image size (Images/60 is 60x60)
-# The board scale is continuous: any square size in this range (the board
-# is 8 squares wide). Non-60px scales are produced by resizing the 60px
-# images with Pillow; without Pillow only the native 60px scale is usable.
-BOARD_SQUARE_MIN_PX = 45
-BOARD_SQUARE_MAX_PX = 200
-# Board -> Size menu presets: label to square size (labels show the board
-# width). Resizing the window fits the board continuously in between.
+IMAGE_DIR = 'Images'      # one folder of piece images per square size
+IMAGE_PATH = 'Images/60'  # the original set; also the fallback
+BASE_SQUARE_PX = 60       # square size of the original set
+# Board -> Size menu: label to square size in px (labels show the board
+# width; the board is 8 squares wide). Each size has its own ready-made
+# piece images in Images/<square size>, so no image library is needed at
+# run time. Resizing a window picks the largest of these sizes that fits.
 BOARD_SIZE_LABELS = {
     'Small (360)': 45,
     'Medium (480)': 60,
     'Large (600)': 75,
     'X-Large (720)': 90,
+    'XX-Large (840)': 105,
+    'Huge (960)': 120,
 }
+BOARD_SQUARE_SIZES = sorted(BOARD_SIZE_LABELS.values())
+BOARD_SQUARE_MIN_PX = BOARD_SQUARE_SIZES[0]
+BOARD_SQUARE_MAX_PX = BOARD_SQUARE_SIZES[-1]
+
+
+def fit_square_px(square_px, min_px=BOARD_SQUARE_MIN_PX):
+    """Return the largest available square size not above ``square_px``.
+
+    The result is never below ``min_px`` (rounded up to an available
+    size), even if that is more than ``square_px``.
+    """
+    lowest = min((s for s in BOARD_SQUARE_SIZES if s >= min_px),
+                 default=BOARD_SQUARE_MAX_PX)
+    fitting = [s for s in BOARD_SQUARE_SIZES if lowest <= s <= square_px]
+    return fitting[-1] if fitting else lowest
 # Fallback vertical window space that is not board (menubar, under-board
 # status bar, margins) when it cannot be measured from the live window.
 BOARD_V_OVERHEAD_PX = 90
@@ -436,13 +450,14 @@ HELP_TOPICS = {
         'The game itself is not affected.'),
     'help_board_size': (
         'Board Size',
-        'Board -> Size picks a board scale preset: Small (360), Medium\n'
-        '(480), Large (600) or X-Large (720) pixels. On first start the\n'
-        'largest board that fits the screen is chosen automatically, and\n'
-        'the size is saved for the next session. The windows are also\n'
-        'resizable: maximize or drag-resize them and the board rescales\n'
-        'continuously to fill the height while the side panels absorb\n'
-        'the leftover width. Like Flip, resizing works at any time.'),
+        'Board -> Size picks a board size: Small (360), Medium (480),\n'
+        'Large (600), X-Large (720), XX-Large (840) or Huge (960)\n'
+        'pixels. On first start the largest board that fits the screen\n'
+        'is chosen automatically, and the size is saved for the next\n'
+        'session. The windows are also resizable: maximize or\n'
+        'drag-resize them and the board switches to the largest of\n'
+        'these sizes that fits, while the side panels absorb the\n'
+        'leftover space. Like Flip, resizing works at any time.'),
     'help_board_color': (
         'Board Colors and Themes',
         'Board -> Color changes the square colors and Board -> Theme\n'
@@ -1648,7 +1663,7 @@ class EasyChessGui:
         # button bar (measured after the window is built).
         self.min_square_px = BOARD_SQUARE_MIN_PX
         self._board_size_from_settings = False
-        # square_px -> {piece: scaled PNG bytes}, built lazily via Pillow.
+        # square_px -> {piece: image file for that board size}.
         self._piece_image_cache = {}
         # Debounced window-resize handling.
         self._resize_after_id = None
@@ -2500,9 +2515,7 @@ class EasyChessGui:
                 pass
         if 'board_square_px' in data:
             try:
-                self.square_px = max(BOARD_SQUARE_MIN_PX,
-                                     min(BOARD_SQUARE_MAX_PX,
-                                         int(data['board_square_px'])))
+                self.square_px = fit_square_px(int(data['board_square_px']))
                 self._board_size_from_settings = True
             except (TypeError, ValueError):
                 pass
@@ -3207,7 +3220,7 @@ class EasyChessGui:
         """
         title = 'Paste FEN'
         try:
-            fen = pyperclip.paste().strip()
+            fen = sg.clipboard_get().strip()
             board = chess.Board(fen)
         except Exception:
             logging.exception('Error in parsing FEN from clipboard.')
@@ -3432,54 +3445,32 @@ class EasyChessGui:
                 self.paint_square(graph, i, j)
 
     def piece_image_source(self, piece):
-        """draw_image kwargs for a piece at the current board scale.
+        """draw_image kwargs for a piece at the current board size.
 
-        The native 60px files are used directly; other scales get PNGs
-        resized once with Pillow and cached. If Pillow is unavailable the
-        native file is used (pieces then sit off-center on non-60 squares,
-        but the app keeps working).
+        Every board size has its own folder of ready-made images,
+        Images/<square size>. If a file is missing there, the original
+        60px image is used (the piece then sits off-center, but the app
+        keeps working).
         """
-        if self.square_px == BASE_SQUARE_PX:
-            return {'filename': images[piece]}
-        cache = self._piece_image_cache.get(self.square_px)
-        if cache is None:
-            cache = self._build_piece_images(self.square_px)
-            self._piece_image_cache[self.square_px] = cache
-        data = cache.get(piece)
-        if data is None:
-            return {'filename': images[piece]}
-        return {'data': data}
-
-    def _build_piece_images(self, square_px):
-        """Return {piece: PNG bytes} resized from Images/60 via Pillow."""
-        result = {}
-        try:
-            from PIL import Image
-        except ImportError:
-            logging.warning(
-                'Pillow is not installed; using native 60px piece images.')
-            return result
-        import io
-        for piece, filename in images.items():
-            try:
-                with Image.open(filename) as im:
-                    im = im.convert('RGBA').resize(
-                        (square_px, square_px), Image.LANCZOS)
-                    buf = io.BytesIO()
-                    im.save(buf, format='PNG')
-                    result[piece] = buf.getvalue()
-            except Exception:
-                logging.exception('Failed to scale piece image %s', filename)
-        return result
+        cache = self._piece_image_cache.setdefault(self.square_px, {})
+        filename = cache.get(piece)
+        if filename is None:
+            filename = os.path.join(IMAGE_DIR, str(self.square_px),
+                                    os.path.basename(images[piece]))
+            if not os.path.isfile(filename):
+                logging.warning('Missing piece image %s', filename)
+                filename = images[piece]
+            cache[piece] = filename
+        return {'filename': filename}
 
     def set_board_size(self, window, square_px, persist=True):
-        """Switch the board to another scale by resizing the canvas in
+        """Switch the board to another size by resizing the canvas in
         place and redrawing - no window rebuild, so it is safe at any
-        time (like Board->Flip). Returns True if the scale changed.
+        time (like Board->Flip). The size is the largest available one
+        that fits ``square_px``. Returns True if the size changed.
         """
         try:
-            square_px = max(self.min_square_px,
-                            min(BOARD_SQUARE_MAX_PX, int(square_px)))
+            square_px = fit_square_px(int(square_px), self.min_square_px)
         except (TypeError, ValueError):
             return False
         if square_px == self.square_px:
@@ -3581,14 +3572,13 @@ class EasyChessGui:
         # Reserve room for the side panel (width) and for the title bar,
         # menubar, status bar and taskbar (height).
         avail = min(screen_w - 560, screen_h - 200)
-        self.square_px = max(BOARD_SQUARE_MIN_PX,
-                             min(BOARD_SQUARE_MAX_PX, avail // 8))
+        self.square_px = fit_square_px(avail // 8)
 
     def install_resize_handler(self, window, bottom_key):
         """Fit the board scale to the window size on resize/maximize.
 
-        The fit is continuous (any square size in range), so the board
-        tracks the window height to within one square of rounding.
+        The board switches to the largest available size (see
+        BOARD_SIZE_LABELS) that fits the window.
         Bound on the toplevel; child <Configure> events are filtered out,
         and events matching the size our own board changes produced are
         ignored so menu size picks are not overridden. The actual fitting

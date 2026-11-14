@@ -1,4 +1,2 @@
 chess==1.11.2
-pyperclip==1.11.0
 FreeSimpleGUI==5.2.0.post1
-pillow==13.0.0
