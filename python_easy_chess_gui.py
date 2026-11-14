@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.24.0'
+APP_VERSION = 'v2.25.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -115,7 +115,6 @@ AUTO_ANALYSIS_BETTER_MAX_ABS_CP = 300
 AUTO_ANALYSIS_TIME_MS = 1000
 AUTO_ANALYSIS_TIME_MS_MIN = 100
 AUTO_ANALYSIS_TIME_MS_MAX = 60000
-AUTO_ANALYSIS_TIME_MS_STEP = 100
 # Time caps (seconds) for Review-mode searches. Without a cap these run
 # "go infinite" and peg the CPU until the user navigates away. Editable via
 # Settings/Game and persisted in the settings file.
@@ -202,6 +201,30 @@ ico_path = {
 
 MIN_DEPTH = 1
 MAX_DEPTH = 1000
+# Numbers in the setup dialogs are picked from drop-down lists or up/down
+# arrows, never typed, so a dialog cannot be handed an invalid value. These
+# are the choices offered. (Engine UCI options are the exception: their
+# ranges are too wide for a list, so they stay typed and are validated.)
+TC_BASE_MAX_MIN = 180    # base time: 0..180 minutes plus 0..59 seconds
+TC_INC_MAX_SEC = 60      # increment: 0..60 seconds
+MAX_BOOK_PLY = 32        # opponent book: 1..32 plies
+DEPTH_CHOICE_MAX = 100   # Set Depth: 1..100, or no limit (MAX_DEPTH)
+DEPTH_NO_LIMIT = 'No limit'
+# Seconds offered for the review analysis/threat and adviser move times.
+TIME_CHOICES_SEC = [1, 2, 3, 5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 300,
+                    600, 900, 1800, 3600]
+# Milliseconds per move offered by the Auto-Analyze dialog.
+AUTO_ANALYSIS_TIME_CHOICES_MS = [100, 200, 300, 500, 1000, 2000, 3000, 5000,
+                                 10000, 15000, 30000, 60000]
+
+
+def choices_with(choices, current):
+    """Return ``choices`` as a sorted list that also offers ``current``.
+
+    Keeps a previously saved value selectable when it is not one of the
+    standard choices.
+    """
+    return sorted(set(choices) | {current})
 MANAGED_UCI_OPTIONS = ['ponder', 'uci_chess960', 'multipv', 'uci_analysemode', 'ownbook']
 # Engine role -> (active id-name attr, file attr, path attr, icon key, title).
 ROLE_META = {
@@ -328,7 +351,7 @@ HELP_TOPICS = {
     'help_eng_depth': (
         'Search Depth',
         'Engine -> Set Depth caps the search depth of the playing and\n'
-        'adviser engines. Leave at the default for no depth limit.\n'
+        'adviser engines. Pick "No limit" to remove the cap.\n'
         'Review analysis/threat are limited by time, not depth.'),
     'help_game_play': (
         'Play a Game',
@@ -2279,6 +2302,84 @@ class EasyChessGui:
         return min(REVIEW_ANALYSIS_TIME_MAX,
                    max(REVIEW_ANALYSIS_TIME_MIN, value))
 
+    def read_whole_number(self, text, label, title,
+                          min_value=None, max_value=None):
+        """Parse and range-check a whole number typed into a dialog field.
+
+        Returns the number, or None after telling the user when ``text`` is
+        not a whole number or lies outside ``min_value``..``max_value``
+        (either may be None for no limit). The caller keeps its dialog open
+        on None.
+        """
+        try:
+            value = int(str(text).strip())
+        except (TypeError, ValueError):
+            value = None
+
+        if value is not None \
+                and (min_value is None or value >= min_value) \
+                and (max_value is None or value <= max_value):
+            return value
+
+        if min_value is not None and max_value is not None:
+            limits = ' from {} to {}'.format(min_value, max_value)
+        elif min_value is not None:
+            limits = ' not less than {}'.format(min_value)
+        elif max_value is not None:
+            limits = ' not more than {}'.format(max_value)
+        else:
+            limits = ''
+        sg.popup('{}: please enter a whole number{}.'.format(label, limits),
+                 title=title, icon=ico_path[platform]['pecg'])
+        return None
+
+    def time_control_rows(self, base_ms, inc_ms):
+        """Layout rows to pick a base time and an increment (no typing)."""
+        minutes, seconds = divmod(max(0, int(base_ms)) // 1000, 60)
+        inc_sec = max(0, int(inc_ms)) // 1000
+        return [
+            [sg.T('Base time', size=(10, 1)),
+             sg.Combo(choices_with(range(TC_BASE_MAX_MIN + 1), minutes),
+                      default_value=minutes, readonly=True, size=(5, 1),
+                      key='base_min_k'),
+             sg.T('min'),
+             sg.Combo(list(range(60)), default_value=seconds, readonly=True,
+                      size=(4, 1), key='base_sec_k'),
+             sg.T('sec')],
+            [sg.T('Increment', size=(10, 1)),
+             sg.Combo(choices_with(range(TC_INC_MAX_SEC + 1), inc_sec),
+                      default_value=inc_sec, readonly=True, size=(5, 1),
+                      key='inc_sec_k'),
+             sg.T('sec')],
+        ]
+
+    def read_time_control(self, values, title):
+        """Return (base_ms, inc_ms) picked in a time control dialog.
+
+        Returns None after telling the user when the base time is 0:00, the
+        one combination the pickers allow that cannot be used.
+        """
+        base_sec = 60 * int(values['base_min_k']) + int(values['base_sec_k'])
+        if base_sec <= 0:
+            sg.popup('Base time must be more than 0.', title=title,
+                     icon=ico_path[platform]['pecg'])
+            return None
+        return 1000 * base_sec, 1000 * int(values['inc_sec_k'])
+
+    def check_spin_options(self, values, opt_meta, title):
+        """Validate the numeric (spin) fields of an engine options editor.
+
+        Each must be a whole number within the option's own min..max.
+        Returns False after telling the user about the first bad field.
+        """
+        for m in opt_meta:
+            if m['type'] != 'spin' or m['key'] not in values:
+                continue
+            if self.read_whole_number(values[m['key']], m['name'], title,
+                                      m.get('min'), m.get('max')) is None:
+                return False
+        return True
+
     def load_settings(self):
         """Load persisted Settings/Game values from the settings file.
 
@@ -2499,7 +2600,8 @@ class EasyChessGui:
                 continue
 
             opt_meta.append({'name': name, 'key': key_name,
-                             'type': type_, 'base': base})
+                             'type': type_, 'base': base,
+                             'min': o.get('min'), 'max': o.get('max')})
             if num_opt > 10 and opt_cnt > num_opt // 2:
                 option_layout2.append(row)
             else:
@@ -2552,6 +2654,9 @@ class EasyChessGui:
             if e in (None, 'Cancel'):
                 break
             if e == 'OK':
+                # Keep the window open on a bad number.
+                if not self.check_spin_options(v, opt_meta, title):
+                    continue
                 entered = self.read_option_values(v, opt_meta)
                 base = {m['name']: m['base'] for m in opt_meta}
                 deltas = {n: val for n, val in entered.items()
@@ -2579,9 +2684,11 @@ class EasyChessGui:
         extra = []
         if role == 'adviser':
             extra = [[sg.Text('Movetime (sec)', size=(14, 1)),
-                      sg.Spin([t for t in range(1, 3600)],
-                              initial_value=self.adviser_movetime_sec,
-                              size=(8, 1), key='role_movetime_k')]]
+                      sg.Combo(choices_with(TIME_CHOICES_SEC,
+                                            self.adviser_movetime_sec),
+                               default_value=self.adviser_movetime_sec,
+                               readonly=True,
+                               size=(8, 1), key='role_movetime_k')]]
         layout = [
             [sg.Text('Active {}:'.format(title), size=(14, 1)),
              sg.Text(active if active else 'None', key='role_active_k',
@@ -2614,12 +2721,8 @@ class EasyChessGui:
 
         def store_movetime(values):
             if role == 'adviser' and values and 'role_movetime_k' in values:
-                try:
-                    self.adviser_movetime_sec = min(
-                        3600, max(1, int(values['role_movetime_k'])))
-                    self.save_settings()
-                except (TypeError, ValueError):
-                    pass
+                self.adviser_movetime_sec = int(values['role_movetime_k'])
+                self.save_settings()
 
         while True:
             e, v = w.Read()
@@ -3665,21 +3768,32 @@ class EasyChessGui:
 
         return pyc_promo, psg_promo
 
-    def set_depth_limit(self):
-        """ Returns max depth based from user setting """
-        user_depth = sg.popup_get_text(
-            f'Current depth is {self.max_depth}\n\nInput depth [{MIN_DEPTH} to {MAX_DEPTH}]',
-            title=BOX_TITLE,
-            icon=ico_path[platform]['pecg']
-        )
+    def set_depth_limit(self, window):
+        """Let the user pick the depth limit of the playing and adviser
+        engines from a list."""
+        # MAX_DEPTH means the search is not depth-limited (see RunEngine).
+        current = DEPTH_NO_LIMIT if self.max_depth >= MAX_DEPTH \
+            else self.max_depth
+        depths = choices_with(range(MIN_DEPTH, DEPTH_CHOICE_MAX + 1),
+                              MIN_DEPTH if current == DEPTH_NO_LIMIT
+                              else current)
+        layout = [
+            [sg.Text('Depth', size=(8, 1)),
+             sg.Combo([DEPTH_NO_LIMIT] + depths, default_value=current,
+                      readonly=True, size=(10, 1), key='depth_k')],
+            [sg.OK(), sg.Cancel()]
+        ]
 
-        try:
-            user_depth = int(user_depth)
-        except Exception:
-            user_depth = self.max_depth
-            logging.exception('Failed to get user depth.')
+        self.begin_dialog(window)
+        w = sg.Window('Engine/Set Depth', layout,
+                      icon=ico_path[platform]['pecg'], modal=True)
+        e, v = w.Read()
+        w.Close()
+        self.end_dialog(window)
 
-        self.max_depth = min(MAX_DEPTH, max(MIN_DEPTH, user_depth))
+        if e == 'OK':
+            self.max_depth = MAX_DEPTH if v['depth_k'] == DEPTH_NO_LIMIT \
+                else int(v['depth_k'])
 
     def show_help_topic(self, menu_event):
         """Show a brief help popup for a Help-menu selection.
@@ -5325,19 +5439,18 @@ class EasyChessGui:
                         key='auto_engine_k',
                         default_values=[default_engine])],
             [sg.Text('MS per move:', size=(16, 1)),
-             sg.Spin([t for t in range(AUTO_ANALYSIS_TIME_MS_MIN,
-                                       AUTO_ANALYSIS_TIME_MS_MAX + 1,
-                                       AUTO_ANALYSIS_TIME_MS_STEP)],
-                     initial_value=default_time, size=(8, 1),
-                     key='auto_time_k')],
+             sg.Combo(choices_with(AUTO_ANALYSIS_TIME_CHOICES_MS,
+                                   default_time),
+                      default_value=default_time, readonly=True,
+                      size=(8, 1), key='auto_time_k')],
             [sg.Text('PV length:', size=(16, 1),
                      tooltip='Length of the engine-vs-engine "Better is"\n'
                              'variation. Each ply is one extra search, so\n'
                              'longer lines analyze more slowly.'),
              sg.Spin([n for n in range(AUTO_ANALYSIS_REPLAY_PLIES_MIN,
                                        AUTO_ANALYSIS_REPLAY_PLIES_MAX + 1)],
-                     initial_value=default_plies, size=(8, 1),
-                     key='auto_plies_k')],
+                     initial_value=default_plies, readonly=True,
+                     size=(8, 1), key='auto_plies_k')],
             [sg.Text('Moves to analyze:', size=(16, 1)),
              sg.Text(str(move_count), size=(30, 1))],
             [sg.Text('The annotated game will be saved to:')],
@@ -5377,22 +5490,8 @@ class EasyChessGui:
                     sg.popup('Please select an engine.', title='Auto-Analyze',
                              icon=ico_path[platform]['pecg'])
                     continue
-                try:
-                    time_ms = int(v['auto_time_k'])
-                except (TypeError, ValueError):
-                    sg.popup('Invalid milliseconds per move.',
-                             title='Auto-Analyze',
-                             icon=ico_path[platform]['pecg'])
-                    continue
-                time_ms = min(AUTO_ANALYSIS_TIME_MS_MAX,
-                              max(AUTO_ANALYSIS_TIME_MS_MIN, time_ms))
-                try:
-                    replay_plies = int(v['auto_plies_k'])
-                except (TypeError, ValueError):
-                    replay_plies = AUTO_ANALYSIS_REPLAY_PLIES
-                replay_plies = min(AUTO_ANALYSIS_REPLAY_PLIES_MAX,
-                                   max(AUTO_ANALYSIS_REPLAY_PLIES_MIN,
-                                       replay_plies))
+                time_ms = int(v['auto_time_k'])
+                replay_plies = int(v['auto_plies_k'])
                 try:
                     eng_file, eng_path = self.get_engine_file(engine_id_name)
                 except Exception:
@@ -6534,13 +6633,8 @@ class EasyChessGui:
             # Idle setup, Set User time control
             if button == 'User::tc_k':
                 win_title = 'Settings/Time/User'
-                layout = [
-                    [sg.T('Base time (minute)', size=(16, 1)),
-                     sg.Input(self.human_base_time_ms/60/1000,
-                              key='base_time_k', size=(8, 1))],
-                    [sg.T('Increment (second)', size=(16, 1)),
-                     sg.Input(self.human_inc_time_ms/1000, key='inc_time_k',
-                              size=(8, 1))],
+                layout = self.time_control_rows(
+                    self.human_base_time_ms, self.human_inc_time_ms) + [
                     [sg.T('Period moves', size=(16, 1), visible=False),
                      sg.Input(self.human_period_moves, key='period_moves_k',
                               size=(8, 1), visible=False)],
@@ -6561,8 +6655,10 @@ class EasyChessGui:
                     if e == 'Cancel':
                         break
                     if e == 'OK':
-                        base_time_ms = int(1000 * 60 * float(v['base_time_k']))
-                        inc_time_ms = int(1000 * float(v['inc_time_k']))
+                        tc_times = self.read_time_control(v, win_title)
+                        if tc_times is None:
+                            continue
+                        base_time_ms, inc_time_ms = tc_times
                         period_moves = int(v['period_moves_k'])
 
                         tc_type = 'fischer'
@@ -6583,14 +6679,8 @@ class EasyChessGui:
             # Idle setup, Set engine time control
             if button == 'Engine::tc_k':
                 win_title = 'Settings/Time/Engine'
-                layout = [
-                    [sg.T('Base time (minute)', size=(16, 1)),
-                     sg.Input(self.engine_base_time_ms / 60 / 1000,
-                              key='base_time_k', size=(8, 1))],
-                    [sg.T('Increment (second)', size=(16, 1)),
-                     sg.Input(self.engine_inc_time_ms / 1000,
-                              key='inc_time_k',
-                              size=(8, 1))],
+                layout = self.time_control_rows(
+                    self.engine_base_time_ms, self.engine_inc_time_ms) + [
                     [sg.T('Period moves', size=(16, 1), visible=False),
                      sg.Input(self.engine_period_moves,
                               key='period_moves_k', size=(8, 1),
@@ -6616,9 +6706,10 @@ class EasyChessGui:
                     if e == 'Cancel':
                         break
                     if e == 'OK':
-                        base_time_ms = int(
-                            1000 * 60 * float(v['base_time_k']))
-                        inc_time_ms = int(1000 * float(v['inc_time_k']))
+                        tc_times = self.read_time_control(v, win_title)
+                        if tc_times is None:
+                            continue
+                        base_time_ms, inc_time_ms = tc_times
                         period_moves = int(v['period_moves_k'])
 
                         tc_type = 'fischer'
@@ -6984,6 +7075,11 @@ class EasyChessGui:
                                 is_cancel_modify_win = True
                                 break
                             if e1 == 'OK':
+                                # Keep the window open on a bad number.
+                                if not self.check_spin_options(
+                                        v1, opt_meta, button_title):
+                                    continue
+
                                 engine_id_name = v1['string_name_k']
                                 ret_opt_name = [
                                     {n: val} for n, val in
@@ -7110,7 +7206,7 @@ class EasyChessGui:
 
             # Idle setup
             if button == 'Set Depth':
-                self.set_depth_limit()
+                self.set_depth_limit(window)
                 break
 
             # Idle setup, Allow user to change book settings
@@ -7126,8 +7222,10 @@ class EasyChessGui:
                         [sg.T('Book File', size=(8, 1)),
                          sg.T(self.gui_book_file, size=(36, 1), relief='sunken')],
                         [sg.T('Max Ply', size=(8, 1)),
-                         sg.Spin([t for t in range(1, 33, 1)],
+                         sg.Spin(choices_with(range(1, MAX_BOOK_PLY + 1),
+                                              self.max_book_ply),
                                  initial_value=self.max_book_ply,
+                                 readonly=True,
                                  size=(6, 1), key='book_ply_k')],
                         [sg.CBox('Use book', key='use_gui_book_k',
                                  default=self.is_use_gui_book)],
@@ -7194,7 +7292,10 @@ class EasyChessGui:
                                      '({} to {}).'.format(
                                          REVIEW_ANALYSIS_TIME_MIN,
                                          REVIEW_ANALYSIS_TIME_MAX)),
-                     sg.Input(default_text=str(self.review_analysis_time_sec),
+                     sg.Combo(choices_with(TIME_CHOICES_SEC,
+                                           self.review_analysis_time_sec),
+                              default_value=self.review_analysis_time_sec,
+                              readonly=True,
                               key='review_analysis_time_k', size=(6, 1))],
                     [sg.Text('Review threat time (sec)', size=(24, 1),
                              tooltip='Maximum time the Review threat engine\n' +
@@ -7202,7 +7303,10 @@ class EasyChessGui:
                                      '({} to {}).'.format(
                                          REVIEW_ANALYSIS_TIME_MIN,
                                          REVIEW_ANALYSIS_TIME_MAX)),
-                     sg.Input(default_text=str(self.review_threat_time_sec),
+                     sg.Combo(choices_with(TIME_CHOICES_SEC,
+                                           self.review_threat_time_sec),
+                              default_value=self.review_threat_time_sec,
+                              readonly=True,
                               key='review_threat_time_k', size=(6, 1))],
                     [sg.OK(), sg.Cancel()],
                 ]
@@ -7218,12 +7322,10 @@ class EasyChessGui:
                     if e == 'OK':
                         self.is_save_time_left = v['save_time_left_k']
                         self.is_time_forfeit_enabled = v['time_forfeit_k']
-                        self.review_analysis_time_sec = self._read_review_time(
-                            v['review_analysis_time_k'],
-                            self.review_analysis_time_sec)
-                        self.review_threat_time_sec = self._read_review_time(
-                            v['review_threat_time_k'],
-                            self.review_threat_time_sec)
+                        self.review_analysis_time_sec = int(
+                            v['review_analysis_time_k'])
+                        self.review_threat_time_sec = int(
+                            v['review_threat_time_k'])
                         self.save_settings()
                         break
 
