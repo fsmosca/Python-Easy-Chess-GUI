@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.27.0'
+APP_VERSION = 'v2.28.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -629,9 +629,31 @@ class Timer:
         self.period_moves = period_moves
         self.elapse = 0
         self.init_base_time = self.base
+        # time.perf_counter() at the start of the turn being timed, or None
+        # while this side's clock is not running.
+        self._started_at = None
+
+    def start(self) -> None:
+        """Start timing the current turn; no effect if already running."""
+        if self._started_at is None:
+            self._started_at = time.perf_counter()
+
+    def tick(self) -> int:
+        """Set ``elapse`` to the real time (ms) since start() and return it.
+
+        The clock follows real time, not the number of GUI loop passes, so
+        it keeps running while a popup or another dialog has the focus.
+        """
+        if self._started_at is not None:
+            self.elapse = int(
+                (time.perf_counter() - self._started_at) * 1000)
+        return self.elapse
 
     def update_base(self) -> None:
-        """Updates base time after every move."""
+        """Updates base time after every move and stops the clock."""
+        self.tick()
+        self._started_at = None
+
         if self.tc_type == 'delay':
             self.base += min(0, self.inc - self.elapse)
         elif self.tc_type == 'fischer':
@@ -4122,15 +4144,23 @@ class EasyChessGui:
                 while True:
                     button, value = window.Read(timeout=100)
 
+                    # The user has just moved: leave before touching the
+                    # clock, or it would start again on the engine's turn.
+                    if not is_human_stm:
+                        break
+
                     # The clock only runs once the game has started.
                     if is_game_started:
+                        # The turn is timed in real time from its first
+                        # pass here; start() does nothing on later passes.
+                        human_timer.start()
+
                         # Update elapse box in m:s format
-                        elapse_str = self.get_time_mm_ss_ms(human_timer.elapse)
+                        elapse_str = self.get_time_mm_ss_ms(human_timer.tick())
                         k = 'w_elapse_k'
                         if not self.is_user_white:
                             k = 'b_elapse_k'
                         window.Element(k).Update(elapse_str)
-                        human_timer.elapse += 100
 
                         # Check if human has run out of time
                         if (self.is_time_forfeit_enabled and
@@ -4142,9 +4172,6 @@ class EasyChessGui:
                                 icon=ico_path[platform]['pecg'])
                             is_user_time_forfeit = True
                             break
-
-                    if not is_human_stm:
-                        break
 
                     # Mode: Play, Stm: User, Run adviser engine
                     if button == 'Start::right_adviser_k':
@@ -4179,6 +4206,12 @@ class EasyChessGui:
 
                         while True:
                             button, value = window.Read(timeout=10)
+
+                            # The user's clock keeps running (and showing)
+                            # while the adviser is thinking.
+                            if is_game_started and button is not None:
+                                window.Element(k).Update(
+                                    self.get_time_mm_ss_ms(human_timer.tick()))
 
                             if button == 'Stop::right_adviser_k':
                                 search.stop()
@@ -4637,6 +4670,7 @@ class EasyChessGui:
                     search.get_board(board)
                     search.daemon = True
                     search.start()
+                    engine_timer.start()
                     window.find_element('_gamestatus_').Update(
                             'Mode     Play, Engine is thinking ...')
 
@@ -4649,12 +4683,11 @@ class EasyChessGui:
                             sys.exit(0)  # the engine is run on daemon threads so it will quit as well
 
                         # Update elapse box in m:s format
-                        elapse_str = self.get_time_mm_ss_ms(engine_timer.elapse)
+                        elapse_str = self.get_time_mm_ss_ms(engine_timer.tick())
                         k = 'b_elapse_k'
                         if not self.is_user_white:
                             k = 'w_elapse_k'
                         window.Element(k).Update(elapse_str)
-                        engine_timer.elapse += 100
 
                         # Hide/Unhide engine searching info while engine is thinking
                         if button == 'Show::right_search_info_k':
