@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.28.0'
+APP_VERSION = 'v2.29.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -2074,6 +2074,20 @@ class EasyChessGui:
         return w
 
     def delete_player(self, name, pgn, que):
+        """Delete the games of player ``name`` from pgn (worker thread).
+
+        Posts progress lines to que and finally 'Done', or 'Failed' when
+        anything goes wrong (the reason is logged), so the dialog waiting on
+        que always gets an answer.
+        """
+        try:
+            self._delete_player(name, pgn, que)
+            que.put('Done')
+        except Exception:
+            logging.exception('Failed to delete player %s from %s', name, pgn)
+            que.put('Failed')
+
+    def _delete_player(self, name, pgn, que):
         """
         Delete games of player name in pgn.
 
@@ -2108,8 +2122,9 @@ class EasyChessGui:
         gcnt = 0
 
         # read pgn and save each game if player name to be deleted is not in
-        # the game, either white or black.
-        with open(output_path, 'a', encoding=encoding) as f:
+        # the game, either white or black. The output is written from
+        # scratch so a leftover from a failed attempt is never appended to.
+        with open(output_path, 'w', encoding=encoding) as f:
             with open(pgn_path, encoding=encoding) as h:
                 game = chess.pgn.read_game(h)
                 while game:
@@ -2133,29 +2148,33 @@ class EasyChessGui:
             output_path.rename(pgn_path)
             logging.info('Rename output to orig pgn file')
 
-        que.put('Done')
-
     def get_players(self, pgn, q):
+        """Post [player names, number of games] of a PGN file to q.
+
+        Posts None when the file cannot be read (the reason is logged), so
+        the dialog waiting on q always gets an answer.
+        """
         logging.info('Enters get_players()')
-        players = []
-        games = 0
-        with open(pgn, encoding=pgn_file_encoding(pgn)) as h:
-            while True:
-                headers = chess.pgn.read_headers(h)
-                if headers is None:
-                    break
+        try:
+            players = []
+            games = 0
+            with open(pgn, encoding=pgn_file_encoding(pgn)) as h:
+                while True:
+                    headers = chess.pgn.read_headers(h)
+                    if headers is None:
+                        break
 
-                wp = headers['White']
-                bp = headers['Black']
+                    wp = headers['White']
+                    bp = headers['Black']
 
-                players.append(wp)
-                players.append(bp)
-                games += 1
+                    players.append(wp)
+                    players.append(bp)
+                    games += 1
 
-        p = list(set(players))
-        ret = [p, games]
-
-        q.put(ret)
+            q.put([list(set(players)), games])
+        except Exception:
+            logging.exception('Failed to read players from %s', pgn)
+            q.put(None)
 
     def get_engine_id_name(self, path_and_file, q):
         """ Returns id name of uci engine """
@@ -6622,6 +6641,11 @@ class EasyChessGui:
                             )
                             break
 
+                        if not os.path.isfile(pgn):
+                            w.Element('status_k').Update(
+                                'Status: PGN file not found.')
+                            continue
+
                         t1 = time.perf_counter()
                         que = queue.Queue()
                         t = threading.Thread(
@@ -6630,21 +6654,28 @@ class EasyChessGui:
                             daemon=True
                         )
                         t.start()
-                        msg = None
+                        w.Element('status_k').Update(
+                            'Display Players: processing ...')
                         while True:
                             e1, v1 = w.Read(timeout=100)
-                            w.Element('status_k').Update(
-                                'Display Players: processing ...')
                             try:
                                 msg = que.get_nowait()
-                                elapse = int(time.perf_counter() - t1)
-                                w.Element('status_k').Update(
-                                    'Players are displayed. Done! in ' +
-                                    str(elapse) + 's')
                                 break
-                            except Exception:
+                            except queue.Empty:
                                 continue
                         t.join()
+
+                        # None: the worker could not read the file.
+                        if msg is None:
+                            w.Element('status_k').Update(
+                                'Status: Cannot read the PGN file, '
+                                'see pecg_log.txt.')
+                            continue
+
+                        elapse = int(time.perf_counter() - t1)
+                        w.Element('status_k').Update(
+                            'Players are displayed. Done! in ' +
+                            str(elapse) + 's')
                         player_list = msg[0]
                         sum_games = msg[1]
                         w.Element('player_k').Update(sorted(player_list))
@@ -6663,6 +6694,11 @@ class EasyChessGui:
                             logging.exception('Failed to get player.')
                             break
 
+                        if not os.path.isfile(v['pgn_k']):
+                            w.Element('status_k').Update(
+                                'Status: PGN file not found.')
+                            continue
+
                         t1 = time.perf_counter()
                         que = queue.Queue()
                         t = threading.Thread(
@@ -6671,25 +6707,34 @@ class EasyChessGui:
                             daemon=True
                         )
                         t.start()
+                        w.Element('status_k').Update(
+                            'Status: Delete: processing ...')
                         msg = None
-                        while True:
+                        while msg not in ('Done', 'Failed'):
                             e1, v1 = w.Read(timeout=100)
-                            w.Element('status_k').Update(
-                                'Status: Delete: processing ...')
-                            try:
-                                msg = que.get_nowait()
-                                if msg == 'Done':
-                                    elapse = int(time.perf_counter() - t1)
-                                    w.Element('status_k').Update(
-                                        player_name + ' was deleted. Done! '
-                                        'in ' + str(elapse) + 's')
+                            # Take everything the worker has posted so far
+                            # and show only the latest progress line.
+                            progress = None
+                            while msg not in ('Done', 'Failed'):
+                                try:
+                                    msg = que.get_nowait()
+                                except queue.Empty:
                                     break
-                                else:
-                                    w.Element('status_k').Update(
-                                        msg + '/' + str(sum_games))
-                            except Exception:
-                                continue
+                                progress = msg
+                            if progress not in (None, 'Done', 'Failed'):
+                                w.Element('status_k').Update(
+                                    progress + '/' + str(sum_games))
                         t.join()
+
+                        if msg == 'Failed':
+                            w.Element('status_k').Update(
+                                'Status: Delete failed, see pecg_log.txt.')
+                            continue
+
+                        elapse = int(time.perf_counter() - t1)
+                        w.Element('status_k').Update(
+                            player_name + ' was deleted. Done! '
+                            'in ' + str(elapse) + 's')
 
                         # Update player list in listbox
                         player_list.remove(player_name)
