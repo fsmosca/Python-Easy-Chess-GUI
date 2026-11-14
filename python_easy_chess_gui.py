@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.25.0'
+APP_VERSION = 'v2.26.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -225,6 +225,29 @@ def choices_with(choices, current):
     standard choices.
     """
     return sorted(set(choices) | {current})
+
+
+# PGN files are written as UTF-8 on every platform. Without an explicit
+# encoding Windows uses its legacy code page, which cannot store most
+# non-English names and does not match what Review reads.
+PGN_ENCODING = 'utf-8'
+
+
+def pgn_file_encoding(path):
+    """Return the encoding to read (and rewrite) an existing PGN file with.
+
+    UTF-8 when the whole file decodes as UTF-8. Otherwise None, the system
+    default: older versions of this app, and some other tools, wrote PGN
+    in the system code page, and such a file must be rewritten the same
+    way to keep its names intact.
+    """
+    try:
+        with open(path, encoding=PGN_ENCODING) as f:
+            for _ in f:
+                pass
+    except UnicodeDecodeError:
+        return None
+    return PGN_ENCODING
 MANAGED_UCI_OPTIONS = ['ponder', 'uci_chess960', 'multipv', 'uci_analysemode', 'ownbook']
 # Engine role -> (active id-name attr, file attr, path attr, icon key, title).
 ROLE_META = {
@@ -2045,13 +2068,14 @@ class EasyChessGui:
         file = PurePath(pgn)
         pgn_file = file.name
 
-        # Create backup of orig
+        # Create backup of orig, byte for byte (no decoding involved).
         backup = pgn_file + '.backup'
         backup_path = Path(folder_path, backup)
-        backup_path.touch()
-        origfile_text = Path(pgn).read_text()
-        backup_path.write_text(origfile_text)
+        backup_path.write_bytes(pgn_path.read_bytes())
         logging.info(f'backup copy {backup_path} is successfully created.')
+
+        # Rewrite the file in the encoding it already uses.
+        encoding = pgn_file_encoding(pgn_path)
 
         # Define output file
         output = 'out_' + pgn_file
@@ -2063,8 +2087,8 @@ class EasyChessGui:
 
         # read pgn and save each game if player name to be deleted is not in
         # the game, either white or black.
-        with open(output_path, 'a') as f:
-            with open(pgn_path) as h:
+        with open(output_path, 'a', encoding=encoding) as f:
+            with open(pgn_path, encoding=encoding) as h:
                 game = chess.pgn.read_game(h)
                 while game:
                     gcnt += 1
@@ -2093,7 +2117,7 @@ class EasyChessGui:
         logging.info('Enters get_players()')
         players = []
         games = 0
-        with open(pgn) as h:
+        with open(pgn, encoding=pgn_file_encoding(pgn)) as h:
             while True:
                 headers = chess.pgn.read_headers(h)
                 if headers is None:
@@ -4253,21 +4277,24 @@ class EasyChessGui:
 
                     if button == 'Save to My Games::save_game_k':
                         logging.info('Saving game manually')
-                        with open(self.my_games, mode='a+') as f:
+                        with open(self.my_games, mode='a+',
+                                  encoding=PGN_ENCODING) as f:
                             self.game.headers['Event'] = 'My Games'
                             f.write('{}\n\n'.format(self.game))
                         break
 
                     # Mode: Play, Stm: user
                     if button == 'Save to White Repertoire':
-                        with open(self.repertoire_file['white'], mode='a+') as f:
+                        with open(self.repertoire_file['white'], mode='a+',
+                                  encoding=PGN_ENCODING) as f:
                             self.game.headers['Event'] = 'White Repertoire'
                             f.write('{}\n\n'.format(self.game))
                         break
 
                     # Mode: Play, Stm: user
                     if button == 'Save to Black Repertoire':
-                        with open(self.repertoire_file['black'], mode='a+') as f:
+                        with open(self.repertoire_file['black'], mode='a+',
+                                  encoding=PGN_ENCODING) as f:
                             self.game.headers['Event'] = 'Black Repertoire'
                             f.write('{}\n\n'.format(self.game))
                         break
@@ -4888,7 +4915,8 @@ class EasyChessGui:
 
     def save_game(self):
         """ Save game in append mode """
-        with open(self.pecg_auto_save_game, mode='a+') as f:
+        with open(self.pecg_auto_save_game, mode='a+',
+                  encoding=PGN_ENCODING) as f:
             f.write('{}\n\n'.format(self.game))
 
     def load_pgn_games(self, pgn, max_games=REVIEW_MAX_DISPLAY_GAMES):
