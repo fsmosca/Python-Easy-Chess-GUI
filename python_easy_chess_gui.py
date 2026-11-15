@@ -72,13 +72,13 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.36.0'
+APP_VERSION = 'v2.37.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
 REVIEW_ANALYSIS_PV_MOVES = 7
 REVIEW_NAV_DEBOUNCE_SEC = 0.3
-REVIEW_MOVE_LIST_HEIGHT = 8   # reduced from 11 to make room for the threat panel
+REVIEW_MOVE_LIST_HEIGHT = 4   # lines, until its panel is made taller
 REVIEW_ANALYSIS_BOX_HEIGHT = 3
 REVIEW_THREAT_BOX_HEIGHT = 1
 REVIEW_THREAT_PV_PLIES = 5
@@ -169,6 +169,9 @@ elif platform == 'darwin':
 else:
     FONT_BASE = (FONT_NAME, 9)
     FONT_SMALL = (FONT_NAME, 8)
+# Title bar of a panel.
+FONT_PANEL_TITLE = (FONT_NAME, FONT_BASE[1], 'bold')
+FONT_NAV_ICON = (FONT_NAME, FONT_BASE[1] + 4, 'bold')   # Review nav bar
 
 # Small font for the board coordinate labels drawn on the canvas.
 # Board edge coordinate labels use FONT_NAME at a size scaled with the
@@ -290,9 +293,116 @@ def fit_square_px(square_px, min_px=BOARD_SQUARE_MIN_PX):
                  default=BOARD_SQUARE_MAX_PX)
     fitting = [s for s in BOARD_SQUARE_SIZES if lowest <= s <= square_px]
     return fitting[-1] if fitting else lowest
-# Fallback vertical window space that is not board (menubar, under-board
-# status bar, margins) when it cannot be measured from the live window.
-BOARD_V_OVERHEAD_PX = 90
+
+
+# A narrow strip on the right of the board canvas holds the turn marker:
+# one dot level with each player's back rank, green for the side to move.
+TURN_MARKER_PX = 16
+TURN_MARKER_ON = '#2e9e3f'
+TURN_MARKER_OFF = '#9aa0a6'
+
+# Panels of the Play window, in their default order in the right zone.
+PLAY_PANEL_KEYS = ('play_players_panel_k', 'play_moves_panel_k',
+                   'play_comment_panel_k', 'play_books_panel_k',
+                   'play_engine_panel_k')
+# Panel key -> name shown in its title bar and in the View menu.
+PLAY_PANEL_TITLES = {
+    'play_players_panel_k': 'Players',
+    'play_moves_panel_k': 'Move list',
+    'play_comment_panel_k': 'Comment',
+    'play_books_panel_k': 'Opening books',
+    'play_engine_panel_k': 'Engine',
+}
+# Ready-made arrangements offered in the View menu: name -> where the
+# panels go around the board. 'Board Left' is the default.
+PLAY_ARRANGEMENTS = {
+    'Board Left': {'right': list(PLAY_PANEL_KEYS)},
+    'Board Centre': {'left': ['play_players_panel_k', 'play_engine_panel_k'],
+                     'right': ['play_moves_panel_k', 'play_comment_panel_k',
+                               'play_books_panel_k']},
+    'Board Right': {'left': list(PLAY_PANEL_KEYS)},
+    'Engine Below Board': {'right': ['play_players_panel_k',
+                                     'play_moves_panel_k',
+                                     'play_comment_panel_k',
+                                     'play_books_panel_k'],
+                           'bottom': ['play_engine_panel_k']},
+}
+
+# Panels of the Review window, in their default order.
+REVIEW_PANEL_KEYS = ('review_game_panel_k', 'review_books_panel_k',
+                     'review_moves_panel_k', 'review_threat_panel_k',
+                     'review_analysis_panel_k')
+REVIEW_PANEL_TITLES = {
+    'review_game_panel_k': 'Game details',
+    'review_books_panel_k': 'Book moves',
+    'review_moves_panel_k': 'Move list',
+    'review_threat_panel_k': 'Threat',
+    'review_analysis_panel_k': 'Analysis',
+}
+REVIEW_ARRANGEMENTS = {
+    'Board Left': {'right': list(REVIEW_PANEL_KEYS)},
+    'Board Centre': {'left': ['review_game_panel_k', 'review_books_panel_k',
+                              'review_threat_panel_k'],
+                     'right': ['review_moves_panel_k',
+                               'review_analysis_panel_k']},
+    'Board Right': {'left': list(REVIEW_PANEL_KEYS)},
+    'Analysis Below Board': {'right': ['review_game_panel_k',
+                                       'review_books_panel_k',
+                                       'review_moves_panel_k',
+                                       'review_threat_panel_k'],
+                             'bottom': ['review_analysis_panel_k']},
+}
+
+# What differs between the panel layouts of the two windows: the key of
+# the board box, what is fixed under the board inside that box (None:
+# nothing), the panels, the ready-made arrangements, the panels that take
+# the spare height of their zone, and the name the layout is saved under
+# in the settings file.
+PANEL_LAYOUTS = {
+    'play': {'board': 'play_board_box_k', 'below_board': None,
+             'panels': PLAY_PANEL_KEYS,
+             'titles': PLAY_PANEL_TITLES, 'arrangements': PLAY_ARRANGEMENTS,
+             'stretch': ('play_moves_panel_k',), 'setting': 'play_layout'},
+    'review': {'board': 'review_board_box_k',
+               'below_board': 'review_nav_bar_k',
+               'panels': REVIEW_PANEL_KEYS,
+               'titles': REVIEW_PANEL_TITLES,
+               'arrangements': REVIEW_ARRANGEMENTS,
+               'stretch': ('review_moves_panel_k',),
+               'setting': 'review_layout'},
+}
+# Buttons of the bar under the Review board: (event key, icon, tooltip).
+REVIEW_NAV_BUTTONS = (
+    ('First', '|\u25c4', 'First position (Home)'),
+    ('Previous', '\u25c4', 'Previous move (Left arrow)'),
+    ('Next', '\u25ba', 'Next move (Right arrow)'),
+    ('Last', '\u25ba|', 'Last position (End)'),
+    ('Flip', '\u21c5', 'Flip the board'),
+)
+# Name of the arrangement a window starts with (in every mode).
+DEFAULT_ARRANGEMENT = 'Board Left'
+PANEL_ZONE_LABELS = {'Left of Board': 'left', 'Right of Board': 'right',
+                     'Below Board': 'bottom'}
+
+
+def build_view_menu(mode):
+    """The View menu of the 'play' or 'review' window: panel arrangement.
+
+    Every item carries '::layout_k:<action>:...' so the event loops can
+    pass it to handle_layout_event(). Usable at any time, like Board ->
+    Flip.
+    """
+    spec = PANEL_LAYOUTS[mode]
+    move_items = []
+    for key in spec['panels']:
+        move_items += [spec['titles'][key],
+                       ['{}::layout_k:move:{}:{}'.format(label, zone, key)
+                        for label, zone in PANEL_ZONE_LABELS.items()]]
+    return ['&View', ['{}::layout_k:preset:{}'.format(name, name)
+                      for name in spec['arrangements']]
+            + ['---', 'Move Panel', move_items,
+               '---', 'Reset Layout::layout_k:reset']]
+PANEL_BORDER_COLOR = '#9aa0a6'
 
 
 BLANK = 0  # piece names
@@ -423,7 +533,8 @@ HELP_TOPICS = {
         'heading to sort. Use Game -> Select Game to change games later.'),
     'help_review_nav': (
         'Navigate Moves',
-        'Use the First, Previous, Next and Last buttons below the board,\n'
+        'Use the arrow buttons under the board (first, previous, next,\n'
+        'last; the fifth button flips the board),\n'
         'the Left / Right arrow keys (Home / End for first / last), or\n'
         'click a move in the move list to jump to that position.'),
     'help_review_engine': (
@@ -458,6 +569,19 @@ HELP_TOPICS = {
         'drag-resize them and the board switches to the largest of\n'
         'these sizes that fits, while the side panels absorb the\n'
         'leftover space. Like Flip, resizing works at any time.'),
+    'help_board_layout': (
+        'Panels and Layout',
+        'The Play and Review windows are made of panels around the board.\n\n'
+        'Move a panel: drag its title bar to the left of the board, to\n'
+        'the right or below it (a green bar shows where it will land),\n'
+        'or use View -> Move Panel. Under the board, drop it on the top\n'
+        'or bottom edge of another panel to stack them, or on its middle\n'
+        'to put them side by side.\n'
+        'Resize: drag the divider between two panels, or between the\n'
+        'board and the panels.\n'
+        'View also has ready-made arrangements and Reset Layout.\n\n'
+        'Each mode keeps its own arrangement; it is saved and restored\n'
+        'at the next start.'),
     'help_board_color': (
         'Board Colors and Themes',
         'Board -> Color changes the square colors and Board -> Theme\n'
@@ -487,6 +611,7 @@ HELP_REVIEW_MENU = ['Review', ['Open a Game::help_review_open',
                                'Auto-Analyze Game::help_review_auto']]
 HELP_BOARD_MENU = ['Board', ['Flip::help_board_flip',
                              'Size::help_board_size',
+                             'Panels and Layout::help_board_layout',
                              'Colors and Themes::help_board_color']]
 
 
@@ -591,6 +716,7 @@ def build_play_menu(in_game=False):
                                        'Green::board_color_k',
                                        'Gray::board_color_k'],
                     g(idle, 'Theme'), list(GUI_THEME)]],
+        build_view_menu('play'),
         ['&Settings', [g(idle, 'General::settings_game_k'),
                        g(idle, 'Time'), [g(idle, 'User::tc_k'),
                                          g(idle, 'Engine::tc_k')],
@@ -624,6 +750,7 @@ def build_review_menu(analyzing=False):
         ['Boar&d', ['Flip',
                     'Size', ['{}::board_size_k'.format(label)
                              for label in BOARD_SIZE_LABELS]]],
+        build_view_menu('review'),
         make_help_menu(HELP_REVIEW_MENU, HELP_ENGINE_MENU, HELP_BOARD_MENU),
     ]
 
@@ -1607,6 +1734,798 @@ class AutoAnalyzeGame(threading.Thread):
                     logging.exception('Failed to quit auto-analysis engine.')
 
 
+class PanelLayout:
+    """Places a window's panels around the board, with draggable dividers.
+
+    The board box and every panel are ordinary FreeSimpleGUI columns, all
+    built in one layout row so their Tk frames share one parent. After the
+    window is finalized this class takes their placement over with Tk
+    PanedWindow widgets: a horizontal one holding [left zone | board |
+    right zone], a vertical one per side zone stacking that zone's panels,
+    and a bottom zone under the board. The bottom zone is made of rows,
+    one under the other, each holding one or more panels side by side
+    (``bottom_rows`` is the number of panels in each row).
+
+    Panels are resized by dragging a divider and moved by dragging their
+    title bar onto another zone (or by calling arrange()), all in the live
+    window without rebuilding it.
+
+    The layout owns the sizes: the board box does not follow the size of
+    the board canvas. ``on_resize(room)`` is called when the room for the
+    board may have changed, so the owner can choose a board size with
+    board_space() and set_board_box(): ``room`` is None when the window
+    was resized, or the (width, height) a divider next to the board left
+    for it when the user let go of that divider (with ``grow_only`` True
+    if that should only ever make the board larger).
+    ``on_change()`` is called after the user moved a panel or a divider,
+    so the owner can save state().
+
+    Heights with panels under the board: the board box is as tall as the
+    board and the bottom zone takes the rest of the window. Dragging the
+    divider between them gives the bottom zone the height it is dragged
+    to; see _bottom_dragged().
+
+    The board box may hold something of a fixed height under the board
+    (the navigation bar of the Review window). ``board_extra_px`` is that
+    height: the box is always that much taller than the board, and the
+    bottom zone comes under it.
+    """
+
+    ZONES = ('left', 'right', 'bottom')
+    SASH_PX = 6
+    DEFAULT_ZONE_PX = 380      # width of a side zone until it is resized
+    BOTTOM_MIN_PX = 60         # least height of the zone under the board
+    DRAG_START_PX = 8          # pointer travel before a title-bar drag starts
+
+    def __init__(self, window, board_key, panel_keys, on_resize, on_change,
+                 stretch_panels=(), divider_color='#c8ccd2',
+                 marker_color='#2e9e3f', min_zone_px=300, board_extra_px=0):
+        self.window = window
+        self.root = window.TKroot
+        self.board_box = window[board_key].Widget
+        self.row = self.board_box.master      # Tk frame of the layout row
+        self.panel_keys = list(panel_keys)
+        self.on_resize = on_resize
+        self.on_change = on_change
+        self.stretch_panels = set(stretch_panels)
+        self.min_zone_px = min_zone_px
+        self.extra_px = board_extra_px        # in the box, under the board
+        self.arrangement = {zone: [] for zone in self.ZONES}
+        self.bottom_rows = []                 # panels per row under the board
+        self._row_paned = []                  # a paned window per such row
+        self._arranged = False
+        self._resize_after_id = None
+        self._drag = None                     # state of a title-bar drag
+        # Set by dragging the divider under the board: the height the
+        # user gave the bottom zone (None: what its panels need) and,
+        # where the window could not follow, the height that left for the
+        # board box (None: just what it holds). Both only apply while
+        # the window is maximized, or not, as it was at the time.
+        self.bottom_px = None
+        self.box_px = None
+        self.bottom_maximized = False
+        self._board_size = (0, 0)             # as given to set_board_box()
+        self._bottom_press = None             # heights when a drag began
+
+        options = dict(sashwidth=self.SASH_PX, sashpad=0, sashrelief='flat',
+                       bd=0, opaqueresize=True, background=divider_color)
+        self._paned_options = options
+        self.main = tk.PanedWindow(self.row, orient='horizontal', **options)
+        self.centre = tk.PanedWindow(self.row, orient='vertical', **options)
+        # The divider under the board resizes the window rather than the
+        # board, so while it is dragged only a line follows the pointer.
+        try:
+            self.centre.configure(opaqueresize=False,
+                                  proxybackground=marker_color,
+                                  proxyborderwidth=0)
+        except tk.TclError:
+            pass    # older Tk without a styled drag line: resize live
+        self.zone = {
+            'left': tk.PanedWindow(self.row, orient='vertical', **options),
+            'right': tk.PanedWindow(self.row, orient='vertical', **options),
+            # The rows under the board, each a paned window of its own.
+            'bottom': tk.PanedWindow(self.row, orient='vertical',
+                                     **options),
+        }
+        # Shows where a dragged panel would land.
+        self.drop_marker = tk.Frame(self.row, background=marker_color)
+
+        # The board box keeps the size it is given instead of shrinking
+        # or growing with the canvas inside it.
+        self.board_box.pack_propagate(False)
+        self.main.bind('<Configure>', self._main_resized, add='+')
+        self.main.bind('<ButtonRelease-1>',
+                       lambda e: self._divider_released(True), add='+')
+        self.centre.bind('<ButtonPress-1>', self._bottom_pressed, add='+')
+        self.centre.bind('<ButtonRelease-1>',
+                         lambda e: self.root.after(1, self._bottom_dragged),
+                         add='+')
+        for paned in self.zone.values():
+            paned.bind('<ButtonRelease-1>',
+                       lambda e: self._divider_released(False), add='+')
+
+        # A panel is moved by dragging its title bar.
+        for key in self.panel_keys:
+            title = window[key + '_title'].Widget
+            title.configure(cursor='fleur')
+            title.bind('<ButtonPress-1>',
+                       lambda e, k=key: self._drag_press(e, k), add='+')
+            title.bind('<B1-Motion>', self._drag_motion, add='+')
+            title.bind('<ButtonRelease-1>', self._drag_release, add='+')
+
+        # Let the row holding everything follow the window size.
+        self.row.pack_configure(fill='both', expand=True)
+
+    # ----- arrangement -----------------------------------------------------
+    def clean(self, arrangement):
+        """Return arrangement with every panel exactly once: unknown names
+        are dropped and missing panels are added to the right zone."""
+        result = {zone: [] for zone in self.ZONES}
+        seen = set()
+        if isinstance(arrangement, dict):
+            for zone in self.ZONES:
+                keys = arrangement.get(zone, [])
+                for key in keys if isinstance(keys, list) else []:
+                    if key in self.panel_keys and key not in seen:
+                        result[zone].append(key)
+                        seen.add(key)
+        result['right'] += [k for k in self.panel_keys if k not in seen]
+        return result
+
+    @staticmethod
+    def clean_rows(arrangement, count):
+        """Return the number of panels in each row under the board for
+        ``count`` panels there: arrangement['bottom_rows'] if it fits,
+        otherwise one panel per row."""
+        rows = arrangement.get('bottom_rows') \
+            if isinstance(arrangement, dict) else None
+        if isinstance(rows, list) and sum(
+                n for n in rows if isinstance(n, int)
+                and not isinstance(n, bool) and n > 0) == count \
+                and all(isinstance(n, int) and not isinstance(n, bool)
+                        and n > 0 for n in rows):
+            return list(rows)
+        return [1] * count
+
+    @staticmethod
+    def _split_rows(keys, rows):
+        """The panels under the board as a list of rows."""
+        result, start = [], 0
+        for count in rows:
+            result.append(list(keys[start:start + count]))
+            start += count
+        return result
+
+    def bottom_row_lists(self):
+        """The panels under the board, row by row from the top."""
+        return self._split_rows(self.arrangement['bottom'], self.bottom_rows)
+
+    def _bottom_row_paned(self, index):
+        """The paned window of a row under the board (made when needed)."""
+        while len(self._row_paned) <= index:
+            paned = tk.PanedWindow(self.row, orient='horizontal',
+                                   **self._paned_options)
+            paned.bind('<ButtonRelease-1>',
+                       lambda e: self._divider_released(False), add='+')
+            self._row_paned.append(paned)
+        return self._row_paned[index]
+
+    def sizes(self):
+        """Current sizes in px: {'zones': {zone: width, or height for the
+        bottom zone}, 'panels': {key: height, or width in the bottom zone},
+        'rows': [height of each row under the board]}.
+        """
+        zones, panels = {}, {}
+        for zone in self.ZONES:
+            if not self.arrangement[zone]:
+                continue
+            across = zone == 'bottom'
+            paned = self.zone[zone]
+            zones[zone] = paned.winfo_height() if across \
+                else paned.winfo_width()
+            for key in self.arrangement[zone]:
+                widget = self.window[key].Widget
+                panels[key] = widget.winfo_width() if across \
+                    else widget.winfo_height()
+        rows = [self._row_paned[i].winfo_height()
+                for i in range(len(self.bottom_rows))]
+        return {'zones': zones, 'panels': panels, 'rows': rows}
+
+    def is_maximized(self):
+        """True if the window is maximized ('zoomed' on Windows and some
+        window managers, the '-zoomed' attribute elsewhere on Linux)."""
+        try:
+            if self.root.state() == 'zoomed':
+                return True
+        except tk.TclError:
+            pass
+        try:
+            return bool(self.root.wm_attributes('-zoomed'))
+        except tk.TclError:
+            return False
+
+    def can_size_window(self):
+        """True if the window is one whose size we may set."""
+        try:
+            return self.root.state() == 'normal' and not self.is_maximized()
+        except tk.TclError:
+            return False
+
+    def state(self):
+        """Everything needed to restore the layout later (JSON-friendly)."""
+        result = {'arrangement': {z: list(k) for z, k in
+                                  self.arrangement.items()}}
+        result['arrangement']['bottom_rows'] = list(self.bottom_rows)
+        result.update(self.sizes())
+        result['bottom_px'] = self.bottom_px
+        result['board_box_px'] = self.box_px
+        result['bottom_maximized'] = self.bottom_maximized
+        try:
+            result['maximized'] = self.is_maximized()
+            if not result['maximized']:
+                result['window'] = [self.root.winfo_width(),
+                                    self.root.winfo_height()]
+        except tk.TclError:
+            pass
+        return result
+
+    def arrange(self, arrangement, sizes=None, natural=False):
+        """Place the panels: {'left': [keys], 'right': [...], 'bottom': [...]}.
+
+        The panels under the board come one per row, unless the
+        arrangement also has 'bottom_rows': the number of panels in each
+        row, e.g. [1, 2] for one panel above two that are side by side.
+        Zones without panels are left out, so the board takes their place.
+        ``sizes`` (as returned by sizes()) restores saved sizes. Without
+        it a zone that stays keeps its size and a panel that stays in its
+        zone keeps its own, while a new zone gets the default width and a
+        moved panel its natural size - or, with ``natural``, everything
+        starts from the default sizes. Unless sizes are being restored,
+        the window is then resized to fit the new arrangement.
+        """
+        new = self.clean(arrangement)
+        new_rows = self.clean_rows(arrangement, len(new['bottom']))
+        new_row_lists = self._split_rows(new['bottom'], new_rows)
+        old = self.arrangement
+        old_row_lists = self.bottom_row_lists()
+        self.root.update_idletasks()
+        chrome = old_main_h = None
+        if self._arranged:
+            # Window space that is not ours: margins, menu, status bar.
+            chrome = (self.root.winfo_width() - self.main.winfo_width(),
+                      self.root.winfo_height() - self.main.winfo_height())
+            old_main_h = self.main.winfo_height()
+        kept = self.sizes() if self._arranged and not natural \
+            else {'zones': {}, 'panels': {}, 'rows': []}
+        old_zone_of = {k: z for z in self.ZONES for k in old[z]}
+        if sizes is None:
+            zone_px = dict(kept['zones'])
+            panel_px = {k: v for k, v in kept['panels'].items()
+                        if k in new[old_zone_of[k]]}
+            # Under the board a row that stays as it was keeps its height
+            # and the widths of its panels; other rows start afresh.
+            for row in old_row_lists:
+                if row not in new_row_lists:
+                    for key in row:
+                        panel_px.pop(key, None)
+            kept_row_px = {tuple(row): px for row, px in
+                           zip(old_row_lists, kept['rows'])}
+            row_px = [kept_row_px.get(tuple(row)) for row in new_row_lists]
+            # The board box goes back to the height of what it holds,
+            # and a bottom zone that is new forgets the height given to
+            # the old one.
+            self.box_px = None
+            if self._board_size[1]:
+                self.board_box.config(
+                    height=self._board_size[1] + self.extra_px)
+            if natural or not (old['bottom'] and new['bottom']) \
+                    or old_row_lists != new_row_lists:
+                self.bottom_px = None
+        else:
+            zone_px = dict(sizes.get('zones') or {})
+            panel_px = dict(sizes.get('panels') or {})
+            saved_rows = sizes.get('rows')
+            if not isinstance(saved_rows, list):
+                saved_rows = []
+            row_px = [saved_rows[i] if i < len(saved_rows) else None
+                      for i in range(len(new_row_lists))]
+
+            def height(name):
+                value = sizes.get(name)
+                return value if isinstance(value, int) \
+                    and not isinstance(value, bool) and value > 0 else None
+            self.bottom_px = height('bottom_px')
+            self.box_px = height('board_box_px')
+            self.bottom_maximized = sizes.get('bottom_maximized') is True
+
+        for paned in [self.main, self.centre] + list(self.zone.values()) \
+                + self._row_paned:
+            for child in paned.panes():
+                paned.forget(child)
+        self.main.pack_forget()
+        self.arrangement = new
+        self.bottom_rows = new_rows
+
+        def size_of(value):
+            return value if isinstance(value, int) \
+                and not isinstance(value, bool) and value > 0 else None
+
+        for zone in ('left', 'right'):
+            for key in new[zone]:
+                panel = self.window[key].Widget
+                panel.pack_forget()
+                options = dict(minsize=40,
+                               stretch='always' if key in self.stretch_panels
+                               else 'never')
+                if size_of(panel_px.get(key)):
+                    options['height'] = panel_px[key]
+                self.zone[zone].add(panel, **options)
+        # Under the board: one paned window per row, its panels side by
+        # side, and the rows stacked in the bottom zone.
+        for i, row in enumerate(new_row_lists):
+            paned = self._bottom_row_paned(i)
+            for key in row:
+                panel = self.window[key].Widget
+                panel.pack_forget()
+                options = dict(minsize=40, stretch='always')
+                if size_of(panel_px.get(key)):
+                    options['width'] = panel_px[key]
+                paned.add(panel, **options)
+            row_px[i] = size_of(row_px[i]) or max(
+                self.window[k].Widget.winfo_reqheight() for k in row)
+            self.zone['bottom'].add(paned, minsize=40, stretch='always',
+                                    height=row_px[i])
+
+        # With panels under the board, the board box is exactly as tall as
+        # the board and the bottom zone takes the rest of the height.
+        self.board_box.pack_forget()
+        # (Its small minimum lets the divider under it be dragged up
+        # freely; the board is made to fit again when it is let go.)
+        self.centre.add(self.board_box, minsize=self.BOTTOM_MIN_PX,
+                        stretch='never' if new['bottom'] else 'always')
+        bottom_px = 0
+        if new['bottom']:
+            # Rows that stay keep their height; new ones get what their
+            # panels need.
+            bottom_px = self.bottom_floor_px()
+            if sizes is None:
+                bottom_px = max(bottom_px, sum(row_px) + self.SASH_PX
+                                * (len(row_px) - 1))
+            elif isinstance(zone_px.get('bottom'), int):
+                bottom_px = max(bottom_px, zone_px['bottom'])
+            self.centre.add(self.zone['bottom'], stretch='always',
+                            minsize=self.BOTTOM_MIN_PX, height=bottom_px)
+
+        side_px = {}
+        for zone in ('left', 'right'):
+            if zone == 'right':
+                self.main.add(self.centre, stretch='never',
+                              minsize=8 * BOARD_SQUARE_MIN_PX
+                              + TURN_MARKER_PX)
+            if new[zone]:
+                side_px[zone] = zone_px.get(zone)
+                if not isinstance(side_px[zone], int) or side_px[zone] <= 0:
+                    side_px[zone] = self.DEFAULT_ZONE_PX
+                self.main.add(self.zone[zone], stretch='always',
+                              minsize=self.min_zone_px, width=side_px[zone])
+        self.main.pack(fill='both', expand=True)
+
+        # The paned windows were created after the panels, so they would
+        # cover them: raise everything they manage back above them.
+        self.centre.lift()
+        self.board_box.lift()
+        for zone in self.ZONES:
+            if new[zone]:
+                self.zone[zone].lift()
+                if zone == 'bottom':
+                    for paned in self._row_paned[:len(new_rows)]:
+                        paned.lift()
+                for key in new[zone]:
+                    self.window[key].Widget.lift()
+        self.root.update_idletasks()
+
+        if chrome is not None and sizes is None:
+            self._fit_window(chrome, side_px, bottom_px,
+                             None if natural else old_main_h)
+        if not self._arranged:
+            # Until now the window had the size its content asked for.
+            # Keep that size, but from here on the paned windows ask for
+            # nothing: otherwise a window made smaller than the panels'
+            # natural size would cut off the status bar and the margins
+            # instead of squeezing the panels.
+            try:
+                self.root.geometry('{}x{}'.format(
+                    min(self.root.winfo_reqwidth(),
+                        self.root.winfo_screenwidth() - 40),
+                    min(self.root.winfo_reqheight(),
+                        self.root.winfo_screenheight() - 100)))
+                self.main.configure(width=1, height=1)
+            except tk.TclError:
+                pass
+        self._arranged = True
+
+    def _fit_window(self, chrome, side_px, bottom_px, keep_height):
+        """Size the window around the board box and the zones as they
+        were just arranged. A paned window does not ask for room itself,
+        so the size is worked out here. ``keep_height`` is a height the
+        panel area should not go below (None: just what is needed)."""
+        try:
+            if not self.can_size_window():
+                return
+            width = int(self.board_box.cget('width'))
+            for px in side_px.values():
+                width += px + self.SASH_PX
+            height = int(self.board_box.cget('height'))
+            if bottom_px:
+                height += bottom_px + self.SASH_PX
+            for zone in side_px:
+                keys = self.arrangement[zone]
+                height = max(height, sum(
+                    self.window[k].Widget.winfo_reqheight() for k in keys)
+                    + self.SASH_PX * (len(keys) - 1))
+            if keep_height:
+                height = max(height, keep_height)
+            width = min(width + chrome[0], self.root.winfo_screenwidth() - 40)
+            height = min(height + chrome[1],
+                         self.root.winfo_screenheight() - 100)
+            self.root.geometry('{}x{}'.format(width, height))
+        except (tk.TclError, ValueError):
+            pass
+
+    # ----- the board box ---------------------------------------------------
+    def board_space(self):
+        """Return the (width, height) the board box could have at most:
+        what is left of the window when the side zones are at their
+        minimum width and the bottom zone at its least height. (The
+        bottom zone gets whatever height the board then leaves.)"""
+        self.root.update_idletasks()
+        width = self.main.winfo_width()
+        for zone in ('left', 'right'):
+            if self.arrangement[zone]:
+                width -= self.min_zone_px + self.SASH_PX
+        height = self.main.winfo_height() - self.extra_px
+        if self.arrangement['bottom']:
+            height -= self.bottom_floor_px() + self.SASH_PX
+        return width, height
+
+    def bottom_floor_px(self):
+        """Height the bottom zone keeps before the board gives way: the
+        height the user dragged it to, or else what its panels need."""
+        if self.bottom_px is None \
+                or self.bottom_maximized != self.is_maximized():
+            return self.bottom_natural_px()
+        return max(self.BOTTOM_MIN_PX, self.bottom_px)
+
+    def bottom_natural_px(self):
+        """Height the panels under the board need for their content."""
+        rows = self.bottom_row_lists()
+        return sum(max(self.window[k].Widget.winfo_reqheight() for k in row)
+                   for row in rows) + self.SASH_PX * max(0, len(rows) - 1)
+
+    def board_box_size(self):
+        """Current (width, height) of the board box."""
+        return self.board_box.winfo_width(), self.board_box.winfo_height()
+
+    def set_board_box(self, width, height):
+        """Make the board box fit a board of this size (and what is
+        fixed under it); the zones take the rest. (Above a bottom zone
+        the box can be taller than that: see _bottom_dragged.)"""
+        self._board_size = (width, height)
+        box_height = height + self.extra_px
+        if self.box_px is not None and self.arrangement['bottom'] \
+                and self.bottom_maximized == self.is_maximized():
+            room = self.main.winfo_height() - self.SASH_PX \
+                - self.bottom_floor_px()
+            box_height = max(box_height, min(self.box_px, room))
+        self.board_box.config(width=width, height=box_height)
+        try:
+            self.main.paneconfigure(self.centre, width=width)
+            if self.arrangement['bottom']:
+                self.centre.paneconfigure(self.board_box, height=box_height)
+        except tk.TclError:
+            pass    # not arranged yet
+
+    def resize_window_for_board_box(self, width, height):
+        """Resize the window so the box of a board of this size fits,
+        keeping the width of the side zones as it is. Call before
+        set_board_box().
+
+        A paned window does not ask for more room when one of its panes
+        grows, so the window size is set explicitly. A maximized window is
+        left alone, and the window never grows past the screen.
+        """
+        # A board size chosen outright: no spare height is kept under it.
+        self.box_px = None
+        try:
+            if not self.can_size_window():
+                return
+            self.root.update_idletasks()
+            grow_w = width - self.centre.winfo_width()
+            need_h = height + self.extra_px
+            if self.arrangement['bottom']:
+                need_h += self.zone['bottom'].winfo_height() + self.SASH_PX
+            grow_h = max(0, need_h - self.main.winfo_height())
+            if not grow_w and not grow_h:
+                return
+            new_w = min(self.root.winfo_width() + grow_w,
+                        self.root.winfo_screenwidth() - 40)
+            new_h = min(self.root.winfo_height() + grow_h,
+                        self.root.winfo_screenheight() - 100)
+            self.root.geometry('{}x{}'.format(new_w, new_h))
+        except tk.TclError:
+            pass
+
+    # ----- window and divider events ---------------------------------------
+    def _main_resized(self, event):
+        """The window changed size: report it once the resizing settles."""
+        if event.widget is not self.main:
+            return
+        if self._resize_after_id is not None:
+            try:
+                self.root.after_cancel(self._resize_after_id)
+            except tk.TclError:
+                pass
+        self._resize_after_id = self.root.after(80, self._report, None)
+
+    def _divider_released(self, beside_board):
+        """The user let go of a divider (beside the board, or in a zone)."""
+        if beside_board:
+            self.root.after(1, self._side_dragged)
+        else:
+            self.root.after(1, self.on_change)
+
+    def _side_dragged(self):
+        """The divider between the board and a side zone was moved:
+        report the room that leaves for the board."""
+        try:
+            width, height = self.board_box_size()
+            height -= self.extra_px
+            if self.arrangement['bottom']:
+                # Here the box is only as tall as the board, which may
+                # also use the height the panels under it can spare.
+                height = max(height, self.board_space()[1])
+        except tk.TclError:
+            return
+        self._report((width, height))
+
+    def _bottom_pressed(self, event):
+        """A drag of the divider under the board may begin: note the
+        heights of the bottom zone and the board box as they are."""
+        if self.arrangement['bottom']:
+            self._bottom_press = (self.zone['bottom'].winfo_height(),
+                                  self.board_box.winfo_height())
+
+    def _bottom_dragged(self):
+        """The user let go of the divider under the board.
+
+        The panels under the board get the height they were dragged to.
+        The board keeps its size: the window becomes taller or shorter
+        instead. Where the window cannot follow (it is maximized, or as
+        tall as the screen) the divider stays where it was dropped: a
+        board that no longer fits above it becomes smaller, and one that
+        got room for a larger size becomes larger.
+        """
+        press, self._bottom_press = self._bottom_press, None
+        try:
+            if press is None or not self.arrangement['bottom']:
+                return
+            self.root.update_idletasks()
+            wanted = self.zone['bottom'].winfo_height()
+            if abs(wanted - press[0]) < 2:
+                return                          # a click, not a drag
+            board_width, board_height = self._board_size
+            box_height = board_height + self.extra_px
+            main_height = new_main_height = self.main.winfo_height()
+            if self.can_size_window():
+                root_height = self.root.winfo_height()
+                new_root_height = min(
+                    root_height + box_height + self.SASH_PX + wanted
+                    - main_height, self.root.winfo_screenheight() - 100)
+                if new_root_height != root_height:
+                    self.root.geometry('{}x{}'.format(
+                        self.root.winfo_width(), new_root_height))
+                    new_main_height += new_root_height - root_height
+            room = new_main_height - self.SASH_PX - wanted
+            self.bottom_px = wanted
+            self.bottom_maximized = self.is_maximized()
+            if room == box_height:
+                self.box_px = None
+                self.set_board_box(board_width, board_height)
+            else:
+                # The window could not follow: the owner chooses the
+                # board for the room that is left, and saves.
+                self.box_px = room
+                self._report((self.board_space()[0], room - self.extra_px),
+                             True)
+        except tk.TclError:
+            return
+        if new_main_height != main_height:
+            self.refit_later()      # once the window has its new height
+        elif room == box_height:
+            self.on_change()
+
+    def _report(self, room, grow_only=False):
+        if room is None:
+            self._resize_after_id = None
+        try:
+            if not self.main.winfo_exists() or self.main.winfo_width() <= 1:
+                return
+        except tk.TclError:
+            return
+        self.on_resize(room, grow_only)
+
+    # ----- moving a panel by its title bar ---------------------------------
+    def _rel(self, widget):
+        """(x, y, width, height) of a widget relative to the layout row."""
+        return (widget.winfo_rootx() - self.row.winfo_rootx(),
+                widget.winfo_rooty() - self.row.winfo_rooty(),
+                widget.winfo_width(), widget.winfo_height())
+
+    def drop_target(self, key, x_root, y_root):
+        """Where panel ``key`` would land if dropped at this screen point.
+
+        Returns (zone, index, marker) - marker being the (x, y, w, h)
+        rectangle, relative to the layout row, that shows the spot - or
+        None when the point is not over a place to drop. Under the board
+        the index is (row, column, True for a new row of its own).
+        """
+        px = x_root - self.row.winfo_rootx()
+        py = y_root - self.row.winfo_rooty()
+        bx, by, bw, bh = self._rel(self.board_box)
+        board_h = min(bh, bw - TURN_MARKER_PX)     # the board itself
+        box_h = min(bh, board_h + self.extra_px)   # and what is under it
+        thick = 6
+        if px < bx:
+            zone = 'left'
+        elif px > bx + bw:
+            zone = 'right'
+        elif py > by + board_h * 0.7:
+            zone = 'bottom'
+        elif px < bx + bw * 0.25:
+            zone = 'left'
+        elif px > bx + bw * 0.75:
+            zone = 'right'
+        else:
+            return None
+        if zone == 'bottom':
+            return self._bottom_drop_target(key, px, py,
+                                            (bx, by + box_h, bw), thick)
+
+        others = [k for k in self.arrangement[zone] if k != key]
+        if not others:
+            # An empty zone: mark the edge of the board it would open on.
+            if zone == 'left':
+                marker = (bx, by, thick, board_h)
+            else:
+                marker = (bx + bw - thick, by, thick, board_h)
+            return zone, 0, marker
+
+        boxes = [self._rel(self.window[k].Widget) for k in others]
+        index = len(others)
+        for i, (x, y, w, h) in enumerate(boxes):
+            if py < y + h / 2:
+                index = i
+                break
+        x, y, w, h = boxes[min(index, len(boxes) - 1)]
+        after_last = index == len(boxes)
+        marker = (x, y + h - thick if after_last else y, w, thick)
+        return zone, index, marker
+
+    def _bottom_drop_target(self, key, px, py, box, thick):
+        """drop_target() for a point under the board. ``box`` is (x, y of
+        the bottom edge, width) of the board box.
+
+        The top or bottom quarter of a row means a new row above or below
+        it (a bar across); the middle means into that row, beside its
+        panels (an upright bar).
+        """
+        bx, box_bottom, bw = box
+        rows = [[k for k in row if k != key]
+                for row in self.bottom_row_lists()]
+        rows = [row for row in rows if row]
+        if not rows:
+            return 'bottom', (0, 0, True), (bx, box_bottom - thick, bw, thick)
+        spans = []
+        for row in rows:
+            boxes = [self._rel(self.window[k].Widget) for k in row]
+            spans.append((min(b[1] for b in boxes),
+                          max(b[1] + b[3] for b in boxes), boxes))
+        r = len(rows) - 1
+        for i, (top, bottom, _) in enumerate(spans):
+            if py < bottom:
+                r = i
+                break
+        top, bottom, boxes = spans[r]
+        edge = (bottom - top) * 0.25
+        if py < top + edge:
+            return 'bottom', (r, 0, True), (bx, top, bw, thick)
+        if py > bottom - edge:
+            return 'bottom', (r + 1, 0, True), \
+                (bx, bottom - thick, bw, thick)
+        column = len(boxes)
+        for i, (x, y, w, h) in enumerate(boxes):
+            if px < x + w / 2:
+                column = i
+                break
+        x, y, w, h = boxes[min(column, len(boxes) - 1)]
+        after_last = column == len(boxes)
+        return 'bottom', (r, column, False), \
+            (x + w - thick if after_last else x, y, thick, h)
+
+    def _drag_press(self, event, key):
+        self._drag = {'key': key, 'x': event.x_root, 'y': event.y_root,
+                      'active': False, 'target': None}
+
+    def _drag_motion(self, event):
+        drag = self._drag
+        if drag is None:
+            return
+        if not drag['active']:
+            if abs(event.x_root - drag['x']) < self.DRAG_START_PX and \
+                    abs(event.y_root - drag['y']) < self.DRAG_START_PX:
+                return
+            drag['active'] = True
+        drag['target'] = self.drop_target(drag['key'], event.x_root,
+                                          event.y_root)
+        if drag['target'] is None:
+            self.drop_marker.place_forget()
+        else:
+            x, y, w, h = drag['target'][2]
+            self.drop_marker.place(x=x, y=y, width=w, height=h)
+            self.drop_marker.lift()
+
+    def _drag_release(self, event):
+        drag, self._drag = self._drag, None
+        self.drop_marker.place_forget()
+        if drag is None or not drag['active'] or drag['target'] is None:
+            return
+        zone, index, _ = drag['target']
+        self.move_panel(drag['key'], zone, index)
+
+    def move_panel(self, key, zone, index=None):
+        """Move panel ``key`` to ``zone`` (at ``index``, default last).
+
+        Under the board ``index`` is (row, column, new_row) as given by
+        drop_target(); by default the panel gets a new row at the end.
+        """
+        if key not in self.panel_keys or zone not in self.ZONES:
+            return
+        new = {z: [k for k in keys if k != key]
+               for z, keys in self.arrangement.items()}
+        rows = [[k for k in row if k != key]
+                for row in self.bottom_row_lists()]
+        rows = [row for row in rows if row]
+        if zone == 'bottom':
+            if index is None:
+                index = (len(rows), 0, True)
+            row, column, new_row = index
+            if new_row or row >= len(rows):
+                rows.insert(min(row, len(rows)), [key])
+            else:
+                rows[row].insert(min(column, len(rows[row])), key)
+            new['bottom'] = [k for r in rows for k in r]
+        else:
+            if index is None or index > len(new[zone]):
+                index = len(new[zone])
+            new[zone].insert(index, key)
+        new_rows = [len(row) for row in rows]
+        if new == self.arrangement and new_rows == self.bottom_rows:
+            return
+        new['bottom_rows'] = new_rows
+        self.arrange(new)
+        self.refit_later()
+
+    def refit_later(self):
+        """Ask the owner to fit the board again once the window has taken
+        the size just requested for it."""
+        if self._resize_after_id is not None:
+            try:
+                self.root.after_cancel(self._resize_after_id)
+            except tk.TclError:
+                pass
+        self._resize_after_id = self.root.after(150, self._report, None)
+
+
 class EasyChessGui:
     queue = queue.Queue()
 
@@ -1658,24 +2577,22 @@ class EasyChessGui:
         # Board scale: square size in px within BOARD_SQUARE_MIN/MAX_PX.
         # Loaded from settings, or auto-fitted to the screen on first start.
         self.square_px = BASE_SQUARE_PX
-        # Effective lower bound for the active window. The Review window
-        # raises it so the board is never narrower than its under-board
-        # button bar (measured after the window is built).
-        self.min_square_px = BOARD_SQUARE_MIN_PX
+        # The board size the user wants; square_px can be smaller for a
+        # while when the window has no room for it. This one is saved.
+        self.preferred_square_px = BASE_SQUARE_PX
         self._board_size_from_settings = False
         # square_px -> {piece: image file for that board size}.
         self._piece_image_cache = {}
-        # Debounced window-resize handling.
-        self._resize_after_id = None
-        # Root size right after our own board-size changes; <Configure>
-        # events matching it are content re-hugs, not user resizes, and
-        # must not trigger a re-fit (they would override menu picks).
-        self._expected_root_size = None
 
         # Board canvas state (one sg.Graph per window, key '_board_graph_k')
         self._board_square_fig = {}   # (row,col) -> rect figure id
         self._board_piece_fig = {}    # (row,col) -> piece image figure id
         self._board_label_fig = {}    # (row,col) -> [coordinate label ids]
+        self._turn_marker_fig = []    # the two turn dots beside the board
+        # Side to move shown by the turn marker: True white, False black.
+        self.side_to_move = True
+        # The PanelLayout of each window that is open ('play', 'review').
+        self.panel_layouts = {mode: None for mode in PANEL_LAYOUTS}
         # Mouse input state on the board canvas
         self._drag_window = None      # sg.Window that owns the bound canvas
         self._drag_source = None      # (row,col) of the mouse press
@@ -1722,6 +2639,9 @@ class EasyChessGui:
         # Per-(role, engine) UCI option overrides:
         # {role: {engine_id_name: {option_name: value}}}, deltas vs base.
         self.role_engine_options = {}
+        # Saved panel arrangement and sizes of each window, as returned
+        # by PanelLayout.state(); None means the default.
+        self.panel_layout_states = {mode: None for mode in PANEL_LAYOUTS}
         self.analysis_file = None
         self.analysis_path_and_file = None
         self.analysis_id_name = None
@@ -2090,13 +3010,8 @@ class EasyChessGui:
         # Initialize White and black boxes
         self.update_labels_and_game_tags(w, human=self.username)
 
-        # Re-bind drag-and-drop on the new window's board squares
-        self.setup_board_drag_drop(w)
-        self.redraw_board(w)
-        self.install_resize_handler(w, 'play_turn_status_k')
-
-        # Match the Linux menubar font to Windows (no-op on Windows/macOS).
-        self.apply_menu_font(w)
+        # Panels, board input and menubar font of the new window.
+        self.finish_play_window(w)
 
         window.Close()
         return w
@@ -2539,6 +3454,9 @@ class EasyChessGui:
                 pass
         # Per-role engine option overrides (the active role ids are applied
         # later by restore_engine_roles, once the engine list exists).
+        for mode, spec in PANEL_LAYOUTS.items():
+            if isinstance(data.get(spec['setting']), dict):
+                self.panel_layout_states[mode] = data[spec['setting']]
         if isinstance(data.get('role_engine_options'), dict):
             self.role_engine_options = data['role_engine_options']
         if isinstance(data.get('recent_pgn_files'), list):
@@ -2568,11 +3486,13 @@ class EasyChessGui:
             'auto_analysis_engine_id_name': self.auto_analysis_engine_id_name,
             'auto_analysis_replay_plies': self.auto_analysis_replay_plies,
             'auto_analysis_time_ms': self.auto_analysis_time_ms,
-            'board_square_px': self.square_px,
+            'board_square_px': self.preferred_square_px,
             'role_engine_options': self.role_engine_options,
             'recent_pgn_files': self.recent_pgn_files,
             'review_pgn_file': self.review_pgn_file,
         }
+        for mode, spec in PANEL_LAYOUTS.items():
+            data[spec['setting']] = self.panel_layout_states[mode]
         try:
             with open(self.settings_file, 'w') as json_file:
                 json.dump(data, json_file, indent=4)
@@ -3440,9 +4360,46 @@ class EasyChessGui:
         self._board_square_fig = {}
         self._board_piece_fig = {}
         self._board_label_fig = {}
+        self._turn_marker_fig = []
         for i in range(8):
             for j in range(8):
                 self.paint_square(graph, i, j)
+        self.draw_turn_marker(graph)
+
+    def draw_turn_marker(self, graph):
+        """Draw the two turn dots in the strip right of the board.
+
+        One dot sits level with each player's back rank (beside h1 and h8
+        with White at the bottom; the other way round when flipped). The
+        dot of the side to move is filled green, the other is a grey ring.
+        """
+        for fig in self._turn_marker_fig:
+            graph.delete_figure(fig)
+        self._turn_marker_fig = []
+        if self.side_to_move is None:
+            return
+        sq = self.square_px
+        x = self.board_px + TURN_MARKER_PX // 2
+        radius = TURN_MARKER_PX // 2 - 3
+        for is_white in (True, False):
+            at_bottom = (is_white == self.is_white_at_bottom)
+            y = 7 * sq + sq // 2 if at_bottom else sq // 2
+            if is_white == self.side_to_move:
+                fig = graph.draw_circle((x, y), radius,
+                                        fill_color=TURN_MARKER_ON,
+                                        line_color=TURN_MARKER_ON)
+            else:
+                fig = graph.draw_circle((x, y), radius,
+                                        line_color=TURN_MARKER_OFF,
+                                        line_width=2)
+            self._turn_marker_fig.append(fig)
+
+    def update_turn_marker(self, window, board):
+        """Show whose turn it is in ``board`` with the turn marker."""
+        self.side_to_move = board.turn
+        graph = self.board_graph(window)
+        if graph is not None:
+            self.draw_turn_marker(graph)
 
     def piece_image_source(self, piece):
         """draw_image kwargs for a piece at the current board size.
@@ -3463,26 +4420,6 @@ class EasyChessGui:
             cache[piece] = filename
         return {'filename': filename}
 
-    def set_board_size(self, window, square_px, persist=True):
-        """Switch the board to another size by resizing the canvas in
-        place and redrawing - no window rebuild, so it is safe at any
-        time (like Board->Flip). The size is the largest available one
-        that fits ``square_px``. Returns True if the size changed.
-        """
-        try:
-            square_px = fit_square_px(int(square_px), self.min_square_px)
-        except (TypeError, ValueError):
-            return False
-        if square_px == self.square_px:
-            return False
-        if self.board_graph(window) is None:
-            return False
-        self.square_px = square_px
-        self._apply_board_scale(window)
-        if persist:
-            self.save_settings()
-        return True
-
     def _apply_board_scale(self, window):
         """Sync the window's board canvas to the current square_px.
 
@@ -3495,20 +4432,12 @@ class EasyChessGui:
         # Keep graph coords == pixels: the widget size and the Graph
         # element's coordinate system must be updated together, otherwise
         # _convert_canvas_xy_to_xy would scale mouse coords wrongly.
-        graph.Widget.config(width=self.board_px, height=self.board_px)
-        graph.CanvasSize = (self.board_px, self.board_px)
+        width = self.board_px + TURN_MARKER_PX
+        graph.Widget.config(width=width, height=self.board_px)
+        graph.CanvasSize = (width, self.board_px)
         graph.BottomLeft = (0, self.board_px)
-        graph.TopRight = (self.board_px, 0)
+        graph.TopRight = (width, 0)
         self.redraw_board(window)
-        # Record the resulting root size so the follow-up <Configure> of a
-        # content-hugging window is recognized as our own change.
-        try:
-            root = window.TKroot
-            root.update_idletasks()
-            self._expected_root_size = (root.winfo_width(),
-                                        root.winfo_height())
-        except Exception:
-            self._expected_root_size = None
 
     def _is_window_maximized(self, window):
         """True if the window is maximized ('zoomed' on Windows/some WMs,
@@ -3536,30 +4465,16 @@ class EasyChessGui:
             logging.exception('Failed to maximize the window.')
 
     def handle_board_size_event(self, window, button):
-        """Apply a Board -> Size menu selection ('<label>::board_size_k')."""
+        """Apply a Board -> Size menu selection ('<label>::board_size_k'),
+        or pass a View menu selection on to handle_layout_event()."""
+        if '::layout_k' in str(button):
+            self.handle_layout_event(window, button)
+            return
         label = str(button).split('::')[0]
         square_px = BOARD_SIZE_LABELS.get(label)
-        if square_px:
-            self.set_board_size(window, square_px)
-
-    def _measure_review_min_square(self, window):
-        """Smallest square size whose board is at least as wide as the
-        Review window's under-board button bar. Below it the bar (six
-        buttons ending with Threat) would stick out past the board's
-        right edge."""
-        try:
-            window.TKroot.update_idletasks()
-            total = 0
-            for key in ('First', 'Previous', 'Next', 'Last',
-                        'review_toggle_analysis_k', 'review_toggle_threat_k'):
-                elem = window.find_element(key, silent_on_error=True)
-                if elem is None or elem.Widget is None:
-                    return BOARD_SQUARE_MIN_PX
-                total += elem.Widget.winfo_width() + 4   # pad + slack
-            return max(BOARD_SQUARE_MIN_PX, -(-total // 8))
-        except Exception:
-            logging.exception('Failed to measure the review button bar.')
-            return BOARD_SQUARE_MIN_PX
+        if not square_px:
+            return
+        self.set_board_square(window, square_px)
 
     def auto_fit_board_size(self):
         """Pick the largest board scale that fits the screen (first start
@@ -3573,71 +4488,6 @@ class EasyChessGui:
         # menubar, status bar and taskbar (height).
         avail = min(screen_w - 560, screen_h - 200)
         self.square_px = fit_square_px(avail // 8)
-
-    def install_resize_handler(self, window, bottom_key):
-        """Fit the board scale to the window size on resize/maximize.
-
-        The board switches to the largest available size (see
-        BOARD_SIZE_LABELS) that fits the window.
-        Bound on the toplevel; child <Configure> events are filtered out,
-        and events matching the size our own board changes produced are
-        ignored so menu size picks are not overridden. The actual fitting
-        runs debounced so a drag-resize only triggers one redraw.
-
-        :param bottom_key: key of the widget at the bottom of the board
-            column (status/button bar); used to measure the vertical
-            space the board column needs besides the board itself.
-        """
-        root = window.TKroot
-
-        # Overheads are measured once while the window still hugs its
-        # natural size. They cannot be measured at event time: the
-        # expand_x/expand_y panels absorb any extra space, which would
-        # make the board's available space always look equal to its
-        # current size.
-        root.update_idletasks()
-        graph = self.board_graph(window)
-        if graph is None:
-            return
-        gw = graph.Widget
-        overhead_w = max(0, root.winfo_width() - gw.winfo_width())
-        # Vertical overhead of the board column: space above the board
-        # (top margin, Linux in-window menubar) plus the status/button
-        # bar below it, plus a small bottom margin.
-        overhead_h = BOARD_V_OVERHEAD_PX
-        bottom_elem = window.AllKeysDict.get(bottom_key)
-        if bottom_elem is not None and bottom_elem.Widget is not None:
-            bw = bottom_elem.Widget
-            top = gw.winfo_rooty() - root.winfo_rooty()
-            below = (bw.winfo_rooty() + bw.winfo_height()) \
-                - (gw.winfo_rooty() + gw.winfo_height())
-            if top >= 0 and below >= 0:
-                overhead_h = top + below + 8
-
-        def apply_fit():
-            self._resize_after_id = None
-            if self.board_graph(window) is None or not root.winfo_exists():
-                return
-            if root.state() in ('iconic', 'withdrawn'):
-                return
-            square = min((root.winfo_width() - overhead_w) // 8,
-                         (root.winfo_height() - overhead_h) // 8)
-            self.set_board_size(window, square)
-
-        def on_configure(event):
-            if event.widget is not root:
-                return
-            if (event.width, event.height) == self._expected_root_size:
-                return
-            if self._resize_after_id is not None:
-                try:
-                    root.after_cancel(self._resize_after_id)
-                except Exception:
-                    pass
-            self._resize_after_id = root.after(250, apply_fit)
-
-        self._expected_root_size = (root.winfo_width(), root.winfo_height())
-        root.bind('<Configure>', on_configure, add='+')
 
     def setup_board_drag_drop(self, window):
         """Bind mouse input on the board canvas.
@@ -3983,28 +4833,6 @@ class EasyChessGui:
         self.review_menu_elem.Update(build_review_menu(analyzing))
         self.apply_menu_font(window)
 
-    def update_play_turn_status(self, window, board):
-        """Update the under-board turn line from the board state.
-
-        Shows e.g. "Black to play, White's last move is Nf3", or just
-        "White to play" when there is no move yet (new game or pasted FEN).
-        """
-        element = window.find_element('play_turn_status_k',
-                                      silent_on_error=True)
-        if element is None:
-            return
-        stm = 'White' if board.turn else 'Black'
-        if board.move_stack:
-            move = board.pop()
-            last_san = board.san(move)
-            board.push(move)
-            opponent = 'Black' if board.turn else 'White'
-            msg = "{} to play, {}'s last move is {}".format(
-                stm, opponent, last_san)
-        else:
-            msg = '{} to play'.format(stm)
-        element.Update(msg)
-
     def flip_play_window(self, window, board):
         """Flip the board orientation during Play.
 
@@ -4125,7 +4953,9 @@ class EasyChessGui:
                         window = self.flip_play_window(window, board)
                         continue
 
-                    if isinstance(button, str) and '::board_size_k' in button:
+                    if isinstance(button, str) and (
+                            '::board_size_k' in button
+                            or '::layout_k' in button):
                         self.handle_board_size_event(window, button)
                         continue
 
@@ -4138,7 +4968,7 @@ class EasyChessGui:
                         self.set_new_game()
 
                         self.fen_to_psg_board(window)
-                        self.update_play_turn_status(window, board)
+                        self.update_turn_marker(window, board)
 
                         # The human plays their color, the engine the other;
                         # wait for Engine->Go when it is the engine's turn.
@@ -4183,7 +5013,7 @@ class EasyChessGui:
                             # below repaints in the current orientation.
                             self.board_to_psg_board(board)
                             self.redraw_board(window)
-                            self.update_play_turn_status(window, board)
+                            self.update_turn_marker(window, board)
                             human_timer = self.define_timer(window)
                             engine_timer = self.define_timer(window, 'engine')
                             window.find_element('_gamestatus_').Update(
@@ -4196,7 +5026,7 @@ class EasyChessGui:
                             # restore the position display and re-map clocks.
                             self.board_to_psg_board(board)
                             self.redraw_board(window)
-                            self.update_play_turn_status(window, board)
+                            self.update_turn_marker(window, board)
                             human_timer = self.define_timer(window)
                             engine_timer = self.define_timer(window, 'engine')
                             window.find_element('_gamestatus_').Update(
@@ -4433,7 +5263,9 @@ class EasyChessGui:
                         window = self.flip_play_window(window, board)
                         break
 
-                    if isinstance(button, str) and '::board_size_k' in button:
+                    if isinstance(button, str) and (
+                            '::board_size_k' in button
+                            or '::layout_k' in button):
                         self.handle_board_size_event(window, button)
                         break
 
@@ -4484,7 +5316,7 @@ class EasyChessGui:
                         self.set_new_game()
 
                         self.fen_to_psg_board(window)
-                        self.update_play_turn_status(window, board)
+                        self.update_turn_marker(window, board)
 
                         # The human plays their color, the engine the other;
                         # wait for Engine->Go when it is the engine's turn.
@@ -4509,7 +5341,7 @@ class EasyChessGui:
                             # below repaints in the current orientation.
                             self.board_to_psg_board(board)
                             self.redraw_board(window)
-                            self.update_play_turn_status(window, board)
+                            self.update_turn_marker(window, board)
                             human_timer = self.define_timer(window)
                             engine_timer = self.define_timer(window, 'engine')
                             window.find_element('_gamestatus_').Update(
@@ -4522,7 +5354,7 @@ class EasyChessGui:
                             # restore the position display and re-map clocks.
                             self.board_to_psg_board(board)
                             self.redraw_board(window)
-                            self.update_play_turn_status(window, board)
+                            self.update_turn_marker(window, board)
                             human_timer = self.define_timer(window)
                             engine_timer = self.define_timer(window, 'engine')
                             window.find_element('_gamestatus_').Update(
@@ -4648,7 +5480,7 @@ class EasyChessGui:
 
                                 board.push(user_move)
                                 move_cnt += 1
-                                self.update_play_turn_status(window, board)
+                                self.update_turn_marker(window, board)
 
                                 # The user's first move starts the game:
                                 # clocks begin to run and the setup menu
@@ -4821,8 +5653,9 @@ class EasyChessGui:
                             window = self.flip_play_window(window, board)
                             continue
 
-                        if isinstance(button, str) and \
-                                '::board_size_k' in button:
+                        if isinstance(button, str) and (
+                                '::board_size_k' in button
+                                or '::layout_k' in button):
                             self.handle_board_size_event(window, button)
                             continue
 
@@ -4897,7 +5730,7 @@ class EasyChessGui:
 
                 board.push(best_move)
                 move_cnt += 1
-                self.update_play_turn_status(window, board)
+                self.update_turn_marker(window, board)
 
                 # Update timer
                 engine_timer.update_base()
@@ -6065,117 +6898,117 @@ class EasyChessGui:
                     break
         window['review_book_k'].Update(book_text if book_text else 'no book moves')
 
+        self.side_to_move = board.turn
         self.set_board_from_board_state(
             window, self.review_boards[self.review_move_index])
         self.update_review_analysis_panel(window)
         self.update_review_threat_panel(window)
 
-    def _right_panel_spacer(self, width=60, pad_y=0):
-        """Return an invisible element that forces a minimum right-panel width.
-
-        Used so the right-hand control column has the same right edge in
-        Play and Review modes. ``pad_y`` tunes the spacer height so the last
-        visible box above it ends level with the board's bottom edge.
-        """
-        bg = sg.theme_background_color()
-        return sg.Text('', size=(width, 1), text_color=bg,
-                       background_color=bg, pad=(0, pad_y))
+    def set_window_style(self):
+        """Theme and element options shared by the Play and Review
+        windows: the margin around everything and the scrollbar colours."""
+        sg.change_look_and_feel(self.gui_theme)
+        sg.set_options(margins=(10, 8), border_width=1, font=FONT_BASE,
+                       sbar_trough_color=sg.theme_background_color(),
+                       sbar_background_color=PANEL_BORDER_COLOR,
+                       sbar_arrow_color=sg.theme_text_color(),
+                       sbar_frame_color=PANEL_BORDER_COLOR)
 
     def build_review_layout(self, is_white_at_bottom=True):
-        """Create review mode layout with navigation controls."""
-        sg.change_look_and_feel(self.gui_theme)
-        sg.set_options(margins=(0, 3), border_width=1, font=FONT_BASE)
+        """
+        Creates all elements for the Review window: the board box (the
+        board with the navigation bar under it) and one panel per group
+        of controls, all in a single layout row. Their placement is taken
+        over by PanelLayout in create_review_window().
 
-        board_layout = self.create_board(is_white_at_bottom)
-        board_controls = [
-            [sg.Text('Mode     Review', size=(36, 1), font=FONT_BASE,
-                     key='_gamestatus_', expand_x=True)],
+        :param is_white_at_bottom: board orientation, white pieces at
+        the bottom when True.
+        :return: GUI layout
+        """
+        self.set_window_style()
+
+        def text_box(key, lines, **options):
+            return sg.Multiline('', do_not_clear=True, autoscroll=False,
+                                size=(48, lines), font=FONT_BASE, key=key,
+                                disabled=True, expand_x=True, expand_y=True,
+                                **options)
+
+        def status(key, text):
+            return sg.Text(text, size=(30, 1), font=FONT_BASE, key=key,
+                           relief='sunken', expand_x=True)
+
+        def button(label, width, key=None, tooltip=None, font=FONT_BASE,
+                   **options):
+            return sg.Button(label, key=key, size=(width, 1), font=font,
+                             pad=(1, 3), tooltip=tooltip, **options)
+
+        # The navigation bar belongs to the board: it sits under it in
+        # the board box, as wide as the board, and moves with it. Panels
+        # dropped below the board come under this bar. The buttons show
+        # an icon (plain Unicode symbols, no image files); their keys are
+        # the event names the Review loop and the shortcuts use.
+        nav_bar = sg.Column(
+            [[button(icon, 4, key, tip, FONT_NAV_ICON, expand_x=True)
+              for key, icon, tip in REVIEW_NAV_BUTTONS]],
+            key='review_nav_bar_k', pad=((0, TURN_MARKER_PX), 0),
+            expand_x=True)
+        board_box = sg.Column(
+            self.create_board(is_white_at_bottom) + [[nav_bar]],
+            key='review_board_box_k', pad=(0, 0))
+
+        game = self.panel('review_game_panel_k', 'Game details', [
             [sg.Text('PGN file', size=(8, 1), font=FONT_BASE),
-             sg.Text('', size=(44, 1), font=FONT_SMALL,
-                     key='review_pgn_k', relief='sunken', expand_x=True)],
-            [sg.TabGroup([
-                [sg.Tab('Game details', [[sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
-                                                       font=FONT_BASE, key='review_header_k',
-                                                       disabled=True, expand_x=True, expand_y=True)]], font=FONT_BASE),
-                 sg.Tab('Book moves', [[sg.Multiline('', do_not_clear=True, autoscroll=False, size=(52, 4),
-                                                     font=FONT_BASE, key='review_book_k',
-                                                     disabled=True, expand_x=True, expand_y=True)]], font=FONT_BASE)]
-            ], font=FONT_BASE, key='review_tab_group_k', expand_x=True)],
-            [sg.Text('Move list', size=(18, 1), font=FONT_BASE)],
-            [sg.Multiline('', do_not_clear=True, autoscroll=False,
-                          size=(52, REVIEW_MOVE_LIST_HEIGHT),
-                          font=FONT_BASE, key='review_move_list_k',
-                          disabled=True, expand_x=True, expand_y=True)],
-            [sg.Text('Position 0/0', size=(20, 1), font=FONT_BASE,
-                     key='review_nav_k', relief='sunken', expand_x=True)],
-            [sg.Text('Threat stopped', size=(55, 1), font=FONT_BASE,
-                     key='review_threat_status_k', relief='sunken',
-                     expand_x=True)],
-            [sg.Multiline('', do_not_clear=True, autoscroll=False,
-                          size=(52, REVIEW_THREAT_BOX_HEIGHT),
-                          font=FONT_BASE, key='review_threat_k',
-                          text_color='red', disabled=True, wrap_lines=False,
-                          expand_x=True)],
-            [sg.Text('Analysis stopped', size=(55, 1), font=FONT_BASE,
-                     key='review_analysis_status_k', relief='sunken',
-                     expand_x=True)],
-            [sg.Multiline('', do_not_clear=True, autoscroll=False,
-                          size=(52, REVIEW_ANALYSIS_BOX_HEIGHT),
-                          font=FONT_BASE, key='review_analysis_k',
-                          disabled=True, wrap_lines=False,
-                          expand_x=True)],
-            # pad_y=4 grows the spacer to the under-board button bar's
-            # height so the analysis box ends level with the board bottom.
-            [self._right_panel_spacer(pad_y=4)],
-        ]
+             sg.Text('', size=(30, 1), font=FONT_SMALL, key='review_pgn_k',
+                     relief='sunken', expand_x=True)],
+            [text_box('review_header_k', 3)],
+        ])
 
-        nav_buttons = sg.Column(
-            [[sg.Button('First', size=(7, 1), font=FONT_BASE, pad=(1, 3)),
-              sg.Button('Previous', size=(8, 1), font=FONT_BASE, pad=(1, 3)),
-              sg.Button('Next', size=(7, 1), font=FONT_BASE, pad=(1, 3)),
-              sg.Button('Last', size=(7, 1), font=FONT_BASE, pad=(1, 3))]],
-            justification='left', pad=(0, 0))
-        toggle_buttons = sg.Column(
-            [[sg.Button('Analysis', key='review_toggle_analysis_k', size=(8, 1),
-                        font=FONT_BASE, pad=(1, 3),
-                        tooltip='Toggle engine analysis for the current position.'),
-              sg.Button('Threat', key='review_toggle_threat_k', size=(7, 1),
-                        font=FONT_BASE, pad=(1, 3),
-                        tooltip='Toggle threat analysis: engine analyses what the '
-                                'opponent threatens if the side to move were to pass.')]],
-            justification='right', pad=(0, 0))
+        books = self.panel('review_books_panel_k', 'Book moves', [
+            [text_box('review_book_k', 2)],
+        ])
 
-        # Pin the button bar to the board width: expand_x makes the bar fill the
-        # board column and sg.Push() flush-rights Threat to the board's right
-        # edge. compact_review_buttons() (run after finalize) trims each button's
-        # Tk padding so all six fit inside the board width on Linux too, where the
-        # default button padding is much larger than on Windows.
-        button_bar = sg.Column(
-            [[nav_buttons, sg.Push(), toggle_buttons]],
-            expand_x=True, pad=(0, 0))
+        moves = self.panel('review_moves_panel_k', 'Move list', [
+            [text_box('review_move_list_k', REVIEW_MOVE_LIST_HEIGHT)],
+            [status('review_nav_k', 'Position 0/0')],
+        ])
 
-        board_column = [
-            # pad=(0, 0) so the board column's width is exactly the board (no
-            # extra side padding); the expand_x button_bar then matches the
-            # board's left and right edges precisely.
-            [sg.Column(board_layout, pad=(0, 0))],
-            [button_bar]
-        ]
+        # Each engine panel has its own on/off button beside its status.
+        threat = self.panel('review_threat_panel_k', 'Threat', [
+            [button('Threat', 8, 'review_toggle_threat_k',
+                    'Toggle threat analysis: engine analyses what the '
+                    'opponent threatens if the side to move were to pass.'),
+             status('review_threat_status_k', 'Threat stopped')],
+            [text_box('review_threat_k', REVIEW_THREAT_BOX_HEIGHT,
+                      text_color='red', wrap_lines=False)],
+        ])
+
+        analysis = self.panel('review_analysis_panel_k', 'Analysis', [
+            [button('Analysis', 8, 'review_toggle_analysis_k',
+                    'Toggle engine analysis for the current position.'),
+             status('review_analysis_status_k', 'Analysis stopped')],
+            [text_box('review_analysis_k', REVIEW_ANALYSIS_BOX_HEIGHT,
+                      wrap_lines=False)],
+        ])
 
         self.review_menu_elem = sg.Menu(
             build_review_menu(analyzing=False), tearoff=False, font=MENU_FONT)
 
         layout = [
             [self.review_menu_elem],
-            [sg.Column(board_column, vertical_alignment='top'),
-             sg.Column(board_controls, vertical_alignment='top',
-                       expand_x=True, expand_y=True)]
+            # One row holding the board box and every panel.
+            [board_box, game, books, moves, threat, analysis],
+            # Status bar along the bottom edge of the window.
+            [sg.Text('Mode     Review', font=FONT_BASE, key='_gamestatus_',
+                     relief='sunken', expand_x=True, pad=(0, (6, 0)))],
         ]
 
         return layout
 
     def create_review_window(self, location=None):
         """Create a review window."""
+        # Built around the board size the user prefers; the board is
+        # fitted to the window once the saved window size is restored.
+        self.square_px = self.preferred_square_px
         layout = self.build_review_layout(self.is_white_at_bottom)
         window = sg.Window(
             '{} {}'.format(APP_NAME, APP_VERSION),
@@ -6188,14 +7021,12 @@ class EasyChessGui:
             icon=ico_path[platform]['pecg']
         )
         self.compact_review_buttons(window)
-        self.apply_menu_font(window)
         self.bind_review_shortcuts(window)
-        # The board must stay at least as wide as the under-board button
-        # bar, or the Threat button ends past the board's right edge.
-        self.min_square_px = self._measure_review_min_square(window)
-        if self.square_px < self.min_square_px:
-            self.set_board_size(window, self.min_square_px)
-        self.install_resize_handler(window, 'review_toggle_threat_k')
+        # Whether the window is maximized follows the Play window (see
+        # start_review_mode), not what was saved.
+        self.attach_panel_layout(window, 'review', restore_maximized=False)
+        self.redraw_board(window)
+        self.apply_menu_font(window)
         return window
 
     def bind_review_shortcuts(self, window):
@@ -6228,15 +7059,14 @@ class EasyChessGui:
             logging.exception('Failed to bind review window shortcuts.')
 
     def compact_review_buttons(self, window):
-        """Shrink the under-board nav/toggle buttons' internal Tk padding.
+        """Shrink the nav/toggle buttons' internal Tk padding.
 
         Classic Tk buttons default to padx='3m'/pady='1m' (~11 px per side on
-        Linux/X11), so the six buttons span wider than the 480 px board and push
-        the Threat button past the board's right edge. Windows uses tiny padding,
-        which is why the overhang only showed on Linux. Force small, uniform
-        padding so the whole button bar fits inside the board width everywhere.
+        Linux/X11), which makes them much wider than on Windows. Force small,
+        uniform padding so the four navigation buttons fit under the smallest
+        board everywhere.
         """
-        for key in ('First', 'Previous', 'Next', 'Last',
+        for key in ('First', 'Previous', 'Next', 'Last', 'Flip',
                     'review_toggle_analysis_k', 'review_toggle_threat_k'):
             element = window.find_element(key, silent_on_error=True)
             if element is None or element.Widget is None:
@@ -6282,9 +7112,13 @@ class EasyChessGui:
                 self.prepare_review_game(chess.pgn.Game())
 
         location = window.CurrentLocation()
-        # Carry the maximized state over to the Review window; its resize
-        # handler then fits the board to the maximized size.
+        # Carry the maximized state over to the Review window; its panel
+        # layout then fits the board to the maximized size.
         was_maximized = self._is_window_maximized(window)
+        # The board sizes when Review was entered: the one the Play window
+        # shows, and the one the user wants.
+        play_square_px = self.square_px
+        wanted_square_px = self.preferred_square_px
         window.Hide()
         review_window = self.create_review_window(location=location)
         if was_maximized:
@@ -6364,7 +7198,8 @@ class EasyChessGui:
                 self.update_review_window(review_window)
                 continue
 
-            if isinstance(button, str) and '::board_size_k' in button:
+            if isinstance(button, str) and ('::board_size_k' in button
+                                            or '::layout_k' in button):
                 self.handle_board_size_event(review_window, button)
                 self.update_review_window(review_window)
                 continue
@@ -6460,16 +7295,23 @@ class EasyChessGui:
         self.close_review_threat()
         # Carry the maximized state back to the Play window.
         was_maximized = self._is_window_maximized(review_window)
+        self.remember_layouts()
+        self.panel_layouts['review'] = None
         review_window.Close()
         self.review_window = None
         self.reset_review_run_state()
-        # The Play window has no under-board button bar, so its board may
-        # shrink to the global minimum again.
-        self.min_square_px = BOARD_SQUARE_MIN_PX
         window.UnHide()
-        # The board scale may have changed while this window was hidden
-        # (Review resize or Board->Size); its canvas is stale until synced.
-        self._apply_board_scale(window)
+        if self.preferred_square_px != wanted_square_px:
+            # A board size was chosen in Review (Board -> Size or a
+            # divider): the Play window follows, as for its own menu.
+            self.square_px = self.preferred_square_px
+            self._apply_board_scale(window)
+            self.sync_board_box(window)
+            self.panel_layouts['play'].refit_later()
+        else:
+            # The Play window gets back the board it was showing.
+            self.square_px = play_square_px
+            self._apply_board_scale(window)
         if was_maximized:
             self._set_window_maximized(window)
 
@@ -6501,108 +7343,326 @@ class EasyChessGui:
         kept for call-site compatibility.
         """
         self.psg_board = copy.deepcopy(initial_board)
-        return [[sg.Graph(canvas_size=(self.board_px, self.board_px),
+        # The canvas is the board plus the turn-marker strip on its right.
+        width = self.board_px + TURN_MARKER_PX
+        return [[sg.Graph(canvas_size=(width, self.board_px),
                           graph_bottom_left=(0, self.board_px),
-                          graph_top_right=(self.board_px, 0),
+                          graph_top_right=(width, 0),
+                          background_color=sg.theme_background_color(),
                           pad=(0, 0), key='_board_graph_k',
                           enable_events=False, drag_submits=False)]]
 
+    def panel(self, key, title, rows):
+        """Return a panel: a column with a title bar above ``rows``.
+
+        The title bar is what identifies the panel; PanelLayout decides
+        where the panel goes and how big it is.
+        """
+        title_bar = sg.Text(' ' + title, font=FONT_PANEL_TITLE,
+                            text_color=sg.theme_input_text_color(),
+                            background_color=sg.theme_input_background_color(),
+                            pad=(0, 0), expand_x=True, key=key + '_title')
+        body = sg.Column(rows, pad=(6, 4), expand_x=True, expand_y=True)
+        return sg.Column([[title_bar], [body]], key=key, pad=(0, 0),
+                         expand_x=True, expand_y=True)
+
     def build_main_layout(self, is_white_at_bottom=True):
         """
-        Creates all elements for the GUI, icluding the board layout.
+        Creates all elements for the Play window: the board box and one
+        panel per group of controls, all in a single layout row. Their
+        placement is taken over by PanelLayout in finish_play_window().
 
         :param is_white_at_bottom: board orientation, white pieces at
         the bottom when True.
         :return: GUI layout
         """
-        sg.change_look_and_feel(self.gui_theme)
-        sg.set_options(margins=(0, 3), border_width=1, font=FONT_BASE)
+        self.set_window_style()
 
-        # Define board
-        board_layout = self.create_board(is_white_at_bottom)
+        board_box = sg.Column(self.create_board(is_white_at_bottom),
+                              key='play_board_box_k', pad=(0, 0))
 
-        board_controls = [
-            [sg.Text('Mode     Play', size=(36, 1), font=FONT_BASE,
-                     key='_gamestatus_', expand_x=True)],
-            [sg.Text('White', size=(7, 1), font=FONT_BASE),
-             sg.Text('Human', font=FONT_BASE, key='_White_',
-                     size=(24, 1), relief='sunken', expand_x=True),
-             sg.Text('', font=FONT_BASE, key='w_base_time_k',
-                     size=(11, 1), relief='sunken'),
-             sg.Text('', font=FONT_BASE, key='w_elapse_k', size=(7, 1),
-                     relief='sunken')
-             ],
-            [sg.Text('Black', size=(7, 1), font=FONT_BASE),
-             sg.Text('Computer', font=FONT_BASE, key='_Black_',
-                     size=(24, 1), relief='sunken', expand_x=True),
-             sg.Text('', font=FONT_BASE, key='b_base_time_k',
-                     size=(11, 1), relief='sunken'),
-             sg.Text('', font=FONT_BASE, key='b_elapse_k', size=(7, 1),
-                     relief='sunken')
-             ],
-            [sg.Text('Adviser', size=(7, 1), font=FONT_BASE, key='adviser_k',
+        def player_row(label, name_key, default_name, base_key, elapse_key):
+            return [sg.Text(label, size=(6, 1), font=FONT_BASE),
+                    sg.Text(default_name, font=FONT_BASE, key=name_key,
+                            size=(20, 1), relief='sunken', expand_x=True),
+                    sg.Text('', font=FONT_BASE, key=base_key,
+                            size=(11, 1), relief='sunken'),
+                    sg.Text('', font=FONT_BASE, key=elapse_key, size=(7, 1),
+                            relief='sunken')]
+
+        players = self.panel('play_players_panel_k', 'Players', [
+            player_row('White', '_White_', 'Human',
+                       'w_base_time_k', 'w_elapse_k'),
+            player_row('Black', '_Black_', 'Computer',
+                       'b_base_time_k', 'b_elapse_k'),
+        ])
+
+        moves = self.panel('play_moves_panel_k', 'Move list', [
+            [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(48, 6),
+                          font=FONT_BASE, key='_movelist_', disabled=True,
+                          expand_x=True, expand_y=True)],
+        ])
+
+        comment = self.panel('play_comment_panel_k', 'Comment', [
+            [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(48, 2),
+                          font=FONT_BASE, key='comment_k', expand_x=True,
+                          expand_y=True)],
+        ])
+
+        def book_column(label, menu_key, text_key):
+            return sg.Column([
+                [sg.Text(label, font=FONT_BASE, expand_x=True,
+                         right_click_menu=['Right', ['Show::' + menu_key,
+                                                     'Hide::' + menu_key]])],
+                [sg.Multiline('', do_not_clear=True, autoscroll=False,
+                              size=(22, 3), font=FONT_BASE, key=text_key,
+                              disabled=True, expand_x=True, expand_y=True)],
+            ], pad=(0, 0), expand_x=True, expand_y=True)
+
+        books = self.panel('play_books_panel_k', 'Opening books', [
+            [book_column('BOOK 1, Comp games', 'right_book1_k',
+                         'polyglot_book1_k'),
+             book_column('BOOK 2, Human games', 'right_book2_k',
+                         'polyglot_book2_k')],
+        ])
+
+        engine = self.panel('play_engine_panel_k', 'Engine', [
+            [sg.Text('Adviser', size=(8, 1), font=FONT_BASE, key='adviser_k',
                      right_click_menu=[
                         'Right',
                         ['Start::right_adviser_k', 'Stop::right_adviser_k']
                     ]),
              sg.Text('', font=FONT_BASE, key='advise_info_k', relief='sunken',
-                     size=(46, 1), expand_x=True)],
-
-            [sg.Text('Move list', size=(16, 1), font=FONT_BASE)],
-            [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(52, 8),
-                          font=FONT_BASE, key='_movelist_', disabled=True,
-                          expand_x=True, expand_y=True)],
-
-            [sg.Text('Comment', size=(7, 1), font=FONT_BASE)],
-            [sg.Multiline('', do_not_clear=True, autoscroll=True, size=(52, 3),
-                          font=FONT_BASE, key='comment_k', expand_x=True)],
-
-            [sg.Text('BOOK 1, Comp games', size=(26, 1),
-                     font=FONT_BASE, expand_x=True,
-                     right_click_menu=['Right', ['Show::right_book1_k', 'Hide::right_book1_k']]),
-             sg.Text('BOOK 2, Human games',
-                     font=FONT_BASE, expand_x=True,
-                     right_click_menu=['Right', ['Show::right_book2_k', 'Hide::right_book2_k']])],
-            [sg.Multiline('', do_not_clear=True, autoscroll=False, size=(23, 4),
-                           font=FONT_BASE, key='polyglot_book1_k', disabled=True,
-                           expand_x=True),
-             sg.Multiline('', do_not_clear=True, autoscroll=False, size=(25, 4),
-                           font=FONT_BASE, key='polyglot_book2_k', disabled=True,
-                           expand_x=True)],
-            [sg.Text('Opponent Search Info', font=FONT_BASE, size=(30, 1),
-                     expand_x=True,
+                     size=(38, 1), expand_x=True)],
+            [sg.Text('Opponent Search Info', font=FONT_BASE, expand_x=True,
                      right_click_menu=['Right',
-                                       ['Show::right_search_info_k', 'Hide::right_search_info_k']])],
-            # Top pad 6 (+3 over the default) drops the box 3 px so its
-            # bottom edge ends level with the board's bottom edge.
-            [sg.Text('', key='search_info_all_k', size=(55, 1),
-                     font=FONT_BASE, relief='sunken', expand_x=True,
-                     pad=((5, 5), (6, 3)))],
-            [self._right_panel_spacer()],
-        ]
+                                       ['Show::right_search_info_k',
+                                        'Hide::right_search_info_k']])],
+            [sg.Text('', key='search_info_all_k', size=(47, 1),
+                     font=FONT_BASE, relief='sunken', expand_x=True)],
+        ])
 
         self.menu_elem = sg.Menu(self.current_menu_def, tearoff=False,
                                  font=MENU_FONT)
 
-        board_column = [
-            [sg.Column(board_layout, pad=(0, 0))],
-            # One-line turn indicator under the board, mirroring the Review
-            # window's under-board button bar so both modes end the same way.
-            [sg.Text('White to play', key='play_turn_status_k',
-                     font=FONT_BASE, pad=(1, 3), expand_x=True)]
-        ]
-
-        # White board layout, mode: Play. The right panel column expands in
-        # both directions so a maximized/resized window is filled: the board
-        # column keeps its natural size, the panels absorb the leftovers.
         layout = [
                 [self.menu_elem],
-                [sg.Column(board_column, vertical_alignment='top'),
-                 sg.Column(board_controls, vertical_alignment='top',
-                           expand_x=True, expand_y=True)]
+                # One row holding the board box and every panel.
+                [board_box, players, moves, comment, books, engine],
+                # Status bar along the bottom edge of the window.
+                [sg.Text('Mode     Play', font=FONT_BASE, key='_gamestatus_',
+                         relief='sunken', expand_x=True, pad=(0, (6, 0)))],
         ]
 
         return layout
+
+    def finish_play_window(self, window):
+        """Set up a newly built Play window: panel placement (restoring
+        the saved arrangement and sizes), board input and the menubar
+        font."""
+        self.attach_panel_layout(window, 'play')
+
+        # Set up drag-and-drop bindings for board squares
+        self.setup_board_drag_drop(window)
+        self.redraw_board(window)
+
+        # Match the Linux menubar font to Windows (no-op on Windows/macOS).
+        self.apply_menu_font(window)
+
+    def attach_panel_layout(self, window, mode, restore_maximized=True):
+        """Hand the placement of the panels of a newly built 'play' or
+        'review' window to a PanelLayout: draw the panel borders and
+        restore the arrangement, sizes and window size saved for that
+        mode (and whether it was maximized, with ``restore_maximized``).
+        """
+        spec = PANEL_LAYOUTS[mode]
+        for key in spec['panels']:
+            window[key].Widget.config(highlightthickness=1,
+                                      highlightbackground=PANEL_BORDER_COLOR,
+                                      highlightcolor=PANEL_BORDER_COLOR)
+
+        # A window that replaces another one (theme or colour change)
+        # starts from the layout the user had in the old one.
+        if self.panel_layouts[mode] is not None:
+            self.remember_layouts()
+
+        # Height of what is fixed under the board in its box (the row
+        # holding it, so its padding counts).
+        extra_px = 0
+        if spec['below_board']:
+            window.TKroot.update_idletasks()
+            extra_px = window[spec['below_board']].Widget.master \
+                .winfo_reqheight()
+
+        layout = PanelLayout(
+            window, spec['board'], spec['panels'],
+            on_resize=lambda room, grow_only: self.fit_board(
+                window, room, grow_only),
+            on_change=self.remember_layouts,
+            stretch_panels=spec['stretch'],
+            divider_color=sg.theme_background_color(),
+            marker_color=TURN_MARKER_ON, board_extra_px=extra_px)
+        self.panel_layouts[mode] = None   # no callbacks act until it is ready
+        layout.set_board_box(self.board_px + TURN_MARKER_PX, self.board_px)
+
+        saved = self.panel_layout_states[mode]
+        if not isinstance(saved, dict):
+            saved = {}
+        layout.arrange(saved.get('arrangement')
+                       or spec['arrangements'][DEFAULT_ARRANGEMENT],
+                       sizes=saved if saved else None)
+        size = saved.get('window')
+        try:
+            if restore_maximized and saved.get('maximized'):
+                self._set_window_maximized(window)
+            elif isinstance(size, list) and len(size) == 2:
+                root = window.TKroot
+                root.geometry('{}x{}'.format(
+                    max(400, min(int(size[0]),
+                                 root.winfo_screenwidth() - 40)),
+                    max(300, min(int(size[1]),
+                                 root.winfo_screenheight() - 100))))
+        except (TypeError, ValueError, tk.TclError):
+            logging.exception('Failed to restore the window size.')
+        self.panel_layouts[mode] = layout
+
+    def panel_layout_of(self, window):
+        """Return (mode, PanelLayout) for a window whose panels are placed
+        by a PanelLayout, or (None, None)."""
+        for mode, layout in self.panel_layouts.items():
+            if layout is not None and layout.window is window:
+                return mode, layout
+        return None, None
+
+    def remember_layouts(self):
+        """Keep the current arrangement and sizes of the window that is
+        showing, and save them with the other settings."""
+        changed = False
+        for mode, layout in self.panel_layouts.items():
+            if layout is None:
+                continue
+            try:
+                # The Play window is hidden while Review is open; what it
+                # reports then is not how the user left it.
+                if layout.root.state() == 'withdrawn':
+                    continue
+                state = layout.state()
+            except tk.TclError:
+                continue        # the window is gone; keep what we had
+            old = self.panel_layout_states[mode]
+            if 'window' not in state and isinstance(old, dict) \
+                    and 'window' in old:
+                # Maximized: remember the size it had before that.
+                state['window'] = old['window']
+            self.panel_layout_states[mode] = state
+            changed = True
+        if changed:
+            self.save_settings()
+
+    def handle_layout_event(self, window, button):
+        """Apply a View menu selection ('<label>::layout_k:<action>:...'):
+        a ready-made arrangement, one panel to another zone, or a reset."""
+        mode, layout = self.panel_layout_of(window)
+        if layout is None:
+            return
+        arrangements = PANEL_LAYOUTS[mode]['arrangements']
+        parts = str(button).split('::layout_k:', 1)[-1].split(':')
+        if parts[0] == 'reset':
+            self.reset_layout(window)
+        elif parts[0] == 'preset' and parts[1] in arrangements:
+            self.use_preferred_board(window)
+            layout.arrange(arrangements[parts[1]], natural=True)
+            layout.refit_later()
+        elif parts[0] == 'move' and len(parts) == 3:
+            layout.move_panel(parts[2], parts[1])
+
+    def reset_layout(self, window):
+        """Back to the default arrangement, sizes and window size."""
+        mode, layout = self.panel_layout_of(window)
+        if layout is None:
+            return
+        root = window.TKroot
+        try:
+            if layout.is_maximized():
+                if root.state() == 'zoomed':
+                    root.state('normal')
+                else:
+                    root.wm_attributes('-zoomed', 0)
+                # Let the window take its un-maximized size before it is
+                # measured (idle tasks alone leave its content at the old
+                # size).
+                root.update()
+        except tk.TclError:
+            pass
+        self.use_preferred_board(window)
+        layout.arrange(PANEL_LAYOUTS[mode]['arrangements'][DEFAULT_ARRANGEMENT],
+                       natural=True)
+        # None in the settings means "the default layout".
+        self.panel_layout_states[mode] = None
+        self.save_settings()
+
+    def use_preferred_board(self, window):
+        """Put the board and its box back at the preferred size, before
+        the window is sized around a new arrangement."""
+        layout = self.panel_layout_of(window)[1]
+        if layout is None:
+            return
+        if self.square_px != self.preferred_square_px:
+            self.square_px = self.preferred_square_px
+            self._apply_board_scale(window)
+        layout.set_board_box(self.board_px + TURN_MARKER_PX, self.board_px)
+
+    def fit_board(self, window, room=None, grow_only=False):
+        """Choose the board size for the room the window has.
+
+        The board is as large as the size the user prefers (picked from
+        Board -> Size or by dragging a divider next to the board), reduced
+        while the window is too small for it. The board box is kept exactly
+        as wide as the board, so the panels get all the remaining width.
+
+        ``room`` is the (width, height) the user left for the board by
+        dragging a divider next to it, or None. With ``grow_only`` that
+        room can only make the preferred size larger (the layout itself
+        keeps a board from being too large for it).
+        """
+        layout = self.panel_layout_of(window)[1]
+        if layout is None:
+            return
+        if room is not None:
+            # The user made this room by hand: that is the size they want.
+            square_px = fit_square_px(
+                min(room[0] - TURN_MARKER_PX, room[1]) // 8)
+            if not grow_only or square_px > self.preferred_square_px:
+                self.preferred_square_px = square_px
+        max_width, max_height = layout.board_space()
+        square_px = fit_square_px(min(self.preferred_square_px,
+                                      (max_width - TURN_MARKER_PX) // 8,
+                                      max_height // 8))
+        if square_px != self.square_px:
+            self.square_px = square_px
+            self._apply_board_scale(window)
+        layout.set_board_box(self.board_px + TURN_MARKER_PX, self.board_px)
+        # Window size, dividers and board size are saved together.
+        self.remember_layouts()
+
+    def set_board_square(self, window, square_px):
+        """Board -> Size: make this the preferred board size, resize the
+        board and its box and let the window follow."""
+        self.preferred_square_px = fit_square_px(square_px)
+        self.square_px = self.preferred_square_px
+        self._apply_board_scale(window)
+        self.sync_board_box(window)
+        self.save_settings()
+
+    def sync_board_box(self, window):
+        """Give the window's board box the size of the current board
+        (after Board -> Size, or a size change made in the other mode)."""
+        layout = self.panel_layout_of(window)[1]
+        if layout is None:
+            return
+        box = (self.board_px + TURN_MARKER_PX, self.board_px)
+        layout.resize_window_for_board_box(*box)
+        layout.set_board_box(*box)
 
     def set_default_adviser_engine(self):
         try:
@@ -7590,6 +8650,7 @@ class EasyChessGui:
         self.load_settings()
         if not self._board_size_from_settings:
             self.auto_fit_board_size()
+        self.preferred_square_px = self.square_px
 
         layout = self.build_main_layout(self.is_white_at_bottom)
 
@@ -7628,13 +8689,8 @@ class EasyChessGui:
         # Initialize White and black boxes
         self.update_labels_and_game_tags(window, human=self.username)
 
-        # Set up drag-and-drop bindings for board squares
-        self.setup_board_drag_drop(window)
-        self.redraw_board(window)
-        self.install_resize_handler(window, 'play_turn_status_k')
-
-        # Match the Linux menubar font to Windows (no-op on Windows/macOS).
-        self.apply_menu_font(window)
+        # Panels, board input and menubar font.
+        self.finish_play_window(window)
 
         # Mode: Play. One game per loop iteration.
         while True:
@@ -7648,7 +8704,7 @@ class EasyChessGui:
             self.set_menu_state(window, in_game=False)
             self.redraw_board(window)
             window.find_element('_gamestatus_').Update('Mode     Play')
-            self.update_play_turn_status(window, board)
+            self.update_turn_marker(window, board)
 
             start_new_game, window = self.play_game(window, board)
 

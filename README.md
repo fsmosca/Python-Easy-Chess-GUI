@@ -69,6 +69,7 @@ task-focused versions of these topics (adapted to the current mode), and
 * [Settings / Game](#settings--game)
 * [Opponent book](#opponent-book)
 * [Show / hide info panels](#show--hide-info-panels)
+* [Panels and layout](#panels-and-layout)
 * [Board appearance](#board-appearance)
 * [Files the app writes](#files-the-app-writes)
 
@@ -105,11 +106,11 @@ Only **UCI** engines are supported. All engine actions are available **before a 
 
 #### Review mode — replay and analyse
 * **Open a game:** `Mode → Review`, choose a PGN file (or pick one from the **Recent** drop-down), then select a game and press **OK** — or double-click it. Click a column heading (White, Black, Result, Date, Event) to sort the game list.
-* **Navigate:** use **First / Previous / Next / Last** below the board, the **Left / Right** arrow keys (**Home / End** for first/last position), or click a move in the move list to jump to that position.
-* **Analysis:** press the **Analysis** button to evaluate the current position (multi-line principal variations). The search stops after the *analysis time* (default 60s) and restarts automatically when you change position.
-* **Threat:** press the **Threat** button to see what the opponent would play if the side to move passed (a null move). It is unavailable when the side to move is in check, and stops after the *threat time* (default 30s).
+* **Navigate:** use the arrow buttons under the board (first, previous, next, last), the **Left / Right** arrow keys (**Home / End** for first/last position), or click a move in the move list to jump to that position.
+* **Analysis:** press the **Analysis** button (in the Analysis panel) to evaluate the current position (multi-line principal variations). The search stops after the *analysis time* (default 60s) and restarts automatically when you change position.
+* **Threat:** press the **Threat** button (in the Threat panel) to see what the opponent would play if the side to move passed (a null move). It is unavailable when the side to move is in check, and stops after the *threat time* (default 30s).
 * **Auto-Analyze Game:** `Game → Auto-Analyze Game` annotates every move with the engine and time per move you choose. Each move gets an evaluation comment; bad moves are marked `?!` `?` `??`. When the engine's move is at least 25cp better than the game move (and its own score stays within ±300cp), the better line is replayed engine-vs-engine for up to 5 plies and added as a *Better is* variation labeled with the evaluation after the line's last move. The annotated game is appended to `pecg_analyzed_games.pgn` and replaces the current review game. `Game → Cancel Analysis` stops early.
-* **Flip the board:** `Board → Flip` within Review mode.
+* **Flip the board:** the flip button at the end of the bar under the board, or `Board → Flip`.
 
 Both analysis and threat run their engines for at most their configured time and then go idle, so they do not keep the CPU busy after a position has been evaluated.
 
@@ -127,6 +128,22 @@ Open with `Settings → General` (before a game starts). **All values are saved 
 These work in **Play** mode by right-clicking the panel's label:
 * **Engine search info:** right-click *Opponent Search Info* → **Show** / **Hide**.
 * **Opening books:** right-click *BOOK 1* or *BOOK 2* → **Show** / **Hide**.
+
+#### Panels and layout
+Both windows are made of panels around the board.
+* **Play:** Players, Move list, Comment, Opening books and Engine.
+* **Review:** Game details, Book moves, Move list, Threat and Analysis. The Threat and Analysis buttons sit in their own panels. The bar of buttons under the board (first, previous, next, last and flip) is part of the board: it stays under it, and panels placed below the board come under it.
+
+Each mode keeps its own arrangement.
+* **Move a panel:** drag it by its title bar to the left of the board, to the right, or below it. A green bar shows where it will land. `View → Move Panel` does the same from the menu.
+* **Ready-made arrangements:** `View → Board Left`, `Board Centre` or `Board Right`, plus `Engine Below Board` in Play and `Analysis Below Board` in Review.
+* **Resize:** drag the divider between two panels, or between the board and the panels beside it. The board takes the largest size that fits.
+* **Several panels under the board:** drop a panel on the top or bottom edge of a panel that is already there to put it above or below it (for example board, Analysis, Threat), or on its middle to put it beside it. `View → Move Panel → Below Board` adds it as a new row at the bottom.
+* **Height of the panels under the board:** drag the divider between the board and those panels up or down to make them taller or shorter. The board keeps its size and the window changes height instead. In a maximized window the divider stays where you drop it, and the board takes the largest size that fits above it.
+* **Saved:** the arrangement, the sizes and the window size are saved in `pecg_settings.json` and restored at the next start. `View → Reset Layout` goes back to the default.
+* **Whose turn:** two dots beside the board, level with each player's back rank; the green one marks the side to move.
+
+All of this works at any time, including during a game or while an analysis is running.
 
 #### Board appearance
 * **Flip:** `Board → Flip`, at any time — including while a game is running or the engine is thinking. The game is not affected.
