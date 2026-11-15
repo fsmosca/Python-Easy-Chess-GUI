@@ -72,13 +72,19 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.38.0'
+APP_VERSION = 'v2.39.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
 REVIEW_ANALYSIS_PV_MOVES = 7
 REVIEW_NAV_DEBOUNCE_SEC = 0.3
 REVIEW_MOVE_LIST_HEIGHT = 4   # lines, until its panel is made taller
+REVIEW_GAME_LIST_ROWS = 4     # games, until its panel is made taller
+# Columns of the Game list panel and their widths in characters. The
+# first four fit a panel of the default width; the rest is reached with
+# the scrollbar under the list, or by making the panel wider.
+REVIEW_GAME_LIST_HEADINGS = ['#', 'White', 'Black', 'Result', 'Date', 'Event']
+REVIEW_GAME_LIST_WIDTHS = [5, 14, 14, 8, 11, 16]
 REVIEW_ANALYSIS_BOX_HEIGHT = 3
 REVIEW_THREAT_BOX_HEIGHT = 1
 REVIEW_THREAT_PV_PLIES = 5
@@ -329,10 +335,11 @@ PLAY_ARRANGEMENTS = {
 }
 
 # Panels of the Review window, in their default order.
-REVIEW_PANEL_KEYS = ('review_game_panel_k', 'review_books_panel_k',
-                     'review_moves_panel_k', 'review_threat_panel_k',
-                     'review_analysis_panel_k')
+REVIEW_PANEL_KEYS = ('review_gamelist_panel_k', 'review_game_panel_k',
+                     'review_books_panel_k', 'review_moves_panel_k',
+                     'review_threat_panel_k', 'review_analysis_panel_k')
 REVIEW_PANEL_TITLES = {
+    'review_gamelist_panel_k': 'Game list',
     'review_game_panel_k': 'Game details',
     'review_books_panel_k': 'Book moves',
     'review_moves_panel_k': 'Move list',
@@ -341,12 +348,14 @@ REVIEW_PANEL_TITLES = {
 }
 REVIEW_ARRANGEMENTS = {
     'Board Left': {'right': list(REVIEW_PANEL_KEYS)},
-    'Board Centre': {'left': ['review_game_panel_k', 'review_books_panel_k',
+    'Board Centre': {'left': ['review_gamelist_panel_k',
+                              'review_game_panel_k', 'review_books_panel_k',
                               'review_threat_panel_k'],
                      'right': ['review_moves_panel_k',
                                'review_analysis_panel_k']},
     'Board Right': {'left': list(REVIEW_PANEL_KEYS)},
-    'Analysis Below Board': {'right': ['review_game_panel_k',
+    'Analysis Below Board': {'right': ['review_gamelist_panel_k',
+                                       'review_game_panel_k',
                                        'review_books_panel_k',
                                        'review_moves_panel_k',
                                        'review_threat_panel_k'],
@@ -528,9 +537,13 @@ HELP_TOPICS = {
         'toggled in Settings -> General.'),
     'help_review_open': (
         'Open a Game to Review',
-        'Mode -> Review, choose a PGN file (or pick one from Recent),\n'
-        'select a game and press OK or double-click it. Click a column\n'
-        'heading to sort. Use Game -> Select Game to change games later.'),
+        'Mode -> Review, then Game -> Select Game: choose a PGN file (or\n'
+        'pick one from Recent), select a game and press OK or\n'
+        'double-click it.\n\n'
+        'The Game list panel shows the games of that file: click one to\n'
+        'put it on the board, or use the Up / Down keys in the list.\n'
+        'Click a column heading to sort. Analysis and Threat, if they\n'
+        'are on, follow the board to the new game.'),
     'help_review_nav': (
         'Navigate Moves',
         'Use the arrow buttons under the board (first, previous, next,\n'
@@ -1859,7 +1872,10 @@ class PanelLayout:
     # ----- arrangement -----------------------------------------------------
     def clean(self, arrangement):
         """Return arrangement with every panel exactly once: unknown names
-        are dropped and missing panels are added to the right zone."""
+        are dropped and missing panels are added to the right zone, above
+        the panels there that come after them in the default order (so a
+        panel that is new in this version shows up in its usual place in
+        a layout saved by an older one)."""
         result = {zone: [] for zone in self.ZONES}
         seen = set()
         if isinstance(arrangement, dict):
@@ -1869,7 +1885,13 @@ class PanelLayout:
                     if key in self.panel_keys and key not in seen:
                         result[zone].append(key)
                         seen.add(key)
-        result['right'] += [k for k in self.panel_keys if k not in seen]
+        order = self.panel_keys.index
+        for key in self.panel_keys:
+            if key not in seen:
+                right = result['right']
+                later = [i for i, k in enumerate(right)
+                         if order(k) > order(key)]
+                right.insert(later[0] if later else len(right), key)
         return result
 
     @staticmethod
@@ -2669,6 +2691,12 @@ class EasyChessGui:
         self.review_games = []
         self.review_game = None
         self.review_game_index = None
+        # The Game list panel: its rows as shown, the game (index into
+        # review_games) of each row, and (column, reversed) it is sorted
+        # by - None for the order of the file.
+        self.review_list_rows = []
+        self.review_list_map = []
+        self.review_list_sort = None
         self.review_move_index = 0
         self.review_move_labels = []
         self.review_boards = []
@@ -2723,26 +2751,39 @@ class EasyChessGui:
             return
         self.review_move_index = idx
         self.update_review_window(self.review_window)
-        if self.review_analysis_enabled or self.review_threat_enabled:
-            # Stop currently running analysis and trigger a debounce restart
+        self.follow_review_position(self.review_window)
+
+    def follow_review_position(self, window):
+        """The position on the Review board changed (another move, or
+        another game): make analysis and threat follow it if they are on.
+
+        Their searches are only told to stop here, without blocking. The
+        Review loop restarts them on the new position once navigation has
+        settled (REVIEW_NAV_DEBOUNCE_SEC).
+        """
+        # A role that is on: mark its output stale, so poll discards the
+        # old position's lines and the debounce restart knows it still
+        # needs restarting. A role that is off just shows 'stopped'.
+        if self.review_analysis_enabled:
             if self.review_analysis_search is not None:
                 self.review_analysis_search.stop()
-            if self.review_threat_search is not None:
-                self.review_threat_search.stop()
-            # Mark output stale so poll discards the old position's lines and the
-            # debounce restart knows these roles still need restarting.
             self.review_analysis_stale = True
-            self.review_threat_stale = True
-            self.review_nav_last_time = time.time()
             self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
             self.review_analysis_status = 'Waiting...'
+            self.update_review_analysis_panel(window)
+        else:
+            self.refresh_review_analysis(window)
+        if self.review_threat_enabled:
+            if self.review_threat_search is not None:
+                self.review_threat_search.stop()
+            self.review_threat_stale = True
             self.review_threat_line = ''
             self.review_threat_status = 'Waiting...'
-            self.update_review_analysis_panel(self.review_window)
-            self.update_review_threat_panel(self.review_window)
+            self.update_review_threat_panel(window)
         else:
-            self.refresh_review_analysis(self.review_window)
-            self.refresh_review_threat(self.review_window)
+            self.refresh_review_threat(window)
+        if self.review_analysis_enabled or self.review_threat_enabled:
+            self.review_nav_last_time = time.time()
 
     def highlight_current_move(self, widget):
         """Highlights the active move in the Multiline text and scrolls it into view."""
@@ -5916,6 +5957,95 @@ class EasyChessGui:
                 headers.get('Date', '?'),
                 headers.get('Event', '?')]
 
+    @staticmethod
+    def sort_game_rows(rows, row_map, col, reverse):
+        """Return (rows, row_map) of a game table sorted by column
+        ``col``: by game number in the first column, as text ignoring
+        case in the others."""
+        paired = sorted(
+            zip(rows, row_map),
+            key=lambda rm: (rm[0][col] if col == 0
+                            else str(rm[0][col]).lower()),
+            reverse=reverse)
+        return [p[0] for p in paired], [p[1] for p in paired]
+
+    def fill_review_game_list(self, window):
+        """Show the games of the review PGN file in the Game list panel,
+        in the order of the file. Follow with mark_review_game()."""
+        self.review_list_sort = None
+        self.review_list_rows = [self.get_review_game_row(game, index)
+                                 for index, game in
+                                 enumerate(self.review_games)]
+        self.review_list_map = list(range(len(self.review_list_rows)))
+        window['review_game_table_k'].Update(values=self.review_list_rows)
+
+    def sort_review_game_list(self, window, col):
+        """Sort the Game list panel by a column; again by the same column
+        reverses the order. The game on the board stays marked."""
+        if not self.review_list_rows \
+                or not 0 <= col < len(REVIEW_GAME_LIST_HEADINGS):
+            return
+        reverse = self.review_list_sort is not None \
+            and self.review_list_sort[0] == col \
+            and not self.review_list_sort[1]
+        self.review_list_sort = (col, reverse)
+        self.review_list_rows, self.review_list_map = self.sort_game_rows(
+            self.review_list_rows, self.review_list_map, col, reverse)
+        window['review_game_table_k'].Update(values=self.review_list_rows)
+        self.mark_review_game(window)
+
+    def mark_review_game(self, window):
+        """Select the row of the game on the board in the Game list panel
+        and bring it into view. No row is selected when that game is not
+        one of the list (an empty or an auto-analysed game)."""
+        tree = window['review_game_table_k'].Widget
+        try:
+            row = str(self.review_list_map.index(self.review_game_index) + 1)
+        except ValueError:
+            row = None
+        try:
+            if row is None:
+                tree.selection_set([])
+            elif tuple(tree.selection()) != (row,):
+                tree.selection_set(row)
+                tree.see(row)
+        except tk.TclError:
+            logging.exception('Failed to mark the game in the game list.')
+
+    def select_listed_review_game(self, window):
+        """A row of the Game list panel was selected (by mouse or with the
+        Up / Down keys): put that game on the board."""
+        selection = window['review_game_table_k'].Widget.selection()
+        try:
+            index = self.review_list_map[int(selection[0]) - 1]
+        except (IndexError, ValueError):
+            return
+        # Marking the current game (mark_review_game) also comes here.
+        if index == self.review_game_index:
+            return
+        game = None
+        try:
+            game = self.load_review_game(self.review_pgn_file,
+                                         self.review_games[index])
+        except (OSError, IndexError):
+            logging.exception('Failed to load game %d of %s', index + 1,
+                              self.review_pgn_file)
+        if game is None:
+            window['_gamestatus_'].Update(
+                'Failed to load game {}.'.format(index + 1))
+            self.mark_review_game(window)
+            return
+        self.show_review_game(window, game, index)
+
+    def show_review_game(self, window, game, game_index):
+        """Put another game on the Review board. Analysis and threat stay
+        on if they were, and follow the board to the new game."""
+        self.prepare_review_game(game, game_index)
+        self.render_review_movelist(window)
+        self.update_review_window(window)
+        self.mark_review_game(window)
+        self.follow_review_position(window)
+
     def select_review_game(self, pgn_file=None, games=None):
         """Ask user to select a game from a pgn file.
 
@@ -6010,12 +6140,7 @@ class EasyChessGui:
                        if sort_state['col'] == col else False)
             sort_state['col'] = col
             sort_state['reverse'] = reverse
-            paired = sorted(
-                zip(rows, row_map),
-                key=lambda rm: (rm[0][col] if col == 0
-                                else str(rm[0][col]).lower()),
-                reverse=reverse)
-            return [list(t) for t in zip(*paired)] if paired else ([], [])
+            return self.sort_game_rows(rows, row_map, col, reverse)
 
         selected_game = None
 
@@ -6164,21 +6289,18 @@ class EasyChessGui:
         traverse_node(node, current_board, indent, is_var)
 
     def prepare_review_game(self, game, game_index=None):
-        """Prepare move list and board positions for review."""
+        """Prepare move list and board positions for review.
+
+        Analysis and threat are left as they are: the caller makes them
+        follow the new game (show_review_game) or stops them
+        (reset_review_engines_for_new_game).
+        """
         self.review_game = game
         self.review_game_index = game_index
         self.review_move_index = 0
         self.review_move_labels = ['Start position']
         self.review_boards = [game.board()]
         self.review_nodes = [game]
-        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
-        self.review_analysis_status = 'Analysis stopped'
-        self.review_analysis_enabled = False
-        self.review_analysis_stale = False
-        self.review_threat_line = ''
-        self.review_threat_status = 'Threat stopped'
-        self.review_threat_enabled = False
-        self.review_threat_stale = False
 
         if game.variations:
             # Mainline starts at variations[0]
@@ -6355,13 +6477,12 @@ class EasyChessGui:
         self.start_review_analysis(window)
 
     def reset_review_engines_for_new_game(self, window):
-        """Stop and disable Review analysis/threat after loading a new game.
+        """Stop and disable Review analysis/threat: used when auto-analysis
+        replaces the game on the board with its annotated copy.
 
-        A freshly loaded game starts with both panels cleanly 'stopped', so the
-        next click on the Analysis/Threat button starts a new search. Loading
-        used to auto-restart the searches, so if analysis was already on the
-        first click — meant to start it — instead toggled the running search
-        off, and only a second click showed output.
+        Both panels are then cleanly 'stopped', so the next click on the
+        Analysis/Threat button starts a new search. (Switching to another
+        game keeps them on instead: see show_review_game.)
         """
         self.review_analysis_enabled = False
         self.review_threat_enabled = False
@@ -6584,6 +6705,8 @@ class EasyChessGui:
                 self.prepare_review_game(annotated)
                 self.render_review_movelist(window)
                 self.update_review_window(window)
+                # The annotated copy is not a game of the list.
+                self.mark_review_game(window)
                 self.reset_review_engines_for_new_game(window)
                 window['_gamestatus_'].Update(
                     'Analysis complete. Saved to {}.'.format(
@@ -6962,6 +7085,19 @@ class EasyChessGui:
             self.create_board(is_white_at_bottom) + [[nav_bar]],
             key='review_board_box_k', pad=(0, 0))
 
+        # The games of the PGN file; selecting one puts it on the board.
+        # It is filled by fill_review_game_list().
+        game_list = self.panel('review_gamelist_panel_k', 'Game list', [
+            [sg.Table(values=[], headings=REVIEW_GAME_LIST_HEADINGS,
+                      key='review_game_table_k', auto_size_columns=False,
+                      col_widths=REVIEW_GAME_LIST_WIDTHS,
+                      justification='left', num_rows=REVIEW_GAME_LIST_ROWS,
+                      enable_events=True, enable_click_events=True,
+                      select_mode=sg.TABLE_SELECT_MODE_BROWSE,
+                      vertical_scroll_only=False, font=FONT_BASE,
+                      expand_x=True, expand_y=True)],
+        ])
+
         game = self.panel('review_game_panel_k', 'Game details', [
             [sg.Text('PGN file', size=(8, 1), font=FONT_BASE),
              sg.Text('', size=(30, 1), font=FONT_SMALL, key='review_pgn_k',
@@ -7002,7 +7138,7 @@ class EasyChessGui:
         layout = [
             [self.review_menu_elem],
             # One row holding the board box and every panel.
-            [board_box, game, books, moves, threat, analysis],
+            [board_box, game_list, game, books, moves, threat, analysis],
             # Status bar along the bottom edge of the window.
             [sg.Text('Mode     Review', font=FONT_BASE, key='_gamestatus_',
                      relief='sunken', expand_x=True, pad=(0, (6, 0)))],
@@ -7028,6 +7164,15 @@ class EasyChessGui:
         )
         self.compact_review_buttons(window)
         self.bind_review_shortcuts(window)
+        # Game list: the columns keep their width, so a panel too narrow
+        # for them scrolls sideways instead of squeezing them all; only
+        # the last one takes the spare width of a wider panel.
+        tree = window['review_game_table_k'].Widget
+        for heading in REVIEW_GAME_LIST_HEADINGS[:-1]:
+            tree.column(heading, stretch=False)
+        tree.column(REVIEW_GAME_LIST_HEADINGS[-1],
+                    minwidth=tree.column(REVIEW_GAME_LIST_HEADINGS[-1],
+                                         'width'))
         # Whether the window is maximized follows the Play window (see
         # start_review_mode), not what was saved.
         self.attach_panel_layout(window, 'review', restore_maximized=False)
@@ -7130,6 +7275,8 @@ class EasyChessGui:
         if was_maximized:
             self._set_window_maximized(review_window)
         self.review_window = review_window
+        self.fill_review_game_list(review_window)
+        self.mark_review_game(review_window)
         self.render_review_movelist(review_window)
         self.update_review_window(review_window)
 
@@ -7180,12 +7327,24 @@ class EasyChessGui:
 
                 self.review_pgn_file = selected_game['pgn_file']
                 self.review_games = selected_game['games']
-                self.prepare_review_game(
-                    selected_game['game'], selected_game['game_index'])
-                self.render_review_movelist(review_window)
-                self.update_review_window(review_window)
-                self.reset_review_engines_for_new_game(review_window)
+                self.fill_review_game_list(review_window)
+                self.show_review_game(
+                    review_window, selected_game['game'],
+                    selected_game['game_index'])
                 self.save_settings()
+                continue
+
+            # The Game list panel: a click on a heading sorts by that
+            # column, a selected row puts that game on the board.
+            if button == 'review_game_table_k' or (
+                    isinstance(button, tuple) and len(button) == 3
+                    and button[0] == 'review_game_table_k'):
+                clicked = button[2] if isinstance(button, tuple) else None
+                if clicked is not None and clicked[0] == -1:
+                    if clicked[1] is not None:
+                        self.sort_review_game_list(review_window, clicked[1])
+                else:
+                    self.select_listed_review_game(review_window)
                 continue
 
             if button == 'Auto-Analyze Game::review_auto_analyze_k':
@@ -7274,28 +7433,7 @@ class EasyChessGui:
 
             if position_changed:
                 self.update_review_window(review_window)
-                if self.review_analysis_enabled or self.review_threat_enabled:
-                    # Signal threads to stop without blocking.
-                    # The actual join and restart happen in the debounce
-                    # handler after the user stops pressing buttons.
-                    if self.review_analysis_search is not None:
-                        self.review_analysis_search.stop()
-                    if self.review_threat_search is not None:
-                        self.review_threat_search.stop()
-                    # Mark current output stale so poll discards the old
-                    # position's lines until a fresh search is started.
-                    self.review_analysis_stale = True
-                    self.review_threat_stale = True
-                    self.review_nav_last_time = time.time()
-                    self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
-                    self.review_analysis_status = 'Waiting...'
-                    self.review_threat_line = ''
-                    self.review_threat_status = 'Waiting...'
-                    self.update_review_analysis_panel(review_window)
-                    self.update_review_threat_panel(review_window)
-                else:
-                    self.refresh_review_analysis(review_window)
-                    self.refresh_review_threat(review_window)
+                self.follow_review_position(review_window)
 
         self.close_review_analysis()
         self.close_review_threat()
@@ -7388,13 +7526,18 @@ class EasyChessGui:
                               key='play_board_box_k', pad=(0, 0))
 
         def player_row(label, name_key, default_name, base_key, elapse_key):
+            # The time boxes are wider than their longest text, which is
+            # centred: remaining time up to '10h:00m:00s' (11 characters),
+            # elapsed time up to '100m:00s' (8). The name takes the rest
+            # of the row.
             return [sg.Text(label, size=(6, 1), font=FONT_BASE),
                     sg.Text(default_name, font=FONT_BASE, key=name_key,
-                            size=(20, 1), relief='sunken', expand_x=True),
+                            size=(17, 1), relief='sunken', expand_x=True),
                     sg.Text('', font=FONT_BASE, key=base_key,
-                            size=(11, 1), relief='sunken'),
-                    sg.Text('', font=FONT_BASE, key=elapse_key, size=(7, 1),
-                            relief='sunken')]
+                            size=(12, 1), relief='sunken',
+                            justification='center'),
+                    sg.Text('', font=FONT_BASE, key=elapse_key, size=(9, 1),
+                            relief='sunken', justification='center')]
 
         players = self.panel('play_players_panel_k', 'Players', [
             player_row('White', '_White_', 'Human',

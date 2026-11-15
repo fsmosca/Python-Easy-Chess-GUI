@@ -105,7 +105,8 @@ Only **UCI** engines are supported. All engine actions are available **before a 
 * **Search depth:** `Engine → Set Depth` caps the depth of the playing and adviser engines. Review analysis/threat are limited by **time** instead (see Settings).
 
 #### Review mode — replay and analyse
-* **Open a game:** `Mode → Review`, choose a PGN file (or pick one from the **Recent** drop-down), then select a game and press **OK** — or double-click it. Click a column heading (White, Black, Result, Date, Event) to sort the game list.
+* **Open a PGN file:** `Mode → Review`, then `Game → Select Game`: choose a PGN file (or pick one from the **Recent** drop-down), then select a game and press **OK** — or double-click it. Click a column heading (White, Black, Result, Date, Event) to sort the game list. The file opened last is loaded again the next time.
+* **Switch games:** the **Game list** panel shows the games of the PGN file. Click a game to put it on the board, or use the **Up / Down** keys in the list. Click a column heading to sort, and again to reverse the order. Analysis and Threat, if they are on, follow the board to the new game.
 * **Navigate:** use the arrow buttons under the board (first, previous, next, last), the **Left / Right** arrow keys (**Home / End** for first/last position), or click a move in the move list to jump to that position.
 * **Analysis:** press the **Analysis** button (in the Analysis panel) to evaluate the current position (multi-line principal variations). The search stops after the *analysis time* (default 60s) and restarts automatically when you change position.
 * **Threat:** press the **Threat** button (in the Threat panel) to see what the opponent would play if the side to move passed (a null move). It is unavailable when the side to move is in check, and stops after the *threat time* (default 30s).
@@ -132,7 +133,7 @@ These work in **Play** mode by right-clicking the panel's label:
 #### Panels and layout
 Both windows are made of panels around the board.
 * **Play:** Players, Move list, Comment, Opening books and Engine.
-* **Review:** Game details, Book moves, Move list, Threat and Analysis. The Threat and Analysis buttons sit in their own panels. The bar of buttons under the board (first, previous, next, last and flip) is part of the board: it stays under it, and panels placed below the board come under it.
+* **Review:** Game list, Game details, Book moves, Move list, Threat and Analysis. The Threat and Analysis buttons sit in their own panels. The bar of buttons under the board (first, previous, next, last and flip) is part of the board: it stays under it, and panels placed below the board come under it.
 
 Each mode keeps its own arrangement.
 * **Move a panel:** drag it by its title bar to the left of the board, to the right, or below it. A green bar shows where it will land. `View → Move Panel` does the same from the menu.
