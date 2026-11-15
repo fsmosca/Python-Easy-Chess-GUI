@@ -53,6 +53,7 @@ import chess.polyglot
 import logging
 import webbrowser
 import tkinter as tk
+import tkinter.font as tkfont
 import platform as sys_plat
 
 
@@ -72,11 +73,18 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.39.0'
+APP_VERSION = 'v2.40.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
-REVIEW_ANALYSIS_MULTIPV_LINES = 3
-REVIEW_ANALYSIS_PV_MOVES = 7
+REVIEW_ANALYSIS_MULTIPV_LINES = 3   # lines of analysis, until changed
+REVIEW_ANALYSIS_MULTIPV_MAX = 10    # most lines the Analysis panel offers
+# Hash sizes in MB offered by the Analysis and Threat panels (those the
+# engine accepts, plus the size it has now).
+REVIEW_HASH_CHOICES_MB = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096,
+                          8192, 16384]
+# Colour of the line of search figures (depth, time, nodes) in the
+# Analysis and Threat boxes; readable on light and dark themes.
+REVIEW_INFO_COLOR = '#7a7f87'
 REVIEW_NAV_DEBOUNCE_SEC = 0.3
 REVIEW_MOVE_LIST_HEIGHT = 4   # lines, until its panel is made taller
 REVIEW_GAME_LIST_ROWS = 4     # games, until its panel is made taller
@@ -85,9 +93,10 @@ REVIEW_GAME_LIST_ROWS = 4     # games, until its panel is made taller
 # the scrollbar under the list, or by making the panel wider.
 REVIEW_GAME_LIST_HEADINGS = ['#', 'White', 'Black', 'Result', 'Date', 'Event']
 REVIEW_GAME_LIST_WIDTHS = [5, 14, 14, 8, 11, 16]
-REVIEW_ANALYSIS_BOX_HEIGHT = 3
-REVIEW_THREAT_BOX_HEIGHT = 1
-REVIEW_THREAT_PV_PLIES = 5
+# Lines of the Analysis and Threat boxes until their panel is made
+# taller: the search figures, then one line per variation.
+REVIEW_ANALYSIS_BOX_HEIGHT = 1 + REVIEW_ANALYSIS_MULTIPV_LINES
+REVIEW_THREAT_BOX_HEIGHT = 2
 # Output file for games annotated by the Review-mode auto-analyzer.
 AUTO_ANALYSIS_OUTPUT_FILE = 'pecg_analyzed_games.pgn'
 # How many recently opened review PGN paths to remember in the settings.
@@ -555,12 +564,20 @@ HELP_TOPICS = {
         'Analysis button: evaluate the position with the analysis engine.\n'
         'Threat button: show the opponent threat (null move).\n'
         'Both stop after their time limits in Settings -> General (analysis\n'
-        '60s, threat 30s) and restart automatically when you change move.'),
+        '60s, threat 30s) and restart automatically when you change move.\n\n'
+        'Each box shows the search figures (depth, time, nodes, nodes per\n'
+        'second), then the score and the line of moves. The score is for\n'
+        'the side to move; #3 means that side mates in 3, -#3 that it is\n'
+        'mated in 3. For Threat the side to move is the opponent. The line\n'
+        'is as long as the panel is wide: widen the panel to see more.\n\n'
+        'Hash, Threads and MultiPV (number of lines) are set in the panel\n'
+        'and saved; a running search restarts with the new value.'),
     'help_review_auto': (
         'Auto-Analyze Game',
         'Game -> Auto-Analyze Game annotates every move of the loaded game\n'
         'with the engine and time per move that you choose. Each move gets\n'
-        'an evaluation comment; bad moves are marked ?! ? ??. When the\n'
+        'an evaluation comment, from the side that played it (positive is\n'
+        'good for that side); bad moves are marked ?! ? ??. When the\n'
         'engine move is at least 25cp better (and its score stays within\n'
         '+/-300cp) the better line is replayed engine vs engine for up to\n'
         '5 plies and added as a "Better is" variation scored at the end of\n'
@@ -898,7 +915,8 @@ class RunEngine(threading.Thread):
                  engine_id_name, max_depth=MAX_DEPTH,
                  base_ms=300000, inc_ms=1000, tc_type='fischer',
                  period_moves=0, is_stream_search_info=True,
-                 existing_engine=None, multipv=1, option_overrides=None):
+                 existing_engine=None, multipv=1, option_overrides=None,
+                 info_as_dict=False):
         """
         Run engine as opponent or as adviser.
 
@@ -909,6 +927,9 @@ class RunEngine(threading.Thread):
         :param max_depth:
         :param existing_engine: An existing chess.engine.SimpleEngine instance
             to reuse instead of spawning a new process.
+        :param info_as_dict: post each line of streamed search info as a
+            dict (see _run) instead of a formatted string, so the consumer
+            formats the score and the whole variation itself.
         """
         threading.Thread.__init__(self)
         self._kill = threading.Event()
@@ -938,6 +959,7 @@ class RunEngine(threading.Thread):
         self.is_move_delay = True
         # Per-role UCI option overrides applied on top of the engine config.
         self.option_overrides = option_overrides or {}
+        self.info_as_dict = info_as_dict
         try:
             self.multipv = max(1, int(multipv))
         except (TypeError, ValueError):
@@ -1194,7 +1216,22 @@ class RunEngine(threading.Thread):
                                 if pv is not None:
                                     self.pv = pv
 
-                            if score is not None and pv is not None and depth is not None:
+                            if self.info_as_dict:
+                                # The variation in full and the score as
+                                # the engine gave it, with the board they
+                                # belong to.
+                                if pv is not None and 'score' in info:
+                                    self.eng_queue.put({
+                                        'board': self.board,
+                                        'multipv': line_number,
+                                        'score': info['score'],
+                                        'pv': list(info['pv']),
+                                        'depth': depth,
+                                        'seldepth': info.get('seldepth'),
+                                        'time': elapsed,
+                                        'nodes': info.get('nodes'),
+                                        'nps': info.get('nps')})
+                            elif score is not None and pv is not None and depth is not None:
                                 if self.multipv > 1:
                                     info_to_send = \
                                         '{} | {:+5.2f} | {} | {:0.1f}s | {} multipv_info'.format(
@@ -1329,7 +1366,7 @@ class AutoAnalyzeGame(threading.Thread):
 
     Walks the mainline of the supplied game, evaluating each position with
     the engine. Each played move gets a comment with its evaluation
-    (White's POV). Bad moves get ?!/?/?? NAGs. When the engine's move beats
+    (from the side that played it). Bad moves get ?!/?/?? NAGs. When the engine's move beats
     the game move by at least AUTO_ANALYSIS_ALT_MIN_CP and its own score is
     within AUTO_ANALYSIS_BETTER_MAX_ABS_CP of equal, the better line is not
     taken from the search PV (which can be a single move) but replayed engine
@@ -1371,21 +1408,21 @@ class AutoAnalyzeGame(threading.Thread):
         self.engine = None
         self.daemon = True
 
-    def _format_score(self, score):
-        """Return a human-readable score string.
+    def _format_score(self, score, mover):
+        """Return a human-readable score string from the point of view of
+        ``mover``: the side to move in the position being annotated, the
+        one whose move the score is written on.
 
-        Centipawn scores read from White's POV. Mate scores instead read
-        from the point of view of the side to move in the scored position
-        (score.relative) - "Mate in n" when that side forces mate, "Mated
-        in n" when that side is the one being mated - matching how engines
-        report mate counts natively.
+        Pawns are positive when that side is better. A mate reads "Mate
+        in n" when that side forces it and "Mated in n" when it is the
+        one being mated.
         """
-        if score.relative.is_mate():
-            mate = score.relative.mate()
+        own = score.pov(mover)
+        if own.is_mate():
+            mate = own.mate()
             return 'Mate in {}'.format(mate) if mate > 0 \
                 else 'Mated in {}'.format(abs(mate))
-        cp = score.white().score(mate_score=32000)
-        return '{:+.2f}'.format(cp / 100.0)
+        return '{:+.2f}'.format(own.score() / 100.0)
 
     def _replay_variation(self, board, first_move, limit):
         """Rebuild an engine line by playing the engine against itself.
@@ -1430,11 +1467,14 @@ class AutoAnalyzeGame(threading.Thread):
         a "Better is" pre-comment on the first variation move, followed by the
         engine's evaluation of the position the replayed line ended on. Without
         it the line is written bare - "(9...Qe6 {+1.53} 10. Re1)" - for a
-        smaller edge over the game move.
+        smaller edge over the game move. That evaluation is from the side
+        to move on ``board`` (the one the line is for), like the comment
+        of the game move it is compared with.
         """
         if not moves or moves[0] not in board.legal_moves:
             return
-        score_text = self._format_score(score) if score is not None else ''
+        score_text = self._format_score(score, board.turn) \
+            if score is not None else ''
         starting_comment = 'Better is' if label_better else ''
         var_board = board.copy()
         var_node = node.add_variation(
@@ -1450,18 +1490,18 @@ class AutoAnalyzeGame(threading.Thread):
                             allows_mate):
         """Return the annotation comment for a played move.
 
-        Base is the score text: centipawns from White's POV, but mate
-        wording from the mover's POV ('Mate in n' when the game move wins
-        with mate, 'Mated in n' when the mover is the one getting mated) -
-        the caller passes game_move_score anchored to the mover for this
-        reason. A move that walks into a forced mate
+        Base is the score text from the mover's POV: pawns positive when
+        the mover is better, 'Mate in n' when the game move wins with
+        mate, 'Mated in n' when the mover is the one getting mated. The
+        caller passes game_move_score anchored to the mover (its turn)
+        for this reason. A move that walks into a forced mate
         while a better move existed is marked 'allows mate'; a move that
         earned a praise NAG is marked as the only good move (same criterion
         as the NAG, so text and glyph never disagree). The better move and
         its price are not spelled out here - the replayed variation carries
         them. Kept brace-free: PGN comments cannot contain '{' or '}'.
         """
-        text = self._format_score(game_move_score)
+        text = self._format_score(game_move_score, game_move_score.turn)
         if delta_cp is not None and delta_cp >= 30 and allows_mate:
             text += ', allows mate'
         elif is_only_move:
@@ -2658,6 +2698,12 @@ class EasyChessGui:
         # user-configurable via Settings/Game and persisted in the settings file.
         self.review_analysis_time_sec = REVIEW_ANALYSIS_TIME_SEC
         self.review_threat_time_sec = REVIEW_THREAT_TIME_SEC
+        # Lines of analysis (MultiPV) asked for in Review mode; set in the
+        # Analysis panel and persisted.
+        self.review_analysis_multipv = REVIEW_ANALYSIS_MULTIPV_LINES
+        # The most lines the analysis engine can give (set when the Review
+        # window opens: show_review_engine_settings).
+        self.review_multipv_limit = REVIEW_ANALYSIS_MULTIPV_MAX
         # Auto-analysis defaults to the analysis engine, but the user can
         # pick any installed engine and a per-move time in milliseconds.
         self.auto_analysis_engine_id_name = None
@@ -2697,12 +2743,15 @@ class EasyChessGui:
         self.review_list_rows = []
         self.review_list_map = []
         self.review_list_sort = None
+        # The boards the running analysis and threat searches were given.
+        self.review_analysis_board = None
+        self.review_threat_board = None
         self.review_move_index = 0
         self.review_move_labels = []
         self.review_boards = []
         self.review_nodes = []
         self.review_window = None
-        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+        self.review_analysis_lines = {}
         self.review_analysis_enabled = False
         self.review_analysis_status = 'Analysis stopped'
         self.review_analysis_search = None
@@ -2711,7 +2760,7 @@ class EasyChessGui:
         self.review_analysis_stale = False
         self.review_threat_enabled = False
         self.review_threat_status = 'Threat stopped'
-        self.review_threat_line = ''
+        self.review_threat_line = None
         self.review_threat_search = None
         self.review_threat_engine = None
         self._stale_threat_searches = []
@@ -2725,7 +2774,7 @@ class EasyChessGui:
     def reset_review_run_state(self):
         """Reset run state of review mode when exiting, keeping loaded game/pgn."""
         self.review_window = None
-        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+        self.review_analysis_lines = {}
         self.review_analysis_enabled = False
         self.review_analysis_status = 'Analysis stopped'
         self.review_analysis_search = None
@@ -2734,7 +2783,7 @@ class EasyChessGui:
         self.review_analysis_stale = False
         self.review_threat_enabled = False
         self.review_threat_status = 'Threat stopped'
-        self.review_threat_line = ''
+        self.review_threat_line = None
         self.review_threat_search = None
         self.review_threat_engine = None
         self._stale_threat_searches = []
@@ -2761,29 +2810,40 @@ class EasyChessGui:
         Review loop restarts them on the new position once navigation has
         settled (REVIEW_NAV_DEBOUNCE_SEC).
         """
-        # A role that is on: mark its output stale, so poll discards the
-        # old position's lines and the debounce restart knows it still
-        # needs restarting. A role that is off just shows 'stopped'.
-        if self.review_analysis_enabled:
-            if self.review_analysis_search is not None:
-                self.review_analysis_search.stop()
-            self.review_analysis_stale = True
-            self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
-            self.review_analysis_status = 'Waiting...'
-            self.update_review_analysis_panel(window)
-        else:
+        self.restart_review_analysis_later(window)
+        self.restart_review_threat_later(window)
+
+    def restart_review_analysis_later(self, window):
+        """Analysis has to start again: the position changed, or one of
+        its settings (Hash, Threads, MultiPV).
+
+        If it is on, its output is marked stale, so poll discards the
+        lines of the old search and the Review loop knows to restart it
+        after the debounce. If it is off it just shows 'stopped'.
+        """
+        if not self.review_analysis_enabled:
             self.refresh_review_analysis(window)
-        if self.review_threat_enabled:
-            if self.review_threat_search is not None:
-                self.review_threat_search.stop()
-            self.review_threat_stale = True
-            self.review_threat_line = ''
-            self.review_threat_status = 'Waiting...'
-            self.update_review_threat_panel(window)
-        else:
+            return
+        if self.review_analysis_search is not None:
+            self.review_analysis_search.stop()
+        self.review_analysis_stale = True
+        self.review_analysis_lines = {}
+        self.review_analysis_status = 'Waiting...'
+        self.update_review_analysis_panel(window)
+        self.review_nav_last_time = time.time()
+
+    def restart_review_threat_later(self, window):
+        """Threat has to start again (see restart_review_analysis_later)."""
+        if not self.review_threat_enabled:
             self.refresh_review_threat(window)
-        if self.review_analysis_enabled or self.review_threat_enabled:
-            self.review_nav_last_time = time.time()
+            return
+        if self.review_threat_search is not None:
+            self.review_threat_search.stop()
+        self.review_threat_stale = True
+        self.review_threat_line = None
+        self.review_threat_status = 'Waiting...'
+        self.update_review_threat_panel(window)
+        self.review_nav_last_time = time.time()
 
     def highlight_current_move(self, widget):
         """Highlights the active move in the Multiline text and scrolls it into view."""
@@ -3462,6 +3522,13 @@ class EasyChessGui:
             if key in data:
                 setattr(self, key,
                         self._read_review_time(data[key], getattr(self, key)))
+        if 'review_analysis_multipv' in data:
+            try:
+                self.review_analysis_multipv = max(
+                    1, min(REVIEW_ANALYSIS_MULTIPV_MAX,
+                           int(data['review_analysis_multipv'])))
+            except (TypeError, ValueError):
+                pass
         if 'adviser_movetime_sec' in data:
             self.adviser_movetime_sec = self._read_review_time(
                 data['adviser_movetime_sec'], self.adviser_movetime_sec)
@@ -3525,6 +3592,7 @@ class EasyChessGui:
             'is_time_forfeit_enabled': self.is_time_forfeit_enabled,
             'review_analysis_time_sec': self.review_analysis_time_sec,
             'review_threat_time_sec': self.review_threat_time_sec,
+            'review_analysis_multipv': self.review_analysis_multipv,
             'opp_id_name': self.opp_id_name,
             'adviser_id_name': self.adviser_id_name,
             'analysis_id_name': self.analysis_id_name,
@@ -6324,24 +6392,241 @@ class EasyChessGui:
             except Exception:
                 break
 
-    def update_review_analysis_panel(self, window):
-        """Refresh Review mode analysis widgets."""
-        analysis_text = '\n'.join(
-            line if line else ' ' for line in self.review_analysis_lines
-        )
-        window['review_analysis_status_k'].Update(self.review_analysis_status)
-        window['review_analysis_k'].Update(analysis_text)
+    # ----- Review analysis / threat output -----
+    # A line of search info is the dict RunEngine posts with
+    # info_as_dict: the board searched, the score, the variation in full
+    # and the search figures. It is turned into text here, when shown, so
+    # the variation can be as long as the box is wide.
+    @staticmethod
+    def format_review_score(score):
+        """The score of a line as text, from the point of view of the
+        side to move in the position searched (as the engine gives it):
+        in pawns ('+0.26'), or the moves to mate ('#5' when that side
+        mates, '-#5' when it is mated)."""
+        own = score.relative
+        if own.is_mate():
+            sign = '' if own > chess.engine.Cp(0) else '-'
+            return '{}#{}'.format(sign, abs(own.mate()))
+        return '{:+.2f}'.format(own.score() / 100)
 
-    def shorten_review_analysis_line(self, info_line):
-        """Limit the Review mode PV display so it fits the analysis box."""
+    @staticmethod
+    def format_review_count(count):
+        """A number of nodes in short form: 850k, 2.9M, 1.25G."""
+        for size, unit, digits in ((1e9, 'G', 2), (1e6, 'M', 1),
+                                   (1e3, 'k', 0)):
+            if count >= size:
+                return '{:.{}f}{}'.format(count / size, digits, unit)
+        return str(count)
+
+    def format_review_figures(self, info):
+        """The search figures of a line of info: depth (and selective
+        depth), time, nodes searched and nodes per second."""
+        parts = []
+        if info.get('depth') is not None:
+            parts.append('depth {}'.format(info['depth']) + (
+                '/{}'.format(info['seldepth']) if info.get('seldepth')
+                else ''))
+        if info.get('time') is not None:
+            parts.append('time {:.1f}s'.format(info['time']))
+        if info.get('nodes'):
+            parts.append('nodes {}'.format(
+                self.format_review_count(info['nodes'])))
+        if info.get('nps'):
+            parts.append('nps {}'.format(
+                self.format_review_count(info['nps'])))
+        return '  '.join(parts)
+
+    @staticmethod
+    def format_review_pv(board, pv, width):
+        """The variation ``pv`` from ``board`` as moves with move numbers
+        ('12. Nf3 Nc6 13. Bb5', or '12... Nc6 13. Bb5' when Black is to
+        move): as many moves as fit in ``width`` characters, with ' …'
+        after a variation that was cut."""
+        board = board.copy(stack=False)
+        text = ''
+        for i, move in enumerate(pv):
+            if not board.is_legal(move):
+                break               # an engine may end a line with rubbish
+            san = board.san(move)
+            if board.turn == chess.WHITE:
+                san = '{}. {}'.format(board.fullmove_number, san)
+            elif i == 0:
+                san = '{}... {}'.format(board.fullmove_number, san)
+            longer = text + ' ' + san if text else san
+            # Every move but the last leaves room for the cut mark.
+            if text and len(longer) > width - (2 if i < len(pv) - 1 else 0):
+                return text + ' …'
+            text = longer
+            board.push(move)
+        return text
+
+    def review_box_chars(self, widget, fallback=48):
+        """The number of characters that fit on a line of an Analysis or
+        Threat box (``fallback`` while it is not on screen yet)."""
         try:
-            prefix, pv_text = info_line.rsplit(' | ', 1)
-        except ValueError:
-            return info_line
+            width = widget.winfo_width()
+            if width <= 1:
+                return fallback
+            font = getattr(widget, 'pecg_font', None)
+            if font is None:
+                font = widget.pecg_font = tkfont.Font(
+                    root=widget, font=widget.cget('font'))
+            edge = sum(int(str(widget.cget(name))) for name in
+                       ('borderwidth', 'padx', 'highlightthickness'))
+            return max(12, (width - 2 * edge) // max(1, font.measure('0')))
+        except (tk.TclError, ValueError):
+            return fallback
 
-        pv_moves = pv_text.split()
-        limited_pv = ' '.join(pv_moves[:REVIEW_ANALYSIS_PV_MOVES])
-        return '{} | {}'.format(prefix, limited_pv)
+    def review_info_rows(self, infos, width):
+        """The lines of an Analysis or Threat box for these lines of
+        search info (None where a line has none yet), ``width`` characters
+        wide: the search figures, then the score and the variation of
+        each line. Each row is a list of (text, tag) pieces."""
+        first = next((info for info in infos if info), None)
+        rows = [[(self.format_review_figures(first)[:width] if first else '',
+                  'figures')]]
+        for info in infos:
+            if not info:
+                rows.append([('', 'pv')])
+                continue
+            # The score takes 6 characters ('+12.34', '-#12') and 2 spaces.
+            rows.append([
+                ('{:>6}'.format(self.format_review_score(info['score'])),
+                 'score'),
+                ('  ' + self.format_review_pv(info['board'], info['pv'],
+                                              width - 8), 'pv')])
+        return rows
+
+    @staticmethod
+    def set_review_box(widget, rows):
+        """Show ``rows`` (see review_info_rows) in an Analysis or Threat
+        box. Nothing is redrawn when they are what the box shows."""
+        if getattr(widget, 'pecg_rows', None) == rows:
+            return
+        widget.pecg_rows = rows
+        top = widget.yview()[0]
+        widget.configure(state='normal')
+        widget.delete('1.0', tk.END)
+        for i, row in enumerate(rows):
+            if i:
+                widget.insert(tk.END, '\n')
+            for text, tag in row:
+                widget.insert(tk.END, text, tag)
+        widget.configure(state='disabled')
+        widget.yview_moveto(top)
+
+    def update_review_analysis_panel(self, window):
+        """Refresh Review mode analysis widgets: the status and the box
+        (search figures, then one line per variation asked for)."""
+        window['review_analysis_status_k'].Update(self.review_analysis_status)
+        widget = window['review_analysis_k'].Widget
+        self.set_review_box(widget, self.review_info_rows(
+            [self.review_analysis_lines.get(line) for line in
+             range(1, self.review_multipv() + 1)],
+            self.review_box_chars(widget)))
+
+    # ----- Review engine settings (Hash, Threads, MultiPV) -----
+    def review_engine_option(self, role, option):
+        """Return (name, value, min, max) of a number option - 'Hash',
+        'Threads', 'MultiPV' - of the engine of a Review role ('analysis'
+        or 'threat'), or None when that engine has no such option. The
+        value is the one the role uses: its own if it has one (see
+        role_engine_options), otherwise the engine's."""
+        eng_id_name = getattr(self, ROLE_META[role][0])
+        if not eng_id_name:
+            return None
+        own = {name.lower(): value for name, value in
+               self.get_role_options(role, eng_id_name).items()}
+        for o in self.get_engine_options(eng_id_name):
+            name = str(o.get('name', ''))
+            if name.lower() != option.lower() or o.get('type') != 'spin':
+                continue
+            try:
+                value = int(own.get(name.lower(), o.get('value')))
+                return (name, value, int(o.get('min', 1)),
+                        int(o.get('max', value)))
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    def review_multipv(self):
+        """Lines of analysis to ask for and show: what the user chose,
+        but no more than the analysis engine can give."""
+        return max(1, min(self.review_analysis_multipv,
+                          self.review_multipv_limit))
+
+    def show_review_engine_settings(self, window):
+        """Fill the Hash, Threads and MultiPV widgets of the Analysis and
+        Threat panels from the engines of those roles. A widget of an
+        option the engine does not have is disabled."""
+        cores = os.cpu_count() or 1
+        for role in ('analysis', 'threat'):
+            hash_box = window['review_{}_hash_k'.format(role)]
+            option = self.review_engine_option(role, 'Hash')
+            if option:
+                _, value, low, high = option
+                hash_box.Update(
+                    value=value, disabled=False,
+                    values=choices_with([mb for mb in REVIEW_HASH_CHOICES_MB
+                                         if low <= mb <= high], value))
+            else:
+                hash_box.Update(value='', values=[], disabled=True)
+
+            threads = window['review_{}_threads_k'.format(role)]
+            option = self.review_engine_option(role, 'Threads')
+            if option:
+                _, value, low, high = option
+                threads.Update(
+                    value=value, disabled=False,
+                    values=choices_with(range(max(1, low),
+                                              min(high, cores) + 1), value))
+            else:
+                threads.Update(value=1, values=[1], disabled=True)
+
+        option = self.review_engine_option('analysis', 'MultiPV')
+        self.review_multipv_limit = \
+            min(REVIEW_ANALYSIS_MULTIPV_MAX, option[3]) if option else 1
+        window['review_analysis_multipv_k'].Update(
+            value=self.review_multipv(),
+            values=list(range(1, self.review_multipv_limit + 1)),
+            disabled=self.review_multipv_limit == 1)
+
+    def change_review_engine_setting(self, window, key, value):
+        """The user changed a Hash, Threads or MultiPV widget (``key``,
+        'review_<role>_<setting>_k') of the Analysis or Threat panel: keep
+        the value and restart that search with it if it is on.
+
+        Hash and Threads are kept as options of that role for its engine
+        (role_engine_options), as Engine -> Manage -> Configure does. They
+        are kept even when equal to the engine's own value, so an engine
+        that is already running is set to it too.
+        """
+        try:
+            _, role, setting, _ = key.split('_')
+            value = int(value)
+        except (TypeError, ValueError):
+            return
+        if setting == 'multipv':
+            if value == self.review_analysis_multipv:
+                return
+            self.review_analysis_multipv = value
+            self.save_settings()
+        else:
+            option = self.review_engine_option(role, setting)
+            if option is None or option[1] == value:
+                return
+            eng_id_name = getattr(self, ROLE_META[role][0])
+            options = {name: v for name, v in
+                       self.get_role_options(role, eng_id_name).items()
+                       if name.lower() != setting}
+            options[option[0]] = value
+            self.set_role_options(role, eng_id_name, options)
+            logging.info('Review %s engine %s: %s set to %s.', role,
+                         eng_id_name, option[0], value)
+        if role == 'analysis':
+            self.restart_review_analysis_later(window)
+        else:
+            self.restart_review_threat_later(window)
 
     def _keep_one_engine(self, attr_engine, engine):
         """Store ``engine`` in ``attr_engine``, keeping exactly one live engine.
@@ -6425,7 +6710,7 @@ class EasyChessGui:
         if self.analysis_path_and_file is None or self.analysis_id_name is None:
             self.review_analysis_enabled = False
             self.review_analysis_status = 'No analysis engine selected'
-            self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+            self.review_analysis_lines = {}
             self.update_review_analysis_panel(window)
             return
 
@@ -6433,7 +6718,7 @@ class EasyChessGui:
         self.review_analysis_enabled = True
         # Fresh search: its output is current, so poll must not discard it.
         self.review_analysis_stale = False
-        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+        self.review_analysis_lines = {}
         # Give immediate feedback: a cold start (no reusable engine) must spawn
         # and hand-shake an engine process, so say so; a warm reuse is fast.
         if self.review_analysis_engine is None:
@@ -6456,11 +6741,15 @@ class EasyChessGui:
             period_moves=0,
             is_stream_search_info=True,
             existing_engine=self.review_analysis_engine,
-            multipv=REVIEW_ANALYSIS_MULTIPV_LINES,
+            multipv=self.review_multipv(),
             option_overrides=self.get_role_options(
-                'analysis', self.analysis_id_name)
+                'analysis', self.analysis_id_name),
+            info_as_dict=True
         )
-        search.get_board(self.review_boards[self.review_move_index].copy(stack=False))
+        # Its info comes back with this board: what poll shows only.
+        self.review_analysis_board = \
+            self.review_boards[self.review_move_index].copy(stack=False)
+        search.get_board(self.review_analysis_board)
         search.is_move_delay = False
         search.daemon = True
         search.start()
@@ -6470,7 +6759,7 @@ class EasyChessGui:
     def refresh_review_analysis(self, window):
         """Restart analysis after the Review mode position changes."""
         if not self.review_analysis_enabled:
-            self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+            self.review_analysis_lines = {}
             self.review_analysis_status = 'Analysis stopped'
             self.update_review_analysis_panel(window)
             return
@@ -6490,9 +6779,9 @@ class EasyChessGui:
         self.review_threat_stale = False
         self.stop_review_analysis()
         self.stop_review_threat()
-        self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+        self.review_analysis_lines = {}
         self.review_analysis_status = 'Analysis stopped'
-        self.review_threat_line = ''
+        self.review_threat_line = None
         self.review_threat_status = 'Threat stopped'
         self.update_review_analysis_panel(window)
         self.update_review_threat_panel(window)
@@ -6747,25 +7036,22 @@ class EasyChessGui:
                 logging.exception('Failed to read Review mode analysis queue.')
                 break
 
-            msg_str = str(msg)
-            if 'multipv_info' in msg_str:
+            if isinstance(msg, dict):
                 # Skip stale analysis info: the search was stopped by navigation
                 # and the engine is still draining old-position lines. A freshly
-                # started search clears this flag, so its output is shown.
-                if self.review_analysis_stale:
+                # started search clears this flag, so its output is shown -
+                # but only its own, not what an old search still posts.
+                if self.review_analysis_stale \
+                        or msg.get('board') is not self.review_analysis_board:
                     continue
-                try:
-                    line_no, info_line = msg_str.split(' | ', 1)
-                    line_number = int(line_no.strip())
-                    if not 1 <= line_number <= REVIEW_ANALYSIS_MULTIPV_LINES:
-                        raise ValueError('Invalid MultiPV line number')
-                    line_index = line_number - 1
-                    info_line = info_line.rsplit(' multipv_info', 1)[0]
-                    self.review_analysis_lines[line_index] = \
-                        self.shorten_review_analysis_line(info_line)
+                if 1 <= msg['multipv'] <= self.review_multipv():
+                    self.review_analysis_lines[msg['multipv']] = msg
+                    if self.review_analysis_status.startswith(
+                            'Analysis: starting'):
+                        self.review_analysis_status = \
+                            'Analysing with {} at position {}'.format(
+                                self.analysis_id_name, self.review_move_index)
                     updated = True
-                except Exception:
-                    logging.exception('Failed to parse Review mode analysis info.')
             # 'bestmove' messages need no handling here: engine recovery and
             # the "ready" status are driven by the non-blocking is_alive()
             # check below. A bestmove may originate from a stale search that
@@ -6790,22 +7076,12 @@ class EasyChessGui:
             self.update_review_analysis_panel(window)
 
     def update_review_threat_panel(self, window):
-        """Refresh Review mode threat analysis widgets."""
+        """Refresh Review mode threat analysis widgets: the status and
+        the box (search figures, then the threat line)."""
         window['review_threat_status_k'].Update(self.review_threat_status)
-        window['review_threat_k'].Update(
-            self.review_threat_line if self.review_threat_line else ' ',
-            text_color='red')
-
-    def shorten_threat_line(self, info_line):
-        """Limit the threat PV display to REVIEW_THREAT_PV_PLIES moves."""
-        try:
-            prefix, pv_text = info_line.rsplit(' | ', 1)
-        except ValueError:
-            return info_line
-
-        pv_moves = pv_text.split()
-        limited_pv = ' '.join(pv_moves[:REVIEW_THREAT_PV_PLIES])
-        return '{} | {}'.format(prefix, limited_pv)
+        widget = window['review_threat_k'].Widget
+        self.set_review_box(widget, self.review_info_rows(
+            [self.review_threat_line], self.review_box_chars(widget)))
 
     def stop_review_threat(self):
         """Stop the current Review mode threat analysis search.
@@ -6870,7 +7146,7 @@ class EasyChessGui:
         if self.threat_path_and_file is None or self.threat_id_name is None:
             self.review_threat_enabled = False
             self.review_threat_status = 'No threat engine selected'
-            self.review_threat_line = ''
+            self.review_threat_line = None
             self.update_review_threat_panel(window)
             logging.warning('Threat analysis failed to start: no threat engine selected.')
             return
@@ -6883,13 +7159,13 @@ class EasyChessGui:
         if board.is_check():
             self.stop_review_threat()
             self.review_threat_status = 'Check - threat N/A'
-            self.review_threat_line = ''
+            self.review_threat_line = None
             self.update_review_threat_panel(window)
             logging.info('Threat analysis is unavailable at move index %d: king is in check.', self.review_move_index)
             return
 
         self.stop_review_threat()
-        self.review_threat_line = ''
+        self.review_threat_line = None
         # Give immediate feedback: a cold start (no reusable engine) must spawn
         # and hand-shake an engine process, so say so; a warm reuse is fast.
         if self.review_threat_engine is None:
@@ -6917,8 +7193,10 @@ class EasyChessGui:
             existing_engine=self.review_threat_engine,
             multipv=1,
             option_overrides=self.get_role_options(
-                'threat', self.threat_id_name)
+                'threat', self.threat_id_name),
+            info_as_dict=True
         )
+        self.review_threat_board = threat_board
         search.get_board(threat_board)
         search.is_move_delay = False
         search.daemon = True
@@ -6930,7 +7208,7 @@ class EasyChessGui:
     def refresh_review_threat(self, window):
         """Restart threat analysis after the Review mode position changes."""
         if not self.review_threat_enabled:
-            self.review_threat_line = ''
+            self.review_threat_line = None
             self.review_threat_status = 'Threat stopped'
             self.update_review_threat_panel(window)
             return
@@ -6957,15 +7235,18 @@ class EasyChessGui:
                 logging.exception('Failed to read threat analysis queue.')
                 break
 
-            msg_str = str(msg)
-            if 'info_all' in msg_str:
+            if isinstance(msg, dict):
                 # Skip stale threat info from the old position; a freshly started
                 # search clears this flag so its output is shown (see
                 # poll_review_analysis).
-                if self.review_threat_stale:
+                if self.review_threat_stale \
+                        or msg.get('board') is not self.review_threat_board:
                     continue
-                info_line = msg_str.rsplit(' info_all', 1)[0]
-                self.review_threat_line = self.shorten_threat_line(info_line)
+                self.review_threat_line = msg
+                if self.review_threat_status.startswith('Threat: starting'):
+                    self.review_threat_status = \
+                        'Threat: {} searching... (pos {})'.format(
+                            self.threat_id_name, self.review_move_index)
                 updated = True
             # 'bestmove' messages need no handling here (see
             # poll_review_analysis): engine recovery and the "ready" status come
@@ -7114,12 +7395,39 @@ class EasyChessGui:
             [status('review_nav_k', 'Position 0/0')],
         ])
 
-        # Each engine panel has its own on/off button beside its status.
+        # Engine settings of a panel, changed in place; they are filled
+        # by show_review_engine_settings().
+        def label(text):
+            return sg.Text(text, font=FONT_BASE, pad=((8, 3), 3))
+
+        def hash_setting(role):
+            return [sg.Text('Hash', font=FONT_BASE, pad=((0, 3), 3)),
+                    sg.Combo([], key='review_{}_hash_k'.format(role),
+                             size=(6, 1), font=FONT_BASE, readonly=True,
+                             enable_events=True, pad=(0, 3),
+                             tooltip='Hash table size of the engine'),
+                    sg.Text('MB', font=FONT_BASE, pad=((3, 0), 3))]
+
+        def number_setting(text, key, tooltip):
+            return [label(text),
+                    sg.Spin([1], initial_value=1, key=key, size=(3, 1),
+                            font=FONT_BASE, readonly=True,
+                            enable_events=True, pad=(0, 3), tooltip=tooltip)]
+
+        def threads_setting(role):
+            return number_setting(
+                'Threads', 'review_{}_threads_k'.format(role),
+                'Number of threads the engine searches with')
+
+        # Each engine panel has its own on/off button beside its status,
+        # its engine settings, and a box: the search figures on its first
+        # line, then the score and the variation.
         threat = self.panel('review_threat_panel_k', 'Threat', [
             [button('Threat', 8, 'review_toggle_threat_k',
                     'Toggle threat analysis: engine analyses what the '
                     'opponent threatens if the side to move were to pass.'),
              status('review_threat_status_k', 'Threat stopped')],
+            hash_setting('threat') + threads_setting('threat'),
             [text_box('review_threat_k', REVIEW_THREAT_BOX_HEIGHT,
                       text_color='red', wrap_lines=False)],
         ])
@@ -7128,6 +7436,9 @@ class EasyChessGui:
             [button('Analysis', 8, 'review_toggle_analysis_k',
                     'Toggle engine analysis for the current position.'),
              status('review_analysis_status_k', 'Analysis stopped')],
+            hash_setting('analysis') + threads_setting('analysis')
+            + number_setting('MultiPV', 'review_analysis_multipv_k',
+                             'Number of best lines to show'),
             [text_box('review_analysis_k', REVIEW_ANALYSIS_BOX_HEIGHT,
                       wrap_lines=False)],
         ])
@@ -7173,6 +7484,22 @@ class EasyChessGui:
         tree.column(REVIEW_GAME_LIST_HEADINGS[-1],
                     minwidth=tree.column(REVIEW_GAME_LIST_HEADINGS[-1],
                                          'width'))
+        # Analysis and Threat boxes: how their text is drawn, and a redraw
+        # when a box changes width, since the variations fill the line.
+        for key, update in (
+                ('review_analysis_k', self.update_review_analysis_panel),
+                ('review_threat_k', self.update_review_threat_panel)):
+            box = window[key].Widget
+            box.tag_configure('figures', foreground=REVIEW_INFO_COLOR)
+            box.tag_configure('score', font=FONT_BASE + ('bold',))
+
+            def on_resize(event, update=update):
+                try:
+                    update(window)
+                except tk.TclError:
+                    pass    # the window is closing
+            box.bind('<Configure>', on_resize, add='+')
+        self.show_review_engine_settings(window)
         # Whether the window is maximized follows the Play window (see
         # start_review_mode), not what was saved.
         self.attach_panel_layout(window, 'review', restore_maximized=False)
@@ -7369,6 +7696,14 @@ class EasyChessGui:
                 self.update_review_window(review_window)
                 continue
 
+            # Hash, Threads or MultiPV of the Analysis or Threat panel.
+            if isinstance(button, str) and button.startswith('review_') \
+                    and button.endswith(('_hash_k', '_threads_k',
+                                         '_multipv_k')):
+                self.change_review_engine_setting(
+                    review_window, button, value.get(button))
+                continue
+
             if button == 'review_toggle_analysis_k':
                 # Toggle on the *enabled* flag, not whether a search is actively
                 # computing: a finished analysis (time/depth cap reached) still
@@ -7379,7 +7714,7 @@ class EasyChessGui:
                 if self.review_analysis_enabled:
                     logging.info('User toggled review analysis OFF.')
                     self.review_analysis_enabled = False
-                    self.review_analysis_lines = [''] * REVIEW_ANALYSIS_MULTIPV_LINES
+                    self.review_analysis_lines = {}
                     self.review_analysis_status = 'Analysis stopped'
                     self.stop_review_analysis()
                     self.update_review_analysis_panel(review_window)
@@ -7395,7 +7730,7 @@ class EasyChessGui:
                 if self.review_threat_enabled:
                     logging.info('User toggled review threat analysis OFF.')
                     self.review_threat_enabled = False
-                    self.review_threat_line = ''
+                    self.review_threat_line = None
                     self.review_threat_status = 'Threat stopped'
                     self.stop_review_threat()
                     self.update_review_threat_panel(review_window)
