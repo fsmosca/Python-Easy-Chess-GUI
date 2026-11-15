@@ -15,6 +15,7 @@ A chess GUI written in Python with [FreeSimpleGUI](https://github.com/spyoungtec
 * **Any UCI engine.** Install your own engines and give each job its own engine: opponent, adviser, analysis and threat.
 * **Play mode.** Clocks with time control, opening books, an engine adviser, automatic saving of every game, and saving to repertoire files.
 * **Review mode.** Game list, move list with variations and comments, multi-line engine analysis, threat detection, and Auto-Analyze, which annotates a whole game.
+* **Edit and annotate.** In Review mode enter moves and variations on the board, add comments and annotations such as `!` and `??` (shown in color), and save the game to a PGN file.
 * **Engine settings where you use them.** Hash, Threads and MultiPV are set right in the Analysis and Threat panels.
 * **A layout you arrange.** Every panel can be dragged to the left, to the right or below the board and resized. The arrangement is saved for each mode.
 * **Board options.** Six board sizes, flip at any time, square colors and GUI themes.
@@ -63,7 +64,7 @@ This is the detailed manual. Inside the app the **Help** menu gives a short vers
 | D.1 | [Modes and menus](#d1-modes-and-menus) | Play and Review, and what each menu offers |
 | D.2 | [Play a game](#d2-play-a-game) | Moving, playing as Black, clocks, saving, adviser and book moves |
 | D.3 | [Engines](#d3-engines) | Install an engine, set its options, choose the engine for each job |
-| D.4 | [Review mode](#d4-review-mode) | Open games, navigate, analysis, threat, Auto-Analyze |
+| D.4 | [Review mode](#d4-review-mode) | Open games, navigate, enter and annotate moves, save, analysis, threat, Auto-Analyze |
 | D.5 | [Settings](#d5-settings) | The Settings menu |
 | D.6 | [Opening books](#d6-opening-books) | The opponent's book and the book panels |
 | D.7 | [Panels and layout](#d7-panels-and-layout) | Move and resize the panels |
@@ -76,7 +77,7 @@ This is the detailed manual. Inside the app the **Help** menu gives a short vers
 #### D.1 Modes and menus
 The GUI opens in **Play** mode, ready to play. There are two modes:
 * **Play** — play a game against the opponent engine.
-* **Review** — step through a saved game with engine analysis and threat.
+* **Review** — step through a saved game with engine analysis and threat, or enter and annotate a game yourself.
 
 ##### Switching modes
 * `Mode → Review` enters Review mode (before a game starts).
@@ -90,7 +91,7 @@ In Play mode all setup (engines, time, book, settings, board colors) is done fro
 | Menu | Play mode | Review mode |
 |---|---|---|
 | **Mode** | Review | Play |
-| **Game** | New, Paste FEN, Resign, User Wins, User Draws, Save | Select Game, Auto-Analyze Game, Cancel Analysis |
+| **Game** | New, Paste FEN, Resign, User Wins, User Draws, Save | New Game, Select Game, Save Game, Game Details, Auto-Analyze Game, Cancel Analysis |
 | **Engine** | Go, Move Now, Set Engine Opponent / Adviser / Analysis / Threat, Set Depth, Manage | — |
 | **Board** | Flip, Size, Color, Theme | Flip, Size |
 | **View** | Arrangements, Move Panel, Reset Layout | Arrangements, Move Panel, Reset Layout |
@@ -194,6 +195,61 @@ The **Game list** panel shows the games of the PGN file.
 * The last button of the bar, or `Board → Flip`, flips the board.
 * The Book moves panel lists the opening book moves of the current position.
 
+##### Read the move list
+* The **main line** of the game is bold. A variation is in brackets on its own line, indented; a variation inside a variation is indented further.
+* The current move is marked yellow (green in a variation, whose line gets a light background).
+* Comments are green, without the braces `{ }` they have in the PGN file.
+* A move with a move annotation is colored:
+
+| Annotation | Meaning | Color |
+|---|---|---|
+| `??` | Blunder | Red |
+| `?` | Mistake | Light red |
+| `?!` | Dubious move | Orange |
+| `!?` | Interesting move | Purple |
+| `!` | Good move | Light blue |
+| `!!` | Brilliant move | Blue |
+
+##### Enter moves and variations
+Move a piece on the Review board as in Play mode: click it and then its square, or drag it. No game has to be loaded first: `Game → New Game` gives an empty game to enter from the start position (Review mode also starts with one when no PGN file is open).
+
+| Where you move | What happens |
+|---|---|
+| After the last move of a line | The move is added to that line. |
+| A move the game already has there | You go to that move. |
+| Any other move | A new variation starts at that point. |
+
+A variation can have variations of its own, to any depth.
+
+**Right-click a move** in the move list for the commands below. A right-click elsewhere in the move list gives the same menu for the current move.
+
+| Command | What it does |
+|---|---|
+| **Promote Variation** | Moves the variation of the move one place up among the alternatives. From the first place it becomes the line it left, and that line becomes the variation. |
+| **Demote Variation** | Moves it one place down. On the main line, the nearest alternative becomes the main line. |
+| **Make Main Line** | Makes the move, and the moves leading to it, the main line of the game. |
+| **Delete Variation** | Deletes the whole variation the move is in. |
+| **Delete This Move and the Rest** | Deletes the move and everything after it. |
+| **Delete the Moves After** | Keeps the move and deletes everything after it. |
+
+Deleting more than one move asks first. The game cannot be changed while Auto-Analyze is running.
+
+##### Comments and annotations
+In the same right-click menu:
+* **Comment...** — the text after the move. The first move of a variation can also have a comment before it. At *Start Position* it is the comment before the first move. Press **Enter** or **OK** to keep it.
+* **Move Annotation** — `!` `?` `!!` `??` `!?` `?!` or `□` (only move). A move has one; **None** removes it.
+* **Position Annotation** — `=` (equal), `∞` (unclear), `+=` `=+` (slightly better for White / Black), `+/-` `-/+` (better), `+-` `-+` (winning). **None** removes it.
+
+Annotations are saved in the PGN file as the standard `$` codes, so other chess programs read them.
+
+##### Save a game
+* `Game → Save Game` (or **Ctrl+S**, or **Save Game...** in the right-click menu) asks for the **folder** and the **file name** of a PGN file.
+* The game is **added at the end** of that file. The games already in the file are kept; a new name makes a new file.
+* The file chosen last is offered the next time.
+* When the game is added to the file shown in the Game list, the list shows it as the last game.
+* `Game → Game Details` sets the event, site, date, round, players and result that are saved with the game.
+* The status bar shows *changed, not saved* until the game is saved. You are asked whether to save before a changed game is replaced by another one, and before you leave Review mode or close the window.
+
 ##### Analysis and Threat
 * **Analysis:** press the **Analysis** button (or **Alt+A**) to evaluate the current position. The search stops after the *analysis time* (default 60s) and restarts automatically when you change position.
 * **Threat:** press the **Threat** button (or **Alt+T**) to see what the opponent would play if the side to move passed (a null move). It is unavailable when the side to move is in check, and stops after the *threat time* (default 30s).
@@ -214,12 +270,54 @@ Both run their engines for at most their configured time and then go idle, so th
 * A setting the engine does not have is greyed out.
 
 ##### Auto-Analyze Game
-`Game → Auto-Analyze Game` annotates every move of the game with the engine and time per move you choose.
-* Each move gets an evaluation comment, from the point of view of the side that played it (positive is good for that side).
-* Bad moves are marked `?!` `?` `??`.
-* When the engine's move is at least 25cp better than the game move (and its own score stays within ±300cp), the better line is replayed engine-vs-engine for up to 5 plies and added as a *Better is* variation, labeled with the evaluation after the line's last move from the same side's point of view.
-* The annotated game is appended to `pecg_analyzed_games.pgn` and replaces the current review game.
-* `Game → Cancel Analysis` stops early.
+`Game → Auto-Analyze Game` annotates the moves of the main line with the engine and time per move you choose.
+
+**Which moves.** *Start move* and *End move* in the dialog are move numbers; both White's and Black's move of each number in between are analysed. They start at **4** (the first three moves, the opening, are skipped) and **1000** (to the end of the game), every time the dialog opens. Type a number or use the arrows. *Game has moves* shows the first and last move number of the game. Moves outside the range are left as they are.
+
+**Score.** Each move gets an evaluation comment, from the point of view of the side that played it (positive is good for that side).
+
+A mate is counted from the position after the move, since the comment comes after it:
+* `19. Qc7# Mate` — the move mates.
+* `18. Rd8+ Mate in 1` — one more move mates.
+* `18... Kh8 Mated in 1` — the side that moved is mated on the opponent's next move.
+
+**Bad moves** are marked by what the move loses against the engine's best move, and by what is left after it:
+
+| Mark | The move loses | After the move |
+|---|---|---|
+| `?!` | 1.00 pawn or more | — |
+| `?` | 2.00 pawns or more | the side is not losing |
+| `??` | 2.00 pawns or more | the side is losing (−3.00 or worse) |
+
+No mark is given while the side is still winning (+3.00 or better) after the move, or was already losing before it. So a move that turns +6.00 into 0.00 is a mistake `?`, not a blunder: the win is gone but the game is not lost.
+
+**Better is.** The engine's line is added as a *Better is* variation when:
+* its move is better than the game move by 0.25 or more, or by 0.10 or more when the engine's score is within 0.50 of equal, and
+* the engine's score is within 10.00 of equal (beyond that the position is decided either way).
+
+The variation is the line the engine gave, in full. The move list shows it as `( Better is 9... Qe6 +1.53 10. Re1 Nf6 — Stockfish 17 )`, with *Better is*, the score and the engine name in the color of comments (in the PGN file they are comments, in braces). The score after the first move is the engine's score of the line, from the same side's point of view as the game move. The dash and the name after the last move tell which engine the line is from.
+
+**Missed wins.** Beyond 10.00 the rule above adds nothing, but a win that was missed is still shown. When the engine's score is above +10.00 and the game move is worse by 2.00 or more, the engine's line is added with a mark on its first move:
+
+| Mark | The engine's move |
+|---|---|
+| `!!` | mates in 10 moves or less |
+| `!` | any other win (a longer mate, or a score above +10.00) |
+
+For example `( Better is 4. Qxf7#!! Mate — Stockfish 17 )`. A move that mates more slowly than the engine's, or wins slightly less, is not a missed win.
+
+**How it searches.** Each position is searched for the two best lines. If the game move starts one of them, that line's score is its score; otherwise the position after the game move is searched too.
+
+**What the game already has.** Comments, annotations and variations of the game are kept, and the analysis is added to them:
+* a move's comment keeps its text and gets the score at the end;
+* a move that already has a move annotation keeps it;
+* your variations stay beside the engine's.
+
+If the game has any of these, the dialog shows how many and offers **Remove them first** for a clean start. The choice is asked every time and is not remembered.
+
+**Analysing again.** With the same engine, its scores and its own lines are replaced. With another engine, the scores are replaced and its lines are added beside those of the first, each ending with its engine's name.
+
+The annotated game is appended to `pecg_analyzed_games.pgn` and replaces the game on the board. `Game → Cancel Analysis` stops early.
 
 ---
 
@@ -308,7 +406,7 @@ The **Help** menu gives a short version of this manual inside the app. Each item
 | **Mouse and Keyboard** | Every mouse action and keyboard shortcut of both modes on one page. |
 | **Play** | Play a Game, Play as Black, Paste FEN, Adviser and Book Moves, Save and Repertoire, Time Control. |
 | **Engine** | Install / Manage, Engine for Each Job, Set Opponent, Adviser, Analysis, Threat, Search Depth. |
-| **Review** | Open a Game, Navigate Moves, Analysis and Threat, Auto-Analyze Game. |
+| **Review** | Open a Game, Navigate Moves, Enter Moves and Variations, Comments and Annotations, Save a Game, Analysis and Threat, Auto-Analyze Game. |
 | **Board and Layout** | Flip, Size, Panels and Layout, Colors and Themes. |
 | **Settings** | The items of the Settings menu. |
 | **Files the App Writes** | The files listed in D.9. |

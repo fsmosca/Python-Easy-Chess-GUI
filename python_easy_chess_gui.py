@@ -52,8 +52,10 @@ import chess.engine
 import chess.polyglot
 import logging
 import webbrowser
+import re
 import tkinter as tk
 import tkinter.font as tkfont
+from tkinter import filedialog
 import platform as sys_plat
 
 
@@ -73,7 +75,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.41.1'
+APP_VERSION = 'v3.0.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3   # lines of analysis, until changed
@@ -97,32 +99,112 @@ REVIEW_GAME_LIST_WIDTHS = [5, 14, 14, 8, 11, 16]
 # taller: the search figures, then one line per variation.
 REVIEW_ANALYSIS_BOX_HEIGHT = 1 + REVIEW_ANALYSIS_MULTIPV_LINES
 REVIEW_THREAT_BOX_HEIGHT = 2
+# Annotations (the $n codes of PGN, "NAGs") the Review move list shows
+# and its right-click menu offers: (code, symbol, name). A move has at
+# most one move annotation and one position annotation; any other code
+# of a game is kept and shown as '$n'.
+REVIEW_MOVE_NAGS = (
+    (1, '!', 'Good move'),
+    (2, '?', 'Mistake'),
+    (3, '!!', 'Brilliant move'),
+    (4, '??', 'Blunder'),
+    (5, '!?', 'Interesting move'),
+    (6, '?!', 'Dubious move'),
+    (7, '□', 'Only move'),
+)
+REVIEW_POSITION_NAGS = (
+    (10, '=', 'Equal position'),
+    (13, '∞', 'Unclear position'),
+    (14, '+=', 'White is slightly better'),
+    (15, '=+', 'Black is slightly better'),
+    (16, '+/-', 'White is better'),
+    (17, '-/+', 'Black is better'),
+    (18, '+-', 'White is winning'),
+    (19, '-+', 'Black is winning'),
+)
+REVIEW_NAG_SYMBOLS = {nag: symbol for nag, symbol, _
+                      in REVIEW_MOVE_NAGS + REVIEW_POSITION_NAGS}
+# The codes one choice of the menu replaces: move annotations are $1-$9,
+# evaluations of the position $10-$21.
+REVIEW_MOVE_NAG_GROUP = range(1, 10)
+REVIEW_POSITION_NAG_GROUP = range(10, 22)
+# Colour of a move in the move list by its move annotation, on a light
+# and on a dark background: red for bad moves (strong for ??, light for
+# ?), orange for dubious, purple for interesting, blue for good moves
+# (light for !, strong for !!). When a game gives a move several, the
+# first of this order colours it.
+REVIEW_NAG_COLORS = {
+    'light': {4: '#d50000', 2: '#f0605a', 6: '#e07b00', 5: '#9c27b0',
+              3: '#0057d9', 1: '#3d9be9'},
+    'dark': {4: '#ff4d4d', 2: '#ffa3a3', 6: '#ffb347', 5: '#d9a0f2',
+             3: '#5aa2ff', 1: '#a3d2ff'},
+}
+# Other colours of the move list, light and dark background: comments,
+# and the background of the variation the current move is in.
+REVIEW_COMMENT_COLOR = {'light': 'green', 'dark': '#7fcf7f'}
+REVIEW_VAR_BLOCK_COLOR = {'light': '#e2f0d9', 'dark': '#34453a'}
+# File name offered the first time a game is saved in Review mode.
+REVIEW_SAVE_FILE = 'pecg_my_games.pgn'
 # Output file for games annotated by the Review-mode auto-analyzer.
 AUTO_ANALYSIS_OUTPUT_FILE = 'pecg_analyzed_games.pgn'
 # How many recently opened review PGN paths to remember in the settings.
 MAX_RECENT_PGN_FILES = 10
-# Engine variations are rebuilt by replaying the line engine vs engine for
-# up to this many plies - a search PV can be as short as a single move, so
-# the reported PV is not trusted for the variation moves. The replay always
-# searches with MultiPV 1 (best line only); user-settable in the dialog.
+# Length of a line replayed engine vs engine (AutoAnalyzeGame.
+# _replay_variation). Not used for now: the "Better is" variation is the
+# full line (PV) of the engine's search. The saved setting is kept.
 AUTO_ANALYSIS_REPLAY_PLIES = 5
 AUTO_ANALYSIS_REPLAY_PLIES_MIN = 1
 AUTO_ANALYSIS_REPLAY_PLIES_MAX = 20
-# Number of engine lines (MultiPV) per analyzed move. Disabled (kept at 1)
-# for now; praise NAGs and Alt: lines need MultiPV >= 2 to reappear.
-AUTO_ANALYSIS_MULTIPV = 1
+# Number of engine lines (MultiPV) of every search of the auto-analyzer.
+# With two lines the game move often is one of them, which saves the
+# search of its own score; and an engine asked for one line only can
+# answer with a line of a single move.
+AUTO_ANALYSIS_MULTIPV = 2
 AUTO_ANALYSIS_MULTIPV_MAX = 5
-# The engine's line is added as a variation when its score beats the game
-# move by at least this many centipawns (mover POV). Below this gap the
-# variation is skipped entirely.
-AUTO_ANALYSIS_ALT_MIN_CP = 5
-# At or above this gap the variation gets the "Better is" pre-comment; a
-# gap between ALT_MIN and this is written as a bare line (no pre-comment).
-AUTO_ANALYSIS_BETTER_MIN_CP = 15
-# Variations are only added when the engine's own score is within this many
-# centipawns of equal (mover POV) - skip variations in already-decided
-# positions.
-AUTO_ANALYSIS_BETTER_MAX_ABS_CP = 300
+# The engine's line is added as a "Better is" variation when its score
+# beats the game move by at least this many centipawns (mover POV)...
+AUTO_ANALYSIS_BETTER_MIN_CP = 25
+# ...or by this many when the engine's score is within
+# AUTO_ANALYSIS_BETTER_CLOSE_ABS_CP of equal: in a level position a small
+# edge matters.
+AUTO_ANALYSIS_BETTER_CLOSE_MIN_CP = 10
+AUTO_ANALYSIS_BETTER_CLOSE_ABS_CP = 50
+# Further than this from equal (mover POV) the position is decided, and
+# the rule above adds no variation...
+AUTO_ANALYSIS_BETTER_MAX_ABS_CP = 1000
+# ...but a win that was missed is shown: when the engine's score is above
+# that limit and the game move is worse by at least MISSED_WIN_MIN_CP,
+# the engine's line is added with a mark on its first move: !! for a
+# mate in MISSED_MATE_MOVES or fewer, ! for any other win. (A gap of a
+# few centipawns between two winning moves is not a missed win.)
+AUTO_ANALYSIS_MISSED_WIN_MIN_CP = 200
+AUTO_ANALYSIS_MISSED_MATE_MOVES = 10
+# Marks of a bad move, by what it loses against the engine's best move
+# and by what is left after it (centipawns, mover POV):
+#   ?!  loses at least DUBIOUS_LOSS
+#   ?   loses at least MISTAKE_LOSS, and the mover is not losing after it
+#   ??  loses at least MISTAKE_LOSS, and the mover is losing after it
+# 'Losing' is a score of -DECIDED or lower, 'winning' +DECIDED or higher.
+# No mark at all while the mover is still winning after the move, or was
+# losing already before it: throwing a win away to a level game is a
+# mistake (?), not a blunder (??), and +9 to +5 is neither.
+AUTO_ANALYSIS_DUBIOUS_LOSS_CP = 100
+AUTO_ANALYSIS_MISTAKE_LOSS_CP = 200
+AUTO_ANALYSIS_DECIDED_CP = 300
+# Praise marks (! and !!) for a best move that stands out from the second
+# line. Off: an obvious recapture stands out just as much.
+AUTO_ANALYSIS_PRAISE = False
+# What the auto-analyzer writes after the last move of its variation,
+# before the engine name: tells the lines of different engines apart.
+AUTO_ANALYSIS_ENGINE_MARK = '—'
+# The part of the game the auto-analyzer works on, as the move numbers
+# its dialog starts with: from the start move (the opening moves before
+# it are skipped) to the end move, both included, White's and Black's
+# move of that number. The end move is far beyond any game, so the
+# analysis goes to the last move unless the user lowers it.
+AUTO_ANALYSIS_START_MOVE = 4
+AUTO_ANALYSIS_END_MOVE = 1000
+AUTO_ANALYSIS_MOVE_MAX = 1000
 # Auto-analysis time per move, in milliseconds. UCI engines are fine with
 # very short searches, so the floor is 100 ms; the value is handed to the
 # engine as a seconds float via chess.engine.Limit.
@@ -494,12 +576,16 @@ HELP_TOPICS = {
         '  Search info        right-click Opponent Search Info\n'
         '  Book moves         right-click BOOK 1 or BOOK 2\n\n'
         'REVIEW\n'
+        '  Move a piece       enter a move: click it, then its square;\n'
+        '                     or drag it\n'
         '  Left / Right       previous / next move\n'
         '  Home / End         first / last position\n'
         '  Alt+A              Analysis on / off\n'
         '  Alt+T              Threat on / off\n'
+        '  Ctrl+S             save the game\n'
         '  Up / Down          previous / next game (in the Game list)\n'
         '  Click a move       jump to that position\n'
+        '  Right-click a move comment, annotate, promote, delete\n'
         '  Click a heading    sort the Game list by that column\n\n'
         'BOTH MODES\n'
         '  Drag a title bar   move that panel\n'
@@ -601,7 +687,9 @@ HELP_TOPICS = {
         'Every game auto-saves to pecg_auto_save_games.pgn.\n\n'
         'During a game Game -> Save also offers Save to My Games and\n'
         'Save to White / Black Repertoire.\n\n'
-        'Open any of these files in Review mode to replay the games.'),
+        'Open any of these files in Review mode to replay the games.\n'
+        'Review mode saves a game to the PGN file you choose: see\n'
+        'Help -> Review -> Save a Game.'),
     'help_game_time': (
         'Time Control',
         'Settings -> Time -> User sets your clock; Settings -> Time ->\n'
@@ -647,6 +735,52 @@ HELP_TOPICS = {
         'last; the fifth button flips the board),\n'
         'the Left / Right arrow keys (Home / End for first / last), or\n'
         'click a move in the move list to jump to that position.'),
+    'help_review_edit': (
+        'Enter Moves and Variations',
+        'Move a piece on the Review board, as in Play mode: click it,\n'
+        'then its square, or drag it.\n\n'
+        '  At the end of a line    the move is added to the line\n'
+        '  A move the game has     you go to that move\n'
+        '  Any other move          starts a variation there\n\n'
+        'A variation can have variations of its own. For a game from\n'
+        'the start position use Game -> New Game.\n\n'
+        'Right-click a move in the move list (or the list itself, for\n'
+        'the current move):\n'
+        '  Promote Variation   one place up; from the first place it\n'
+        '                      becomes the line it left\n'
+        '  Demote Variation    one place down\n'
+        '  Make Main Line      the move becomes main line of the game\n'
+        '  Delete Variation    the whole variation of the move\n'
+        '  Delete This Move and the Rest\n'
+        '  Delete the Moves After\n\n'
+        'The main line is bold. The game cannot be changed while\n'
+        'Auto-Analyze is running.'),
+    'help_review_annotate': (
+        'Comments and Annotations',
+        'Right-click a move in the move list.\n\n'
+        'Comment...            text after the move. The first move of a\n'
+        '                      variation can also have text before it.\n'
+        '                      At Start Position: text before move one.\n'
+        'Move Annotation       !  ?  !!  ??  !?  ?!  or only move\n'
+        'Position Annotation   =  unclear  +=  =+  +/-  -/+  +-  -+\n'
+        'None takes the annotation away.\n\n'
+        'A move with a move annotation is coloured in the move list:\n'
+        '  ??  blunder        red\n'
+        '  ?   mistake        light red\n'
+        '  ?!  dubious        orange\n'
+        '  !?  interesting    purple\n'
+        '  !   good           light blue\n'
+        '  !!  brilliant      blue'),
+    'help_review_save': (
+        'Save a Game (Review)',
+        'Game -> Save Game (Ctrl+S) asks for the folder and the name of\n'
+        'a PGN file. The game is added at the end of that file: the\n'
+        'games already in it are kept. A new name makes a new file.\n\n'
+        'Game -> Game Details sets the players, event, date and result\n'
+        'saved with the game.\n\n'
+        'The status bar shows "changed, not saved" until the game is\n'
+        'saved. You are asked before a changed game is replaced by\n'
+        'another one, and before you leave Review mode.'),
     'help_review_engine': (
         'Analysis and Threat (Review)',
         'Analysis button (Alt+A): evaluate the position with the\n'
@@ -665,18 +799,34 @@ HELP_TOPICS = {
         'panel and saved; a running search restarts with the new value.'),
     'help_review_auto': (
         'Auto-Analyze Game',
-        'Game -> Auto-Analyze Game annotates every move of the loaded\n'
-        'game with the engine and time per move that you choose.\n\n'
-        'Each move gets an evaluation comment, from the side that\n'
-        'played it (positive is good for that side); bad moves are\n'
-        'marked ?! ? ??.\n\n'
-        'When the engine move is at least 25cp better (and its score\n'
-        'stays within +/-300cp) the better line is replayed engine vs\n'
-        'engine for up to 5 plies and added as a "Better is" variation\n'
-        'scored at the end of the line.\n\n'
-        'Results are appended to pecg_analyzed_games.pgn and the\n'
-        'annotated game replaces the current review game. Use Game ->\n'
-        'Cancel Analysis to stop early.'),
+        'Game -> Auto-Analyze Game annotates every move of the main\n'
+        'line with the engine and time per move that you choose.\n\n'
+        'Each move gets its evaluation as a comment, from the side that\n'
+        'played it (positive is good for that side). A mate is counted\n'
+        'after the move: "Mate" when the move mates, "Mate in 1" when\n'
+        'one more move does.\n\n'
+        'A bad move is marked by what it loses against the best move:\n'
+        '  ?!  1.00 pawn or more\n'
+        '  ?   2.00 or more, and the side is not losing after it\n'
+        '  ??  2.00 or more, and the side is losing after it\n'
+        'Losing is -3.00 or worse. No mark while the side is still\n'
+        'winning (+3.00) after the move, or was losing before it.\n\n'
+        'A "Better is" variation is added when the engine move is\n'
+        'better by 0.25 or more (by 0.10 when its score is within 0.50\n'
+        'of equal) and its score is within 10.00 of equal. It is the\n'
+        'line of the engine: its score after the first move, and a\n'
+        'dash and the engine name after the last move.\n'
+        'A missed win (engine score above 10.00, game move worse by\n'
+        '2.00 or more) is shown too, its first move marked !! for a\n'
+        'mate in 10 or less and ! otherwise.\n\n'
+        'Comments, annotations and variations the game already has are\n'
+        'kept; the dialog lets you remove them first. Start move and\n'
+        'End move in the dialog pick the moves to analyse, by move\n'
+        'number (4 to the end unless changed). Analysing again\n'
+        'replaces the scores and the lines of the same engine, and\n'
+        'adds the lines of another engine beside them.\n\n'
+        'The result is appended to pecg_analyzed_games.pgn and replaces\n'
+        'the game on the board. Game -> Cancel Analysis stops early.'),
     'help_board_flip': (
         'Flip Board',
         'Board -> Flip swaps the side shown at the bottom. It works at\n'
@@ -734,6 +884,10 @@ HELP_GAME_MENU = ['Play', ['Play a Game::help_game_play',
                            'Time Control::help_game_time']]
 HELP_REVIEW_MENU = ['Review', ['Open a Game::help_review_open',
                                'Navigate Moves::help_review_nav',
+                               'Enter Moves and Variations::help_review_edit',
+                               'Comments and Annotations'
+                               '::help_review_annotate',
+                               'Save a Game::help_review_save',
                                'Analysis and Threat::help_review_engine',
                                'Auto-Analyze Game::help_review_auto']]
 HELP_BOARD_MENU = ['Board and Layout', [
@@ -875,7 +1029,11 @@ def build_review_menu(analyzing=False):
 
     return [
         ['&Mode', [g(idle, 'Play')]],
-        ['&Game', ['Select Game::review_select_game_k',
+        ['&Game', [g(idle, 'New Game::review_new_game_k'),
+                   'Select Game::review_select_game_k',
+                   'Save Game::review_save_game_k',
+                   g(idle, 'Game Details::review_details_k'),
+                   '---',
                    g(idle, 'Auto-Analyze Game::review_auto_analyze_k'),
                    'Cancel Analysis::review_cancel_analysis_k']],
         ['Boar&d', ['Flip',
@@ -1465,28 +1623,44 @@ class RunEngine(threading.Thread):
 class AutoAnalyzeGame(threading.Thread):
     """Background thread that annotates a game with engine analysis.
 
-    Walks the mainline of the supplied game, evaluating each position with
-    the engine. Each played move gets a comment with its evaluation
-    (from the side that played it). Bad moves get ?!/?/?? NAGs. When the engine's move beats
-    the game move by at least AUTO_ANALYSIS_ALT_MIN_CP and its own score is
-    within AUTO_ANALYSIS_BETTER_MAX_ABS_CP of equal, the better line is not
-    taken from the search PV (which can be a single move) but replayed engine
-    vs engine (at MultiPV 1) for up to self.replay_plies plies and added as a
-    sub-variation whose comment carries the score after the line's last move.
-    When that final line score beats the game move by at least
-    AUTO_ANALYSIS_BETTER_MIN_CP the variation earns the "Better is"
-    pre-comment; a smaller gap is written as a bare line. Praise NAGs !/!! and
-    Alt: lines need a MultiPV >= 2 search, controlled by self.multipv.
+    Walks the mainline of the supplied game. Each position is searched
+    with self.multipv lines (two). The score of the game move is that of
+    the line it starts, the first or the second; only a move that starts
+    neither needs a search of its own, of the position after it.
+
+    Each played move gets a comment with its evaluation (from the side
+    that played it), and a bad move a ?! / ? / ?? NAG (_classify_nag).
+    When the engine's move is better than the game move by enough
+    (_is_better_line) its whole line, as the search gave it, is added as
+    a variation: 'Better is' before its first move, the score of the line
+    after that move, and the engine name after its last move.
+
+    With keep_existing the comments, NAGs and variations the game already
+    has stay, and the analysis is added to them; without it they are
+    removed first (_clear_existing_annotations).
     """
+
+    # The score this class writes at the end of a move comment; found
+    # again there when the game is analysed once more. (', allows mate'
+    # is no longer written, but games analysed earlier have it.)
+    SCORE_COMMENT = re.compile(
+        r'(?:^|\s+)(?:[+-]\d+\.\d\d|Mated? in \d+|Mate)'
+        r'(?:, allows mate|, only good move)?\s*$')
 
     def __init__(self, game, engine_config_file, engine_path_and_file,
                  engine_id_name, time_sec, output_queue, cancel_event,
                  max_depth=MAX_DEPTH, option_overrides=None,
                  output_file=AUTO_ANALYSIS_OUTPUT_FILE,
                  multipv=AUTO_ANALYSIS_MULTIPV,
-                 replay_plies=AUTO_ANALYSIS_REPLAY_PLIES):
+                 replay_plies=AUTO_ANALYSIS_REPLAY_PLIES,
+                 keep_existing=True, start_move=1, end_move=None):
         threading.Thread.__init__(self)
         self.game = game
+        self.keep_existing = keep_existing
+        # Only the moves numbered start_move to end_move (both included)
+        # are analysed; end_move None is the last move of the game.
+        self.start_move = start_move
+        self.end_move = end_move
         self.engine_config_file = engine_config_file
         self.engine_path_and_file = engine_path_and_file
         self.engine_id_name = engine_id_name
@@ -1509,7 +1683,7 @@ class AutoAnalyzeGame(threading.Thread):
         self.engine = None
         self.daemon = True
 
-    def _format_score(self, score, mover):
+    def _format_score(self, score, mover, played=0):
         """Return a human-readable score string from the point of view of
         ``mover``: the side to move in the position being annotated, the
         one whose move the score is written on.
@@ -1517,16 +1691,29 @@ class AutoAnalyzeGame(threading.Thread):
         Pawns are positive when that side is better. A mate reads "Mate
         in n" when that side forces it and "Mated in n" when it is the
         one being mated.
+
+        The text is written after a move, so a mate is counted from the
+        position that move leaves on the board. ``played`` is the number
+        of moves of ``mover`` played since the position the score was
+        searched in: 1 for the score of a search made before the move.
+        The mover's own mate is then that many moves nearer - a search
+        that says mate in 2 gives "Mate in 1" after the first of the two
+        moves - and reads just "Mate" when the move itself mates. (The
+        opponent still needs all of his moves, so "Mated in n" does not
+        change.)
         """
         own = score.pov(mover)
         if own.is_mate():
-            mate = own.mate()
-            return 'Mate in {}'.format(mate) if mate > 0 \
-                else 'Mated in {}'.format(abs(mate))
+            if own > chess.engine.Cp(0):
+                left = own.mate() - played
+                return 'Mate in {}'.format(left) if left > 0 else 'Mate'
+            return 'Mated in {}'.format(abs(own.mate()))
         return '{:+.2f}'.format(own.score() / 100.0)
 
     def _replay_variation(self, board, first_move, limit):
         """Rebuild an engine line by playing the engine against itself.
+
+        Not used for now: the variation is the line of the search itself.
 
         A search PV is sometimes truncated to a single move, so instead of
         trusting it the line is replayed move by move (engine vs engine)
@@ -1560,52 +1747,116 @@ class AutoAnalyzeGame(threading.Thread):
             moves.append(pv[0])
         return moves, score
 
-    def _build_engine_variation(self, node, moves, board, score,
-                                label_better=True):
-        """Add a replayed engine line as a variation on node.
+    def _engine_signature(self):
+        """What ends a variation of this engine: a long dash and its
+        name."""
+        return '{} {}'.format(AUTO_ANALYSIS_ENGINE_MARK, self.engine_id_name)
 
-        With label_better, reads e.g. "({Better is} 9...Qe6 {+1.53} 10. Re1)":
-        a "Better is" pre-comment on the first variation move, followed by the
-        engine's evaluation of the position the replayed line ended on. Without
-        it the line is written bare - "(9...Qe6 {+1.53} 10. Re1)" - for a
-        smaller edge over the game move. That evaluation is from the side
-        to move on ``board`` (the one the line is for), like the comment
-        of the game move it is compared with.
+    @staticmethod
+    def _is_better_line(engine_cp, gap_cp):
+        """Whether the engine's line is worth a 'Better is' variation.
+
+        :param engine_cp: score of the engine's best move
+        :param gap_cp: that score minus the score of the game move
+          (both in centipawns for the side to move)
+        """
+        if abs(engine_cp) > AUTO_ANALYSIS_BETTER_MAX_ABS_CP:
+            return False
+        if gap_cp >= AUTO_ANALYSIS_BETTER_MIN_CP:
+            return True
+        return gap_cp >= AUTO_ANALYSIS_BETTER_CLOSE_MIN_CP \
+            and abs(engine_cp) <= AUTO_ANALYSIS_BETTER_CLOSE_ABS_CP
+
+    @staticmethod
+    def _missed_win_nag(score, engine_cp, gap_cp):
+        """The mark of the engine's move when the game move missed a win:
+        3 (!!) for a mate in AUTO_ANALYSIS_MISSED_MATE_MOVES or fewer,
+        1 (!) for another win; None when no win was missed.
+
+        A win is an engine score above AUTO_ANALYSIS_BETTER_MAX_ABS_CP,
+        and it is missed when the game move is worse by
+        AUTO_ANALYSIS_MISSED_WIN_MIN_CP or more.
+
+        :param score: PovScore of the engine's best move
+        :param engine_cp: that score, :param gap_cp: that score minus the
+          score of the game move (centipawns for the side to move)
+        """
+        if engine_cp <= AUTO_ANALYSIS_BETTER_MAX_ABS_CP \
+                or gap_cp < AUTO_ANALYSIS_MISSED_WIN_MIN_CP:
+            return None
+        mate = score.relative.mate()
+        if mate is not None and 0 < mate <= AUTO_ANALYSIS_MISSED_MATE_MOVES:
+            return 3
+        return 1
+
+    def _remove_own_variations(self, node):
+        """Remove the variations of ``node`` this engine added in an
+        earlier analysis (they end with its name), so that analysing a
+        game again does not repeat them. The main line, the lines of
+        other engines and the user's own stay."""
+        signature = self._engine_signature()
+        for var in list(node.variations[1:]):
+            if var.end().comment.endswith(signature):
+                node.remove_variation(var)
+
+    def _build_engine_variation(self, node, moves, board, score, nag=None):
+        """Add the engine's line as a variation on node.
+
+        Reads e.g. "({Better is} 9...Qe6 {+1.53} 10. Re1 Nf6 {— Engine})":
+        'Better is' before the first move, after that move the score of
+        the line as the search gave it, and after the last move a long
+        dash and the name of the engine. The score is from the side to
+        move on ``board`` (the one the line is for), like the comment of
+        the game move it is compared with. It was searched before the
+        first move and is written after it, so a mate is one move nearer
+        there (_format_score). ``nag`` is the mark of the first move,
+        for a win the game move missed (_missed_win_nag).
         """
         if not moves or moves[0] not in board.legal_moves:
             return
-        score_text = self._format_score(score, board.turn) \
+        score_text = self._format_score(score, board.turn, played=1) \
             if score is not None else ''
-        starting_comment = 'Better is' if label_better else ''
         var_board = board.copy()
         var_node = node.add_variation(
-            moves[0], starting_comment=starting_comment, comment=score_text)
+            moves[0], starting_comment='Better is', comment=score_text,
+            nags=[nag] if nag else [])
         var_board.push(moves[0])
         for move in moves[1:]:
+            # An engine may end a line with a move that cannot be played.
             if move not in var_board.legal_moves:
                 break
             var_node = var_node.add_variation(move)
             var_board.push(move)
+        var_node.comment = '{} {}'.format(
+            var_node.comment, self._engine_signature()).strip()
 
-    def _build_move_comment(self, game_move_score, delta_cp, is_only_move,
-                            allows_mate):
+    def _merge_move_comment(self, existing, score_text):
+        """The comment of a game move: what it had, then its score.
+
+        A score written here by an earlier analysis is replaced, the
+        rest of the comment (the user's text, a clock time) is kept.
+        """
+        kept = self.SCORE_COMMENT.sub('', existing or '')
+        return '{} {}'.format(kept, score_text).strip()
+
+    def _build_move_comment(self, game_move_score, is_only_move, played=0):
         """Return the annotation comment for a played move.
 
-        Base is the score text from the mover's POV: pawns positive when
+        It is the score text from the mover's POV: pawns positive when
         the mover is better, 'Mate in n' when the game move wins with
-        mate, 'Mated in n' when the mover is the one getting mated. The
-        caller passes game_move_score anchored to the mover (its turn)
-        for this reason. A move that walks into a forced mate
-        while a better move existed is marked 'allows mate'; a move that
-        earned a praise NAG is marked as the only good move (same criterion
-        as the NAG, so text and glyph never disagree). The better move and
-        its price are not spelled out here - the replayed variation carries
-        them. Kept brace-free: PGN comments cannot contain '{' or '}'.
+        mate ('Mate' when it mates), 'Mated in n' when the mover is the
+        one getting mated. The caller passes game_move_score anchored to
+        the mover (its turn) for this reason, and ``played`` = 1 when the
+        score is that of a search made before the move (_format_score).
+        A move that earned a praise NAG is also marked
+        as the only good move (same criterion as the NAG, so text and
+        glyph never disagree). The better move and its price are not
+        spelled out here - the engine's variation carries them. Kept
+        brace-free: PGN comments cannot contain '{' or '}'.
         """
-        text = self._format_score(game_move_score, game_move_score.turn)
-        if delta_cp is not None and delta_cp >= 30 and allows_mate:
-            text += ', allows mate'
-        elif is_only_move:
+        text = self._format_score(game_move_score, game_move_score.turn,
+                                  played)
+        if is_only_move:
             text += ', only good move'
         return text
 
@@ -1692,16 +1943,24 @@ class AutoAnalyzeGame(threading.Thread):
         return score.relative.score(mate_score=32000)
 
     def _classify_nag(self, engine_cp, game_move_cp):
-        """Return a NAG integer if the game move is much worse than best.
+        """Return the NAG of a bad game move, or None.
 
         Both scores are from the POV of the player who made the game move.
+        The mark depends on what the move loses and on what is left after
+        it: see the AUTO_ANALYSIS_*_LOSS_CP constants. A move that gives
+        a win away but keeps a level game is a mistake (?); the blunder
+        (??) is kept for a move after which the mover is losing.
         """
-        if game_move_cp <= -500 and engine_cp >= -200:
-            return 4   # ?? blunder
-        if game_move_cp <= -300 and engine_cp > -300:
-            return 2   # ? mistake
-        if game_move_cp <= -100 and engine_cp > -100:
-            return 6   # ?! dubious
+        if game_move_cp >= AUTO_ANALYSIS_DECIDED_CP \
+                or engine_cp <= -AUTO_ANALYSIS_DECIDED_CP:
+            return None     # still winning, or it was lost anyway
+        loss = engine_cp - game_move_cp
+        if loss >= AUTO_ANALYSIS_MISTAKE_LOSS_CP:
+            if game_move_cp <= -AUTO_ANALYSIS_DECIDED_CP:
+                return 4   # ?? blunder
+            return 2       # ? mistake
+        if loss >= AUTO_ANALYSIS_DUBIOUS_LOSS_CP:
+            return 6       # ?! dubious
         return None
 
     def _clear_existing_annotations(self):
@@ -1738,14 +1997,21 @@ class AutoAnalyzeGame(threading.Thread):
                     self.engine_path_and_file, cwd=folder)
             self._configure_engine()
             self._configure_runtime_analysis_options()
-            self._clear_existing_annotations()
+            if not self.keep_existing:
+                self._clear_existing_annotations()
 
-            # Count mainline moves for progress reporting.
+            def in_range(move_number):
+                return move_number >= self.start_move and (
+                    self.end_move is None or move_number <= self.end_move)
+
+            # Count the mainline moves to analyse for progress reporting.
             total = 0
             node = self.game
+            board = self.game.board()
             while node.variations:
-                total += 1
+                total += in_range(board.fullmove_number)
                 node = node.variations[0]
+                board.push(node.move)
 
             current = 0
             node = self.game
@@ -1755,8 +2021,15 @@ class AutoAnalyzeGame(threading.Thread):
                     self.output_queue.put({'type': 'cancelled'})
                     return
 
-                current += 1
                 child = node.variations[0]
+                # A move outside the range the user asked for is left as
+                # it is.
+                if not in_range(board.fullmove_number):
+                    board.push(child.move)
+                    node = child
+                    continue
+
+                current += 1
                 limit = chess.engine.Limit(
                     time=self.time_sec,
                     depth=self.max_depth if self.max_depth != MAX_DEPTH else None)
@@ -1780,11 +2053,13 @@ class AutoAnalyzeGame(threading.Thread):
                 # the mover's POV so the comment's mate wording reads from
                 # the side that played the move ('Mate in n' when the game
                 # move wins with mate, 'Mated in n' when it runs into one).
-                # If the move appears in one of the MultiPV lines its
-                # pre-move score is reused (already mover POV, no extra
-                # search); only a move outside the top lines needs a search
-                # of the position after it, whose opponent-POV score is
-                # re-anchored back to the mover.
+                # If the move starts one of the lines of the search (the
+                # best or the second best) the score of that line is its
+                # score (already mover POV, no extra search); only a move
+                # that starts neither needs a search of the position
+                # after it, whose opponent-POV score is re-anchored back
+                # to the mover. That search asks for the same number of
+                # lines, like every search here.
                 game_move_score = None
                 game_move_cp = None
                 if score is not None:
@@ -1799,7 +2074,7 @@ class AutoAnalyzeGame(threading.Thread):
                         after_board = board.copy()
                         after_board.push(child.move)
                         after_infos = self.engine.analyse(
-                            after_board, limit, multipv=1)
+                            after_board, limit, multipv=self.multipv)
                         after_info = after_infos[0] if isinstance(
                             after_infos, list) else after_infos
                         after_score = after_info.get('score')
@@ -1814,50 +2089,50 @@ class AutoAnalyzeGame(threading.Thread):
                 if engine_cp is not None and game_move_cp is not None:
                     delta_cp = engine_cp - game_move_cp
 
-                # Rebuild the engine's better line by replaying it engine
-                # vs engine. The root gap (engine best vs game move) at least
-                # ALT_MIN_CP, plus a not-yet-decided position, is the cheap
-                # gate for replaying at all. The "Better is" label is then
-                # decided by the replayed line's final score - the eval shown
-                # on the variation - vs the game move (both mover POV): a gap
-                # of at least BETTER_MIN_CP earns the pre-comment, a smaller
-                # gap is written as a bare line.
+                # The engine's line becomes a "Better is" variation when
+                # its move is better than the game move by enough: the
+                # line and its score are those of the search, as they are.
+                # A win that the game move missed is shown too, with a
+                # mark on the engine's move.
                 var_moves = None
-                var_score = None
-                label_better = False
+                var_nag = None
                 if (not is_best and best_move is not None
-                        and delta_cp is not None
-                        and delta_cp >= AUTO_ANALYSIS_ALT_MIN_CP
-                        and engine_cp is not None
-                        and abs(engine_cp) <= AUTO_ANALYSIS_BETTER_MAX_ABS_CP):
-                    var_moves, var_score = self._replay_variation(
-                        board, best_move, limit)
-                    if var_score is None:
-                        var_score = score
-                    var_cp = var_score.pov(board.turn).score(mate_score=32000)
-                    label_better = (var_cp - game_move_cp
-                                    >= AUTO_ANALYSIS_BETTER_MIN_CP)
+                        and delta_cp is not None):
+                    var_nag = self._missed_win_nag(score, engine_cp,
+                                                   delta_cp)
+                    if var_nag is not None \
+                            or self._is_better_line(engine_cp, delta_cp):
+                        var_moves = pv
 
                 if game_move_score is not None:
                     nag = None
                     if engine_cp is not None and game_move_cp is not None:
-                        if is_best:
+                        if not is_best:
+                            nag = self._classify_nag(engine_cp, game_move_cp)
+                        elif AUTO_ANALYSIS_PRAISE:
                             nag = self._classify_good_nag(
                                 engine_cp, second_cp, score, second_score)
-                        else:
-                            nag = self._classify_nag(engine_cp, game_move_cp)
-                        if nag is not None:
+                        # A move annotation the move already has (kept
+                        # from the game) is not written over.
+                        if nag is not None and not any(
+                                old in REVIEW_MOVE_NAG_GROUP
+                                for old in child.nags):
                             child.nags.add(nag)
 
-                    allows_mate = (game_move_cp is not None
-                                   and game_move_cp <= -31000)
-                    child.comment = self._build_move_comment(
-                        game_move_score, None if is_best else delta_cp,
-                        nag in (1, 3), allows_mate)
+                    # The score of a line of the search was found before
+                    # the move, that of the search of the position after
+                    # it was not: a mate is counted from after the move.
+                    child.comment = self._merge_move_comment(
+                        child.comment, self._build_move_comment(
+                            game_move_score, nag in (1, 3),
+                            played=1 if played_info is not None else 0))
 
+                # What this engine added here in an earlier analysis goes,
+                # whether or not it has a line for this move now.
+                self._remove_own_variations(node)
                 if var_moves:
                     self._build_engine_variation(
-                        node, var_moves, board, var_score, label_better)
+                        node, var_moves, board, score, var_nag)
 
                 self.output_queue.put({
                     'type': 'progress',
@@ -2825,6 +3100,9 @@ class EasyChessGui:
         self.threat_id_name = None
         # Recently opened review PGN files, most recent first (persisted).
         self.recent_pgn_files = []
+        # The PGN file a Review game was last saved to (persisted): what
+        # Game -> Save Game offers next time.
+        self.review_save_file = None
         self.review_queue = queue.Queue()
         self.threat_queue = queue.Queue()
         self.auto_analysis_queue = queue.Queue()
@@ -2848,9 +3126,18 @@ class EasyChessGui:
         self.review_analysis_board = None
         self.review_threat_board = None
         self.review_move_index = 0
-        self.review_move_labels = []
+        # The game tree flattened in the order of the move list: the
+        # position after each move and its node, with the start position
+        # first. review_move_index is the current one.
         self.review_boards = []
         self.review_nodes = []
+        # True when the game on the board was changed (moves, comments,
+        # annotations, details) and not saved since.
+        self.review_game_modified = False
+        # The square (row, col) of the piece picked up by a click on the
+        # Review board, waiting for the click on its destination.
+        self.review_from_sq = None
+        self._review_move_menu = None
         self.review_window = None
         self.review_analysis_lines = {}
         self.review_analysis_enabled = False
@@ -2875,6 +3162,8 @@ class EasyChessGui:
     def reset_review_run_state(self):
         """Reset run state of review mode when exiting, keeping loaded game/pgn."""
         self.review_window = None
+        self.review_from_sq = None
+        self._review_move_menu = None
         self.review_analysis_lines = {}
         self.review_analysis_enabled = False
         self.review_analysis_status = 'Analysis stopped'
@@ -2896,7 +3185,7 @@ class EasyChessGui:
         self.auto_analysis_cancel = threading.Event()
 
     def on_move_clicked(self, idx):
-        """Callback when a move in the Multiline PGN view is clicked."""
+        """A move of the move list was clicked: go to its position."""
         if self.review_window is None:
             return
         self.review_move_index = idx
@@ -2946,188 +3235,770 @@ class EasyChessGui:
         self.update_review_threat_panel(window)
         self.review_nav_last_time = time.time()
 
+    # ----- Review move list -----
+    # The move list is a Tk Text widget filled by render_review_movelist()
+    # from the game tree. Every move is tagged 'move_<n>', n being its
+    # index in review_nodes / review_boards, which is how a click finds
+    # its move.
+    @staticmethod
+    def iter_review_tree(game):
+        """Walk the game tree in the order the move list shows it.
+
+        Yields (kind, node, board before the move, board after it, depth
+        of variation):
+          'move'    a move
+          'open'    a variation starts with this move (which follows)
+          'close'   the variation that started with this move has ended
+          'resume'  the line goes on after the variations of this move
+
+        A line is followed in a loop, and only a variation goes one call
+        deeper, so a long game cannot run into the recursion limit.
+        """
+        def line(node, board, depth):
+            while node.variations:
+                main = node.variations[0]
+                after = board.copy()
+                after.push(main.move)
+                yield 'move', main, board, after, depth
+                for var in node.variations[1:]:
+                    var_after = board.copy()
+                    var_after.push(var.move)
+                    yield 'open', var, board, var_after, depth + 1
+                    yield 'move', var, board, var_after, depth + 1
+                    yield from line(var, var_after, depth + 1)
+                    yield 'close', var, board, var_after, depth + 1
+                if len(node.variations) > 1 and main.variations:
+                    yield 'resume', main, board, after, depth
+                node, board = main, after
+
+        yield from line(game, game.board(), 0)
+
+    @staticmethod
+    def review_nag_text(nags):
+        """The annotations of a move as the move list shows them: the
+        move annotation right after the move ('!?'), the others after a
+        space each ('+/-', or '$n' for a code without a symbol)."""
+        text = ''
+        for nag in sorted(nags):
+            symbol = REVIEW_NAG_SYMBOLS.get(nag)
+            if symbol is None:
+                text += ' ${}'.format(nag)
+            elif nag in REVIEW_MOVE_NAG_GROUP:
+                text += symbol
+            else:
+                text += ' ' + symbol
+        return text
+
+    @staticmethod
+    def review_variation_root(node):
+        """The first move of the variation ``node`` is in: the nearest
+        move, from ``node`` back to the start, that is not the first
+        choice of its position. None when ``node`` is on the main line
+        of the game."""
+        while node.parent is not None:
+            if node.parent.variations[0] is not node:
+                return node
+            node = node.parent
+        return None
+
+    def review_node_index(self, node):
+        """Index of ``node`` in review_nodes, or None."""
+        for index, listed in enumerate(self.review_nodes):
+            if listed is node:
+                return index
+        return None
+
+    def review_move_label(self, node):
+        """A move as text with its number: '12. Nf3' or '12... Nc6'."""
+        if node.parent is None:
+            return 'Start position'
+        board = node.parent.board()
+        return '{}{} {}'.format(board.fullmove_number,
+                                '.' if board.turn == chess.WHITE else '...',
+                                board.san(node.move))
+
+    def review_palette(self, widget):
+        """'dark' or 'light': the kind of background of the move list,
+        which decides the colours used on it."""
+        try:
+            red, green, blue = widget.winfo_rgb(widget.cget('background'))
+        except tk.TclError:
+            return 'light'
+        # winfo_rgb gives 16-bit values; this is the perceived brightness.
+        brightness = (299 * red + 587 * green + 114 * blue) / 1000 / 65535
+        return 'dark' if brightness < 0.5 else 'light'
+
+    def setup_review_move_list(self, window):
+        """Set up the move list of a new Review window: how its text is
+        drawn (bold main line, colours of annotated moves and comments,
+        the mark of the current move) and what the mouse does in it."""
+        widget = window['review_move_list_k'].Widget
+        palette = self.review_palette(widget)
+        # Tags made later win over earlier ones: the mark of the current
+        # move has to come last to cover the colour of an annotated move.
+        widget.tag_configure('mainline', font=FONT_BASE + ('bold',))
+        widget.tag_configure('comment',
+                             foreground=REVIEW_COMMENT_COLOR[palette])
+        for nag, color in REVIEW_NAG_COLORS[palette].items():
+            widget.tag_configure('nag_{}'.format(nag), foreground=color)
+        widget.tag_configure('current_var_block',
+                             background=REVIEW_VAR_BLOCK_COLOR[palette])
+        widget.tag_configure('current_move', background='yellow',
+                             foreground='black')
+        widget.tag_configure('current_var_move', background='#adff2f',
+                             foreground='black')
+
+        widget.tag_bind('move_link', '<Enter>',
+                        lambda event: widget.configure(cursor='hand2'))
+        widget.tag_bind('move_link', '<Leave>',
+                        lambda event: widget.configure(cursor=''))
+        widget.bind('<Button-1>', self.on_move_list_click, add='+')
+        # The menu of the move list: the right button, which Tk calls
+        # button 2 on a Mac, where Control-click does the same.
+        menu_clicks = ['<Button-3>']
+        if platform == 'darwin':
+            menu_clicks += ['<Button-2>', '<Control-Button-1>']
+        for click in menu_clicks:
+            widget.bind(click, self.on_move_list_menu_click)
+
+    def review_move_at(self, widget, x, y):
+        """Index of the move drawn at pixel (x, y) of the move list, or
+        None when there is no move there."""
+        try:
+            index = widget.index('@{},{}'.format(x, y))
+            box = widget.bbox(index)
+        except tk.TclError:
+            return None
+        # '@x,y' is the nearest character: make sure it is under (x, y).
+        if not box or not (box[0] <= x < box[0] + box[2]
+                           and box[1] <= y < box[1] + box[3]):
+            return None
+        for tag in widget.tag_names(index):
+            if tag.startswith('move_') and tag[5:].isdigit():
+                move = int(tag[5:])
+                return move if move < len(self.review_nodes) else None
+        return None
+
+    def on_move_list_click(self, event):
+        """Left click in the move list: go to the move under the mouse."""
+        idx = self.review_move_at(event.widget, event.x, event.y)
+        if idx is not None:
+            self.on_move_clicked(idx)
+
+    def on_move_list_menu_click(self, event):
+        """Right click in the move list: go to the move under the mouse,
+        if there is one, and show the menu for the current move."""
+        window = self.review_window
+        if window is None or self.review_game is None:
+            return 'break'
+        idx = self.review_move_at(event.widget, event.x, event.y)
+        if idx is not None and idx != self.review_move_index:
+            self.on_move_clicked(idx)
+        self.show_review_move_menu(window, event.x_root, event.y_root)
+        return 'break'
+
+    def show_review_move_menu(self, window, x, y):
+        """Show the menu of the current move at screen position (x, y):
+        comment, annotations, and what can be done with its variation.
+
+        It is a plain Tk menu, built for the move each time so that its
+        items can be greyed out and its annotations ticked. A choice is
+        sent to the Review loop as a 'review_edit_k' event with the value
+        (action, argument): see handle_review_edit().
+        """
+        node = self.review_nodes[self.review_move_index]
+        is_move = node.parent is not None
+        root = self.review_variation_root(node)
+        lower = self.review_demote_target(node)
+        can_edit = not self.is_auto_analysis_running()
+
+        if self._review_move_menu is not None:
+            try:
+                self._review_move_menu.destroy()
+            except tk.TclError:
+                pass
+        options = {'tearoff': 0}
+        if MENU_FONT is not None:
+            options['font'] = MENU_FONT
+        menu = tk.Menu(window.TKroot, **options)
+        self._review_move_menu = menu
+
+        def send(action, arg=None):
+            return lambda: window.write_event_value('review_edit_k',
+                                                    (action, arg))
+
+        def state(enabled):
+            return 'normal' if enabled and can_edit else 'disabled'
+
+        def item(label, action, enabled=True):
+            menu.add_command(label=label, command=send(action),
+                             state=state(enabled))
+
+        def annotations(label, action, group, choices):
+            """A submenu of annotations of which the move has one."""
+            current = next((nag for nag in sorted(node.nags)
+                            if nag in group), 0) if is_move else 0
+            chosen = tk.IntVar(menu, value=current)
+            sub = tk.Menu(menu, **options)
+            sub.chosen = chosen     # a Tk variable must be kept alive
+            sub.add_radiobutton(label='None', variable=chosen, value=0,
+                                command=send(action, 0))
+            for nag, symbol, name in choices:
+                sub.add_radiobutton(
+                    label='{}   {}'.format(symbol, name), variable=chosen,
+                    value=nag, command=send(action, nag))
+            menu.add_cascade(label=label, menu=sub, state=state(is_move))
+
+        # The move the menu is about, as its heading.
+        menu.add_command(label=self.review_move_label(node),
+                         state='disabled')
+        menu.add_separator()
+        item('Comment...', 'comment')
+        annotations('Move Annotation', 'move_nag', REVIEW_MOVE_NAG_GROUP,
+                    REVIEW_MOVE_NAGS)
+        annotations('Position Annotation', 'position_nag',
+                    REVIEW_POSITION_NAG_GROUP, REVIEW_POSITION_NAGS)
+        menu.add_separator()
+        item('Promote Variation', 'promote', root is not None)
+        item('Demote Variation', 'demote', lower is not None)
+        item('Make Main Line', 'mainline', root is not None)
+        menu.add_separator()
+        item('Delete Variation', 'delete_variation', root is not None)
+        item('Delete This Move and the Rest', 'delete_move', is_move)
+        item('Delete the Moves After', 'delete_after', bool(node.variations))
+        menu.add_separator()
+        menu.add_command(label='Save Game...', command=send('save'))
+
+        try:
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+
     def highlight_current_move(self, widget):
-        """Highlights the active move in the Multiline text and scrolls it into view."""
-        widget.tag_remove("current_move", "1.0", "end")
-        widget.tag_remove("current_var_move", "1.0", "end")
-        widget.tag_remove("current_var_block", "1.0", "end")
-
-        current_node = self.review_nodes[self.review_move_index]
-
-        # 1. Determine if the current move is in a variation
-        in_var = False
-        curr = current_node
-        while curr.parent is not None:
-            if curr.parent.variations and curr != curr.parent.variations[0]:
-                in_var = True
-                break
-            curr = curr.parent
-
-        # 2. Highlight active move
-        tag_name = f"move_{self.review_move_index}"
-        ranges = widget.tag_ranges(tag_name)
-        if ranges:
-            if in_var:
-                widget.tag_add("current_var_move", ranges[0], ranges[1])
-            else:
-                widget.tag_add("current_move", ranges[0], ranges[1])
-            widget.see(ranges[0])
-
-        # 3. Highlight parenthetical variation block if in variation
-        if in_var:
-            var_root_idx = None
-            curr = current_node
-            while curr.parent is not None:
-                if curr.parent.variations and curr in curr.parent.variations[1:]:
-                    if curr in self.review_nodes:
-                        var_root_idx = self.review_nodes.index(curr)
-                        break
-                curr = curr.parent
-
-            if var_root_idx is not None:
-                var_tag = f"var_block_{var_root_idx}"
-                var_ranges = widget.tag_ranges(var_tag)
-                if var_ranges:
-                    widget.tag_add("current_var_block", var_ranges[0], var_ranges[1])
-
-    def render_pgn_tree(self, node, board, widget, indent=0, is_var=False):
-        """Recursively render game node and variations into the Tkinter Text widget."""
-
-        def render_only_move(n, b, ind):
-            NAG_SYMBOLS = {
-                1: "!",
-                2: "?",
-                3: "!!",
-                4: "??",
-                5: "!?",
-                6: "?!",
-            }
-            if n.move is None:
-                return b, None
-
-            # 1. Print starting comment, if any
-            if n.starting_comment:
-                comment_text = f"{{{n.starting_comment}}} "
-                widget.insert("insert", comment_text, "comment")
-
-            turn = b.turn
-            fullmove = b.fullmove_number
-            san = b.san(n.move)
-
-            nag_suffix = ""
-            for nag in n.nags:
-                if nag in NAG_SYMBOLS:
-                    nag_suffix += NAG_SYMBOLS[nag]
-
-            idx = len(self.review_nodes)
-            self.review_nodes.append(n)
-            next_b = b.copy()
-            next_b.push(n.move)
-            self.review_boards.append(next_b)
-
-            prefix = ""
-            if turn == chess.WHITE:
-                prefix = f"{fullmove}. "
-            else:
-                if self.first_move_in_line:
-                    prefix = f"{fullmove}... "
-
-            move_text = f"{prefix}{san}{nag_suffix} "
-            tag_name = f"move_{idx}"
-            widget.insert("insert", move_text, (tag_name, "move_link"))
-            widget.tag_bind(tag_name, "<Button-1>", lambda event, i=idx: self.on_move_clicked(i))
-
-            self.first_move_in_line = False
-
-            # 2. Print comment, if any
-            if n.comment:
-                comment_text = f"{{{n.comment}}} "
-                widget.insert("insert", comment_text, "comment")
-
-            return next_b, idx
-
-        def render_continuations(n, b, ind):
-            if not n.variations:
-                return
-
-            mainline_child = n.variations[0]
-            # 1. Render mainline child's move
-            next_b, idx = render_only_move(mainline_child, b, ind)
-
-            # 2. Render sibling variations (alternatives to mainline child)
-            if len(n.variations) > 1:
-                for var_node in n.variations[1:]:
-                    var_idx = len(self.review_nodes)
-                    start_mark = widget.index("insert")
-
-                    widget.insert("insert", "\n" + "    " * (ind + 1) + "( ")
-                    self.first_move_in_line = True
-                    render_node(var_node, b, ind + 1, True)
-                    widget.insert("insert", " ) ")
-                    self.first_move_in_line = True
-
-                    end_mark = widget.index("insert")
-                    var_tag = f"var_block_{var_idx}"
-                    widget.tag_add(var_tag, start_mark, end_mark)
-
-                # After the last variation, continue the mainline on a fresh
-                # line at the parent's indentation level.
-                if mainline_child.variations:
-                    widget.insert("insert", "\n" + "    " * ind)
-
-            # 3. Render mainline child's continuation
-            render_continuations(mainline_child, next_b, ind)
-
-        def render_node(n, b, ind, is_v):
-            next_b, idx = render_only_move(n, b, ind)
-            render_continuations(n, next_b, ind)
-
-        render_node(node, board, indent, is_var)
-
-    def render_review_movelist(self, window):
-        """Build and render the entire PGN move list with variations into the Multiline widget."""
-        if self.review_game is None or 'review_move_list_k' not in window.AllKeysDict:
+        """Mark the current move in the move list and bring it into
+        view. A move of a variation is marked in another colour, and its
+        variation gets a background."""
+        for tag in ('current_move', 'current_var_move', 'current_var_block'):
+            widget.tag_remove(tag, '1.0', 'end')
+        if not self.review_nodes:
             return
 
+        root = self.review_variation_root(
+            self.review_nodes[self.review_move_index])
+        ranges = widget.tag_ranges('move_{}'.format(self.review_move_index))
+        if ranges:
+            widget.tag_add(
+                'current_move' if root is None else 'current_var_move',
+                ranges[0], ranges[1])
+            widget.see(ranges[0])
+        if root is not None:
+            block = widget.tag_ranges(
+                'var_block_{}'.format(self.review_node_index(root)))
+            if block:
+                widget.tag_add('current_var_block', block[0], block[1])
+
+    def render_review_movelist(self, window, current=None):
+        """Write the game into the move list, and number its moves again
+        (review_nodes, review_boards) in the order they are written.
+
+        The main line is bold. A variation is in brackets on a line of
+        its own, indented by its depth, and the line it left goes on
+        below it. A move with a move annotation has the colour of that
+        annotation (REVIEW_NAG_COLORS).
+
+        :param current: the node to make the current move; without it
+          the current index is kept (and brought back into range).
+        """
+        if self.review_game is None \
+                or 'review_move_list_k' not in window.AllKeysDict:
+            return
+
+        game = self.review_game
         widget = window['review_move_list_k'].Widget
+        top = widget.yview()[0]
         widget.configure(state='normal')
         widget.delete('1.0', tk.END)
+        self.review_nodes = [game]
+        self.review_boards = [game.board()]
 
-        # Re-initialize index mapping lists
-        self.review_nodes = [self.review_game]
-        self.review_boards = [self.review_game.board()]
+        def write(text, *tags):
+            widget.insert(tk.END, text, tags)
 
-        # Configure styles
-        default_fg = widget.cget("foreground")
-        widget.tag_configure("move_link", foreground=default_fg, font=widget.cget("font"))
-        widget.tag_configure("comment", foreground="green")
-        widget.tag_configure("current_move", background="yellow", foreground="black")
-        widget.tag_configure("current_var_move", background="#adff2f", foreground="black")
-        widget.tag_configure("current_var_block", background="#e2f0d9")
+        def write_comment(text):
+            # Without the braces a comment has in a PGN file: its colour
+            # sets it apart from the moves. On one line whatever was
+            # typed, as PGN has no line breaks.
+            write(' '.join(text.split()), 'comment')
+            write(' ')
 
-        widget.tag_raise("current_move", "move_link")
-        widget.tag_raise("current_var_move", "move_link")
-        widget.tag_raise("current_move", "current_var_block")
-        widget.tag_raise("current_var_move", "current_var_block")
+        write('Start Position', 'move_0', 'move_link')
+        if game.comment:
+            write(' ')
+            write_comment(game.comment)
+        write('\n\n')
 
-        widget.tag_bind("move_link", "<Enter>", lambda event: widget.configure(cursor="hand2"))
-        widget.tag_bind("move_link", "<Leave>", lambda event: widget.configure(cursor=""))
-
-        # Insert Start Position
-        widget.insert("insert", "Start Position", ("move_0", "move_link"))
-        widget.tag_bind("move_0", "<Button-1>", lambda event, i=0: self.on_move_clicked(i))
-        widget.insert("insert", "\n\n")
-
-        self.first_move_in_line = True
-        game = self.review_game
-        if game.variations:
-            # Render from the root so that alternative first moves (e.g. an
-            # engine-best line for move 1) appear inline after the mainline
-            # first move instead of at the end of the move list.
-            self.render_pgn_tree(game, game.board(), widget, 0, False)
+        # A black move shows its number when it starts a line or follows
+        # a comment or a variation: '12... Nc6'.
+        show_number = True
+        blocks = []     # open variations: (where it starts, its first move)
+        for kind, node, before, after, depth in self.iter_review_tree(game):
+            if kind == 'open':
+                write('\n' + '    ' * depth)
+                blocks.append((widget.index('end-1c'),
+                               len(self.review_nodes)))
+                write('( ')
+                show_number = True
+            elif kind == 'close':
+                start, first_move = blocks.pop()
+                write(')')
+                widget.tag_add('var_block_{}'.format(first_move), start,
+                               'end-1c')
+                write(' ')
+                show_number = True
+            elif kind == 'resume':
+                write('\n' + '    ' * depth)
+                show_number = True
+            else:
+                idx = len(self.review_nodes)
+                self.review_nodes.append(node)
+                self.review_boards.append(after)
+                if node.starting_comment:
+                    write_comment(node.starting_comment)
+                    show_number = True
+                if before.turn == chess.WHITE:
+                    number = '{}. '.format(before.fullmove_number)
+                elif show_number:
+                    number = '{}... '.format(before.fullmove_number)
+                else:
+                    number = ''
+                tags = ['move_{}'.format(idx), 'move_link']
+                if depth == 0:
+                    tags.append('mainline')
+                tags += ['nag_{}'.format(nag)
+                         for nag in REVIEW_NAG_COLORS['light']
+                         if nag in node.nags][:1]
+                write(number + before.san(node.move)
+                      + self.review_nag_text(node.nags), *tags)
+                write(' ')
+                show_number = False
+                if node.comment:
+                    write_comment(node.comment)
+                    show_number = True
 
         widget.configure(state='disabled')
+        if current is not None:
+            self.review_move_index = self.review_node_index(current) or 0
+        self.review_move_index = min(self.review_move_index,
+                                     len(self.review_nodes) - 1)
+        widget.yview_moveto(top)
         self.highlight_current_move(widget)
+
+    # ----- Review: changing the game -----
+    def is_auto_analysis_running(self):
+        """True while Auto-Analyze works on a copy of the game: a change
+        made meanwhile would be lost when the annotated copy comes back."""
+        return self.auto_analysis_thread is not None
+
+    @staticmethod
+    def review_demote_target(node):
+        """The move 'Demote Variation' moves one place down among the
+        choices of its position: the nearest move, from ``node`` back to
+        the start, that is not the last choice of its position. (It is
+        the mirror of review_variation_root(), the move that 'Promote
+        Variation' moves up.) On the main line that is where the nearest
+        alternative is, which then becomes the main line. None when
+        there is no such move."""
+        while node.parent is not None:
+            if node.parent.variations[-1] is not node:
+                return node
+            node = node.parent
+        return None
+
+    def review_tree_changed(self, window, current, moved=True):
+        """The game was changed: write the move list again and make
+        ``current`` the current move. ``moved`` tells that the position
+        on the board is another one, which analysis and threat follow."""
+        self.review_game_modified = True
+        self.render_review_movelist(window, current)
+        self.update_review_window(window)
+        if moved:
+            self.follow_review_position(window)
+
+    def run_review_dialog(self, window, title, layout):
+        """Show a dialog over the Review window and return the (event,
+        values) that closed it."""
+        self.begin_dialog(window)
+        w = sg.Window(title, layout, icon=ico_path[platform]['pecg'],
+                      modal=True)
+        e, v = w.Read()
+        # The Review window is made usable before the dialog goes, so
+        # that it is the one that gets the keyboard back.
+        self.end_dialog(window)
+        w.Close()
+        return e, v
+
+    def confirm_review_delete(self, window, first_node, what):
+        """Ask before deleting more than one move. ``first_node`` is the
+        first move that goes, with everything after it."""
+        count = 0
+        nodes = [first_node]
+        while nodes:
+            node = nodes.pop()
+            count += 1
+            nodes.extend(node.variations)
+        if count <= 1:
+            return True
+        e, _ = self.run_review_dialog(window, 'Delete', [
+            [sg.Text('Delete {} ({} moves)?'.format(what, count))],
+            [sg.Button('Delete'), sg.Cancel()]])
+        return e == 'Delete'
+
+    def handle_review_edit(self, window, action, arg=None):
+        """Do what was chosen in the menu of the move list, for the
+        current move.
+
+        :param action: 'comment', 'move_nag' / 'position_nag' (``arg``:
+          the code, 0 for none), 'promote', 'demote', 'mainline',
+          'delete_variation', 'delete_move', 'delete_after' or 'save'.
+        """
+        if self.review_game is None:
+            return
+        if action == 'save':
+            self.save_review_game(window)
+            return
+        if self.is_auto_analysis_running():
+            window['_gamestatus_'].Update(
+                'The game cannot be changed while Auto-Analyze is running.')
+            return
+
+        node = self.review_nodes[self.review_move_index]
+        root = self.review_variation_root(node)
+        current, moved = node, False
+
+        if action == 'comment':
+            if not self.edit_review_comment(window, node):
+                return
+        elif action in ('move_nag', 'position_nag'):
+            if node.parent is None:
+                return
+            group = REVIEW_MOVE_NAG_GROUP if action == 'move_nag' \
+                else REVIEW_POSITION_NAG_GROUP
+            nags = {nag for nag in node.nags if nag not in group}
+            if arg:
+                nags.add(arg)
+            if nags == set(node.nags):
+                return
+            node.nags = nags
+        elif action == 'promote':
+            if root is None:
+                return
+            root.parent.promote(root)
+        elif action == 'demote':
+            lower = self.review_demote_target(node)
+            if lower is None:
+                return
+            lower.parent.demote(lower)
+        elif action == 'mainline':
+            if root is None:
+                return
+            step = node
+            while step.parent is not None:
+                step.parent.promote_to_main(step)
+                step = step.parent
+        elif action == 'delete_variation':
+            if root is None or not self.confirm_review_delete(
+                    window, root, 'this variation'):
+                return
+            current, moved = root.parent, True
+            root.parent.remove_variation(root)
+        elif action == 'delete_move':
+            if node.parent is None or not self.confirm_review_delete(
+                    window, node, 'this move and what follows it'):
+                return
+            current, moved = node.parent, True
+            node.parent.remove_variation(node)
+        elif action == 'delete_after':
+            if not node.variations:
+                return
+            if len(node.variations) > 1 or node.variations[0].variations:
+                e, _ = self.run_review_dialog(window, 'Delete', [
+                    [sg.Text('Delete every move after {}?'.format(
+                        self.review_move_label(node)))],
+                    [sg.Button('Delete'), sg.Cancel()]])
+                if e != 'Delete':
+                    return
+            node.variations = []
+        else:
+            return
+        self.review_tree_changed(window, current, moved)
+
+    def edit_review_comment(self, window, node):
+        """Let the user write the comment of a move (of the game, at the
+        start position). The first move of a variation can also have a
+        comment before it. Return True when a comment was changed."""
+        is_move = node.parent is not None
+        has_before = is_move and node.starts_variation()
+        layout = []
+        if has_before:
+            layout += [
+                [sg.Text('Comment before the move (start of the variation)')],
+                [sg.Multiline(node.starting_comment, size=(64, 3),
+                              font=FONT_BASE, key='before_k',
+                              enter_submits=True)]]
+        layout += [
+            [sg.Text('Comment after {}'.format(self.review_move_label(node))
+                     if is_move else 'Comment before the first move')],
+            [sg.Multiline(node.comment, size=(64, 6), font=FONT_BASE,
+                          key='after_k', focus=True, enter_submits=True)],
+            # A comment is one paragraph: Enter is OK, in both boxes.
+            [sg.Button('OK', bind_return_key=True), sg.Cancel()]]
+        e, v = self.run_review_dialog(window, 'Comment', layout)
+        if e != 'OK':
+            return False
+
+        def typed(key):
+            # A PGN comment ends at '}' and has no line breaks.
+            return ' '.join((v.get(key) or '').replace('}', ' ').split())
+
+        changed = False
+        if typed('after_k') != node.comment:
+            node.comment = typed('after_k')
+            changed = True
+        if has_before and typed('before_k') != node.starting_comment:
+            node.starting_comment = typed('before_k')
+            changed = True
+        return changed
+
+    def edit_review_details(self, window):
+        """Game -> Game Details: let the user write the names, the event,
+        the date and the result of the game on the board."""
+        game = self.review_game
+        if game is None:
+            return
+        tags = ('Event', 'Site', 'Date', 'Round', 'White', 'Black')
+        result = game.headers.get('Result', '*')
+        layout = [[sg.Text(tag, size=(7, 1)),
+                   sg.Input(game.headers.get(tag, '?'), size=(44, 1),
+                            key=tag, focus=(tag == 'White'))]
+                  for tag in tags]
+        layout += [
+            [sg.Text('Result', size=(7, 1)),
+             sg.Combo(sorted({'*', '1-0', '0-1', '1/2-1/2', result}),
+                      default_value=result, readonly=True, size=(10, 1),
+                      key='Result')],
+            [sg.Text('Date is written as year.month.day, for example '
+                     '2026.11.15', font=FONT_SMALL)],
+            [sg.Button('OK', bind_return_key=True), sg.Cancel()]]
+        e, v = self.run_review_dialog(window, 'Game Details', layout)
+        if e != 'OK':
+            return
+
+        changed = False
+        for tag in tags + ('Result',):
+            value = ' '.join((v.get(tag) or '').split())
+            if not value:
+                value = '????.??.??' if tag == 'Date' else '?'
+            if value != game.headers.get(tag):
+                game.headers[tag] = value
+                changed = True
+        if changed:
+            self.review_game_modified = True
+            self.update_review_window(window)
+
+    def new_review_game(self, window):
+        """Game -> New Game: an empty game on the board, to enter moves
+        from the start position."""
+        self.show_review_game(window, self.empty_review_game(), None)
+
+    def empty_review_game(self):
+        """A game without moves, dated today."""
+        game = chess.pgn.Game()
+        game.headers['Date'] = self.get_tag_date()
+        return game
+
+    def keep_review_changes(self, window):
+        """The game on the board is about to go: when it was changed and
+        not saved, ask whether to save it first. Return False when the
+        user wants to stay with the game instead."""
+        if not self.review_game_modified:
+            return True
+        e, _ = self.run_review_dialog(window, 'Save Game', [
+            [sg.Text('The game was changed and is not saved.\n'
+                     'Save it now?')],
+            [sg.Button('Save', bind_return_key=True),
+             sg.Button("Don't Save"), sg.Cancel()]])
+        if e == 'Save':
+            return self.save_review_game(window)
+        return e == "Don't Save"
+
+    @staticmethod
+    def append_game_to_pgn(path, game):
+        """Write ``game`` at the end of the PGN file ``path``, which is
+        created when it does not exist. What the file holds is kept.
+
+        An existing file is written in its own encoding, and an empty
+        line is put between its last game and the new one if missing.
+        """
+        encoding = PGN_ENCODING
+        gap = ''
+        if os.path.isfile(path) and os.path.getsize(path) > 0:
+            encoding = pgn_file_encoding(path)
+            with open(path, 'rb') as f:
+                f.seek(-min(4, os.path.getsize(path)), os.SEEK_END)
+                tail = f.read().replace(b'\r', b'')
+            if not tail.endswith(b'\n'):
+                gap = '\n\n'
+            elif not tail.endswith(b'\n\n'):
+                gap = '\n'
+        with open(path, mode='a', encoding=encoding,
+                  errors='replace') as f:
+            f.write('{}{}\n\n'.format(gap, game))
+
+    def save_review_game(self, window):
+        """Game -> Save Game: ask for the folder and the name of a PGN
+        file and add the game on the board at the end of that file.
+        Return True when the game was saved."""
+        if self.review_game is None:
+            return False
+        last = self.review_save_file or ''
+        folder = os.path.dirname(last)
+        if not folder or not os.path.isdir(folder):
+            folder = os.getcwd()
+        options = {
+            'parent': window.TKroot,
+            'title': 'Save Game (added at the end of the file)',
+            'initialdir': folder,
+            'initialfile': os.path.basename(last) or REVIEW_SAVE_FILE,
+            'defaultextension': '.pgn',
+            'filetypes': [('PGN files', '*.pgn'), ('All files', '*.*')],
+        }
+        # The game is added to an existing file, nothing is overwritten:
+        # the dialog must not ask to replace the file (where Tk can be
+        # told so).
+        try:
+            path = filedialog.asksaveasfilename(confirmoverwrite=False,
+                                                **options)
+        except tk.TclError:
+            path = filedialog.asksaveasfilename(**options)
+        if not path:
+            return False
+        path = os.path.normpath(path)
+
+        try:
+            self.append_game_to_pgn(path, self.review_game)
+        except (OSError, LookupError):
+            logging.exception('Failed to save the review game to %s', path)
+            self.run_review_dialog(window, 'Save Game', [
+                [sg.Text('The game could not be saved to\n{}'.format(path))],
+                [sg.OK()]])
+            return False
+        logging.info('Review game saved to %s', path)
+        self.review_game_modified = False
+        self.review_save_file = path
+
+        # The Game list shows the games of a file: when that is the file
+        # just written (or there was none yet), it gets the new game.
+        if not self.review_pgn_file:
+            self.review_pgn_file = path
+            self.add_recent_pgn(path)
+        is_listed_file = False
+        try:
+            is_listed_file = os.path.samefile(path, self.review_pgn_file)
+        except OSError:
+            pass
+        if is_listed_file:
+            try:
+                self.review_games, is_truncated = self.load_pgn_games(path)
+                self.review_game_index = None if is_truncated \
+                    else len(self.review_games) - 1
+            except (OSError, UnicodeError):
+                logging.exception('Failed to list the games of %s', path)
+            self.fill_review_game_list(window)
+            self.mark_review_game(window)
+        self.save_settings()
+        self.update_review_window(window)
+        window['_gamestatus_'].Update(
+            'Game saved at the end of {}'.format(path))
+        return True
+
+    # ----- Review: moves entered on the board -----
+    def clear_review_selection(self, window):
+        """Forget the piece picked up by a click on the Review board."""
+        if self.review_from_sq is not None:
+            self.restore_square_color(window, *self.review_from_sq)
+            self.review_from_sq = None
+
+    def handle_review_board_input(self, window, button, value):
+        """A click on a square of the Review board ((row, col) event) or
+        a piece dragged to another square ('__drag_move__').
+
+        A click on a piece of the side to move picks it up, the next
+        click is its destination; a click on the same square puts it
+        back, one on another piece of that side picks that one instead.
+        """
+        if self.review_game is None or not self.review_boards:
+            return
+        if self.is_auto_analysis_running():
+            window['_gamestatus_'].Update(
+                'Moves cannot be entered while Auto-Analyze is running.')
+            return
+        board = self.review_boards[self.review_move_index]
+
+        def has_own_piece(square):
+            return board.color_at(
+                chess.square(square[1], 7 - square[0])) == board.turn
+
+        if button == '__drag_move__':
+            source, target = value['__drag_move__']
+            self.clear_review_selection(window)
+            self.enter_review_move(window, source, target)
+            return
+
+        source = self.review_from_sq
+        self.clear_review_selection(window)
+        if button == source:
+            return
+        if has_own_piece(button):
+            self.review_from_sq = button
+            self.change_square_color(window, *button)
+        elif source is not None:
+            self.enter_review_move(window, source, button)
+
+    def enter_review_move(self, window, source, target):
+        """Play the move from square ``source`` to ``target`` (each
+        (row, col)) in the current position, if it is legal.
+
+        A move the game already has there is followed. A new move goes
+        on the line when the current move is its last one, and starts a
+        variation otherwise.
+        """
+        node = self.review_nodes[self.review_move_index]
+        board = self.review_boards[self.review_move_index]
+        fr_sq = chess.square(source[1], 7 - source[0])
+        to_sq = chess.square(target[1], 7 - target[0])
+        move = chess.Move(fr_sq, to_sq)
+        # A pawn reaching the last rank: ask for the piece, but only
+        # when the pawn move itself is legal.
+        if board.piece_type_at(fr_sq) == chess.PAWN \
+                and chess.square_rank(to_sq) in (0, 7) \
+                and board.is_legal(chess.Move(fr_sq, to_sq,
+                                              promotion=chess.QUEEN)):
+            self.begin_dialog(window)
+            promotion, _ = self.get_promo_piece(None, board.turn, True)
+            self.end_dialog(window)
+            move = chess.Move(fr_sq, to_sq, promotion=promotion)
+        if not board.is_legal(move):
+            if board.color_at(fr_sq) is not None:
+                window['_gamestatus_'].Update('That move is not legal.')
+            return
+
+        if node.has_variation(move):
+            self.review_move_index = self.review_node_index(
+                node.variation(move))
+            self.update_review_window(window)
+            self.follow_review_position(window)
+        else:
+            self.review_tree_changed(window, node.add_variation(move))
 
     def update_game(self, mc: int, user_move: str, time_left: int, user_comment: str):
         """Saves moves in the game.
@@ -3678,6 +4549,8 @@ class EasyChessGui:
             self.recent_pgn_files = [
                 p for p in data['recent_pgn_files'] if isinstance(p, str)
             ][:MAX_RECENT_PGN_FILES]
+        if isinstance(data.get('review_save_file'), str):
+            self.review_save_file = data['review_save_file'] or None
         if 'review_pgn_file' in data:
             self.review_pgn_file = data['review_pgn_file']
             if self.review_pgn_file and os.path.isfile(self.review_pgn_file):
@@ -3706,6 +4579,7 @@ class EasyChessGui:
             'role_engine_options': self.role_engine_options,
             'recent_pgn_files': self.recent_pgn_files,
             'review_pgn_file': self.review_pgn_file,
+            'review_save_file': self.review_save_file,
         }
         for mode, spec in PANEL_LAYOUTS.items():
             data[spec['setting']] = self.panel_layout_states[mode]
@@ -6193,6 +7067,9 @@ class EasyChessGui:
         # Marking the current game (mark_review_game) also comes here.
         if index == self.review_game_index:
             return
+        if not self.keep_review_changes(window):
+            self.mark_review_game(window)
+            return
         game = None
         try:
             game = self.load_review_game(self.review_pgn_file,
@@ -6408,56 +7285,6 @@ class EasyChessGui:
         w.Close()
         return selected_game
 
-    def traverse_review_game(self, node, current_board, indent, is_var):
-        """Recursively traverse game tree to build flat list of moves, boards, and nodes."""
-
-        def traverse_only_move(n, b, ind, is_v):
-            if n.move is None:
-                return b
-
-            # 1. Add starting comment to label if present
-            start_comment = f"{{{n.starting_comment}}} " if n.starting_comment else ""
-
-            turn = b.turn
-            fullmove = b.fullmove_number
-            san = b.san(n.move)
-            prefix = f'{fullmove}. ' if turn == chess.WHITE else f'{fullmove}... '
-
-            # 2. Add ending comment to label if present
-            end_comment = f" {{{n.comment}}}" if n.comment else ""
-
-            if is_v:
-                label = '    ' * ind + f'( {start_comment}{prefix}{san}{end_comment} )'
-            else:
-                label = '    ' * ind + f'{start_comment}{prefix}{san}{end_comment}'
-
-            next_b = b.copy()
-            next_b.push(n.move)
-
-            self.review_move_labels.append(label)
-            self.review_boards.append(next_b)
-            self.review_nodes.append(n)
-            return next_b
-
-        def traverse_continuations(n, b, ind):
-            if not n.variations:
-                return
-
-            mainline_child = n.variations[0]
-            next_b = traverse_only_move(mainline_child, b, ind, False)
-
-            if len(n.variations) > 1:
-                for var_node in n.variations[1:]:
-                    traverse_node(var_node, b, ind + 1, True)
-
-            traverse_continuations(mainline_child, next_b, ind)
-
-        def traverse_node(n, b, ind, is_v):
-            next_b = traverse_only_move(n, b, ind, is_v)
-            traverse_continuations(n, next_b, ind)
-
-        traverse_node(node, current_board, indent, is_var)
-
     def prepare_review_game(self, game, game_index=None):
         """Prepare move list and board positions for review.
 
@@ -6467,17 +7294,17 @@ class EasyChessGui:
         """
         self.review_game = game
         self.review_game_index = game_index
+        self.review_game_modified = False
+        self.review_from_sq = None
         self.review_move_index = 0
-        self.review_move_labels = ['Start position']
+        # The moves in the order of the move list, which numbers them
+        # the same way when it is written (render_review_movelist).
         self.review_boards = [game.board()]
         self.review_nodes = [game]
-
-        if game.variations:
-            # Mainline starts at variations[0]
-            self.traverse_review_game(game.variations[0], game.board(), 0, False)
-            # Alternative starting moves (variations) start at variations[1:]
-            for var_node in game.variations[1:]:
-                self.traverse_review_game(var_node, game.board(), 1, True)
+        for kind, node, _, after, _ in self.iter_review_tree(game):
+            if kind == 'move':
+                self.review_nodes.append(node)
+                self.review_boards.append(after)
 
     def set_board_from_board_state(self, window, board):
         """Update the GUI board from a python-chess board."""
@@ -6891,9 +7718,11 @@ class EasyChessGui:
     def confirm_auto_analysis(self, window):
         """Ask the user to pick engine/time and confirm auto-analysis.
 
-        Returns a dict with engine_id_name, engine_path_and_file and
-        time_ms (milliseconds per move) if the user confirms, otherwise
-        False.
+        Returns a dict with engine_id_name, engine_path_and_file, time_ms
+        (milliseconds per move), start_move and end_move (the numbers of
+        the first and last move to analyse) and keep_existing (False when the user
+        chose to remove the notes of the game first) if the user confirms,
+        otherwise False.
         """
         if self.review_game is None:
             sg.popup('Load a game first.', title='Auto-Analyze',
@@ -6906,11 +7735,12 @@ class EasyChessGui:
                      title='Auto-Analyze', icon=ico_path[platform]['pecg'])
             return False
 
-        move_count = 0
-        node = self.review_game
-        while node.variations:
-            move_count += 1
-            node = node.variations[0]
+        # The numbers of the first and of the last move of the main line
+        # (a game from a set-up position need not start at move 1).
+        first_move = self.review_game.board().fullmove_number
+        last_node = self.review_game.end()
+        last_move = last_node.parent.board().fullmove_number \
+            if last_node.parent is not None else None
 
         # Default to the saved auto-analysis engine, or the analysis engine.
         default_engine = self.auto_analysis_engine_id_name
@@ -6924,9 +7754,7 @@ class EasyChessGui:
                 or default_time < AUTO_ANALYSIS_TIME_MS_MIN:
             default_time = AUTO_ANALYSIS_TIME_MS
 
-        default_plies = max(AUTO_ANALYSIS_REPLAY_PLIES_MIN,
-                            min(AUTO_ANALYSIS_REPLAY_PLIES_MAX,
-                                self.auto_analysis_replay_plies))
+        move_numbers = list(range(1, AUTO_ANALYSIS_MOVE_MAX + 1))
 
         layout = [
             [sg.Text('Select engine and time per move for auto-analysis:')],
@@ -6939,16 +7767,39 @@ class EasyChessGui:
                                    default_time),
                       default_value=default_time, readonly=True,
                       size=(8, 1), key='auto_time_k')],
-            [sg.Text('PV length:', size=(16, 1),
-                     tooltip='Length of the engine-vs-engine "Better is"\n'
-                             'variation. Each ply is one extra search, so\n'
-                             'longer lines analyze more slowly.'),
-             sg.Spin([n for n in range(AUTO_ANALYSIS_REPLAY_PLIES_MIN,
-                                       AUTO_ANALYSIS_REPLAY_PLIES_MAX + 1)],
-                     initial_value=default_plies, readonly=True,
-                     size=(8, 1), key='auto_plies_k')],
-            [sg.Text('Moves to analyze:', size=(16, 1)),
-             sg.Text(str(move_count), size=(30, 1))],
+            # The moves to analyse, by move number. The numbers can be
+            # typed or stepped with the arrows; OK checks them.
+            [sg.Text('Start move:', size=(16, 1)),
+             sg.Spin(move_numbers, initial_value=AUTO_ANALYSIS_START_MOVE,
+                     size=(6, 1), key='auto_start_k',
+                     tooltip='Number of the first move to analyse.\n'
+                             'The moves before it are left as they are.'),
+             sg.Text('End move:', pad=((16, 5), 3)),
+             sg.Spin(move_numbers, initial_value=AUTO_ANALYSIS_END_MOVE,
+                     size=(6, 1), key='auto_end_k',
+                     tooltip='Number of the last move to analyse.\n'
+                             'A number past the end of the game means\n'
+                             'up to its last move.')],
+            [sg.Text('Game has moves:', size=(16, 1)),
+             sg.Text('none' if last_move is None
+                     else '{} to {}'.format(first_move, last_move),
+                     size=(30, 1))],
+        ]
+        # What to do with the notes of the game is only asked when it has
+        # some. They are kept unless the user says otherwise, every time:
+        # the choice is not remembered.
+        notes = self.describe_review_notes(self.review_game)
+        if notes:
+            layout += [
+                [sg.Frame('This game already has {}'.format(notes), [
+                    [sg.Radio('Keep them and add the analysis',
+                              'auto_notes', default=True,
+                              key='auto_keep_k')],
+                    [sg.Radio('Remove them first', 'auto_notes',
+                              key='auto_remove_k')],
+                ], expand_x=True)],
+            ]
+        layout += [
             [sg.Text('The annotated game will be saved to:')],
             [sg.Text(AUTO_ANALYSIS_OUTPUT_FILE, size=(50, 1),
                      relief='sunken')],
@@ -6987,7 +7838,28 @@ class EasyChessGui:
                              icon=ico_path[platform]['pecg'])
                     continue
                 time_ms = int(v['auto_time_k'])
-                replay_plies = int(v['auto_plies_k'])
+                # The move numbers can be typed: check them.
+                try:
+                    start_move = int(v['auto_start_k'])
+                    end_move = int(v['auto_end_k'])
+                except (TypeError, ValueError):
+                    start_move = end_move = None
+                problem = None
+                if start_move is None or not (
+                        1 <= start_move <= end_move
+                        <= AUTO_ANALYSIS_MOVE_MAX):
+                    problem = ('Start move and end move are numbers from '
+                               '1 to {},\nand the start move is not after '
+                               'the end move.'.format(
+                                   AUTO_ANALYSIS_MOVE_MAX))
+                elif last_move is None or start_move > last_move \
+                        or end_move < first_move:
+                    problem = 'The game has no move from {} to {}.'.format(
+                        start_move, end_move)
+                if problem:
+                    sg.popup(problem, title='Auto-Analyze',
+                             icon=ico_path[platform]['pecg'])
+                    continue
                 try:
                     eng_file, eng_path = self.get_engine_file(engine_id_name)
                 except Exception:
@@ -6998,18 +7870,40 @@ class EasyChessGui:
                     break
                 self.auto_analysis_engine_id_name = engine_id_name
                 self.auto_analysis_time_ms = time_ms
-                self.auto_analysis_replay_plies = replay_plies
                 self.save_settings()
                 result = {
                     'engine_id_name': engine_id_name,
                     'engine_path_and_file': eng_path,
                     'time_ms': time_ms,
-                    'replay_plies': replay_plies,
+                    'keep_existing': not v.get('auto_remove_k', False),
+                    'start_move': start_move,
+                    'end_move': end_move,
                 }
                 break
         w.Close()
         self.end_dialog(window)
         return result
+
+    @staticmethod
+    def describe_review_notes(game):
+        """What a game has besides its main line, as text for a dialog:
+        '3 comments, 2 annotations and 1 variation'. Empty when it has
+        nothing of the kind."""
+        comments = annotations = variations = 0
+        nodes = [game]
+        while nodes:
+            node = nodes.pop()
+            comments += bool(node.comment) + bool(node.starting_comment)
+            annotations += len(node.nags)
+            variations += max(0, len(node.variations) - 1)
+            nodes.extend(node.variations)
+        parts = ['{} {}{}'.format(count, name, '' if count == 1 else 's')
+                 for count, name in ((comments, 'comment'),
+                                     (annotations, 'annotation'),
+                                     (variations, 'variation')) if count]
+        if len(parts) > 1:
+            parts[-2:] = [parts[-2] + ' and ' + parts[-1]]
+        return ', '.join(parts)
 
     def start_auto_analysis(self, window):
         """Start the background auto-analysis thread for the loaded game."""
@@ -7040,16 +7934,19 @@ class EasyChessGui:
             option_overrides=self.get_role_options(
                 'auto_analysis', config['engine_id_name']),
             multipv=AUTO_ANALYSIS_MULTIPV,
-            replay_plies=config.get('replay_plies',
-                                    self.auto_analysis_replay_plies),
+            replay_plies=self.auto_analysis_replay_plies,
+            keep_existing=config.get('keep_existing', True),
+            start_move=config.get('start_move', 1),
+            end_move=config.get('end_move'),
         )
         self.auto_analysis_thread.start()
         self.set_review_menu_state(window, analyzing=True)
-        window['_gamestatus_'].Update(
-            'Auto-analyzing move 1/{}...'.format(
-                self._count_mainline_moves(self.review_game)))
-        logging.info('Started auto-analysis of game with %d moves.',
-                     self._count_mainline_moves(self.review_game))
+        # The thread reports 'move n/total' of the moves in the range.
+        window['_gamestatus_'].Update('Auto-analyzing...')
+        logging.info(
+            'Started auto-analysis of game with %d moves, moves %s to %s.',
+            self._count_mainline_moves(self.review_game),
+            config.get('start_move', 1), config.get('end_move'))
 
     def _count_mainline_moves(self, game):
         """Return the number of half-moves on the game's mainline."""
@@ -7390,7 +8287,8 @@ class EasyChessGui:
             else '?'
         )
         window['_gamestatus_'].Update(
-            f'Mode     Review, game {game_number}/{len(self.review_games)}')
+            f'Mode     Review, game {game_number}/{len(self.review_games)}'
+            + (' - changed, not saved' if self.review_game_modified else ''))
         window['review_header_k'].Update(header_text)
         window['review_nav_k'].Update(
             f'Position {self.review_move_index}/{len(self.review_boards) - 1}')
@@ -7411,6 +8309,8 @@ class EasyChessGui:
         window['review_book_k'].Update(book_text if book_text else 'no book moves')
 
         self.side_to_move = board.turn
+        # The board is drawn again: a piece picked up by a click is not.
+        self.review_from_sq = None
         self.set_board_from_board_state(
             window, self.review_boards[self.review_move_index])
         self.update_review_analysis_panel(window)
@@ -7573,10 +8473,17 @@ class EasyChessGui:
             finalize=True,
             resizable=True,
             location=location,
-            icon=ico_path[platform]['pecg']
+            icon=ico_path[platform]['pecg'],
+            # Closing the window is an event of the Review loop, which
+            # can then ask about a game that was changed and not saved.
+            enable_close_attempted_event=True
         )
         self.compact_review_buttons(window)
         self.bind_review_shortcuts(window)
+        self.setup_review_move_list(window)
+        # Moves are entered on the board as in Play (start_review_mode
+        # hands the mouse back to the Play window).
+        self.setup_board_drag_drop(window)
         # Game list: the columns keep their width, so a panel too narrow
         # for them scrolls sideways instead of squeezing them all; only
         # the last one takes the spare width of a wider panel.
@@ -7613,7 +8520,8 @@ class EasyChessGui:
         """Bind keyboard shortcuts on the Review window.
 
         Alt+A / Alt+T toggle analysis and threat; Left / Right step through
-        the moves and Home / End jump to the first / last position. The
+        the moves and Home / End jump to the first / last position;
+        Ctrl+S saves the game. The
         bindings write the same event keys used by the buttons, so the
         existing event-loop handlers take over. Binding on the toplevel is
         safe: the review window has no editable text fields that need the
@@ -7635,6 +8543,9 @@ class EasyChessGui:
                       lambda e: window.write_event_value('First', True))
             root.bind('<End>',
                       lambda e: window.write_event_value('Last', True))
+            root.bind('<Control-Key-s>',
+                      lambda e: window.write_event_value(
+                          'Save Game::review_save_game_k', True))
         except Exception:
             logging.exception('Failed to bind review window shortcuts.')
 
@@ -7687,9 +8598,10 @@ class EasyChessGui:
                 if selected_game_obj is not None:
                     self.prepare_review_game(selected_game_obj, 0)
                 else:
-                    self.prepare_review_game(chess.pgn.Game())
+                    self.prepare_review_game(self.empty_review_game())
             else:
-                self.prepare_review_game(chess.pgn.Game())
+                # No file yet: an empty game, to enter moves right away.
+                self.prepare_review_game(self.empty_review_game())
 
         location = window.CurrentLocation()
         # Carry the maximized state over to the Review window; its panel
@@ -7732,7 +8644,12 @@ class EasyChessGui:
                         self.start_review_threat(review_window)
                 continue
 
-            if button is None:
+            if button is None or button == sg.WINDOW_CLOSE_ATTEMPTED_EVENT:
+                # The window X: a game that was changed can be saved
+                # first, or the window kept open.
+                if button is not None \
+                        and not self.keep_review_changes(review_window):
+                    continue
                 self.cancel_auto_analysis(review_window)
                 self.close_review_analysis()
                 self.close_review_threat()
@@ -7741,6 +8658,10 @@ class EasyChessGui:
                 sys.exit(0)
 
             if button == 'Play':
+                # The game stays on the Review board, but leaving the
+                # app from Play mode would lose what was not saved.
+                if not self.keep_review_changes(review_window):
+                    continue
                 self.cancel_auto_analysis(review_window)
                 break
 
@@ -7748,10 +8669,37 @@ class EasyChessGui:
                 self.show_help_topic(button)
                 continue
 
+            # A click on a square of the board, or a piece dragged to
+            # another square: a move is entered.
+            if button == '__drag_move__' or (
+                    isinstance(button, tuple) and len(button) == 2
+                    and all(isinstance(i, int) for i in button)):
+                self.handle_review_board_input(review_window, button, value)
+                continue
+
+            # A choice of the right-click menu of the move list.
+            if button == 'review_edit_k':
+                self.handle_review_edit(review_window, *value[button])
+                continue
+
+            if button == 'New Game::review_new_game_k':
+                if self.keep_review_changes(review_window):
+                    self.new_review_game(review_window)
+                continue
+
+            if button == 'Save Game::review_save_game_k':
+                self.save_review_game(review_window)
+                continue
+
+            if button == 'Game Details::review_details_k':
+                self.edit_review_details(review_window)
+                continue
+
             if button == 'Select Game::review_select_game_k':
                 selected_game = self.select_review_game(
                     self.review_pgn_file, self.review_games)
-                if selected_game is None:
+                if selected_game is None \
+                        or not self.keep_review_changes(review_window):
                     continue
 
                 self.review_pgn_file = selected_game['pgn_file']
@@ -7881,6 +8829,12 @@ class EasyChessGui:
         review_window.Close()
         self.review_window = None
         self.reset_review_run_state()
+        # Mouse input on the board goes to the Play window again.
+        self._drag_window = window
+        self._drag_source = None
+        self._drag_piece = None
+        self._drag_started = False
+        self._drag_fig = None
         window.UnHide()
         if self.preferred_square_px != wanted_square_px:
             # A board size was chosen in Review (Board -> Size or a
