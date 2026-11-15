@@ -73,7 +73,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.40.0'
+APP_VERSION = 'v2.41.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3   # lines of analysis, until changed
@@ -469,50 +469,98 @@ black_init_promote_board = [[QUEENB, ROOKB, BISHOPB, KNIGHTB]]
 # Help system
 # ---------------------------------------------------------------------------
 # Brief, topic-focused help shown in small popups from the Help menu. The full
-# reference lives in the project README, opened via Help -> Online Help.
+# reference lives in the project README (its section D.10 lists this menu).
 # Each dict key doubles as the "::key" suffix of its Help menu item.
 HELP_TOPICS = {
     'help_start': (
         'Getting Started',
-        'Python Easy Chess GUI opens ready to play.\n\n'
+        'Python Easy Chess GUI opens in Play mode, ready to play.\n\n'
         '1. Install a UCI engine:  Engine -> Manage -> Install.\n'
+        '   (A few engines are installed already.)\n'
         '2. Choose your opponent:  Engine -> Set Engine Opponent.\n'
         '3. Move a piece to start the game, or press Engine -> Go\n'
         '   to play as Black.\n\n'
         'Setup menus are disabled while a game is running; press\n'
         'Game -> New to end it and set up again.\n'
-        'Games auto-save to pecg_auto_save_games.pgn.\n'
-        'For the full manual use Help -> Online Help.'),
+        'Games auto-save to pecg_auto_save_games.pgn.\n\n'
+        'To replay and analyse a game:  Mode -> Review.\n\n'
+        'Each Help topic is short. The full manual is the README on the\n'
+        'project page; Help -> About shows its address.'),
+    'help_shortcuts': (
+        'Mouse and Keyboard',
+        'PLAY\n'
+        '  Move a piece       click it, then its square; or drag it\n'
+        '  Adviser            right-click Adviser -> Start / Stop\n'
+        '  Search info        right-click Opponent Search Info\n'
+        '  Book moves         right-click BOOK 1 or BOOK 2\n\n'
+        'REVIEW\n'
+        '  Left / Right       previous / next move\n'
+        '  Home / End         first / last position\n'
+        '  Alt+A              Analysis on / off\n'
+        '  Alt+T              Threat on / off\n'
+        '  Up / Down          previous / next game (in the Game list)\n'
+        '  Click a move       jump to that position\n'
+        '  Click a heading    sort the Game list by that column\n\n'
+        'BOTH MODES\n'
+        '  Drag a title bar   move that panel\n'
+        '  Drag a divider     resize panels or the board'),
     'help_eng_install': (
         'Install / Manage Engines',
         'Available before a game starts. Only UCI engines are supported.\n\n'
-        'Install:    Engine -> Manage -> Install -> Add.\n'
-        'Configure:  Engine -> Manage -> Edit -> pick engine -> Modify\n'
-        '            (Hash, Threads and other options).\n'
-        'Remove:     Engine -> Manage -> Delete.'),
+        'Install:\n'
+        '  1. Engine -> Manage -> Install, press Add.\n'
+        '  2. Press Browse and pick the engine file.\n'
+        '  3. Press Get Id Name (or type a name), then OK.\n'
+        '  On Linux first allow the file to run:  chmod +x engine\n\n'
+        'Options:  Engine -> Manage -> Edit -> pick the engine -> Modify\n'
+        '          (Hash, Threads and its other options).\n'
+        'Remove:   Engine -> Manage -> Delete.\n\n'
+        'After installing, choose what the engine is used for: see\n'
+        'Help -> Engine -> Engine for Each Job.'),
+    'help_eng_roles': (
+        'Engine for Each Job',
+        'There are four jobs, each with its own engine. Choose them in\n'
+        'the Engine menu (Play mode, before a game starts):\n\n'
+        '  Set Engine Opponent   the engine you play against\n'
+        '  Set Engine Adviser    suggests a move during a game\n'
+        '  Set Engine Analysis   the Analysis button in Review\n'
+        '  Set Engine Threat     the Threat button in Review\n\n'
+        'In the manager that opens:\n'
+        '  Use Selected    make the selected engine do this job\n'
+        '  Configure       give it other options for this job only,\n'
+        '                  for example more Hash for analysis\n'
+        '  Delete Config   remove those options again\n'
+        'An engine with its own options for the job is marked\n'
+        '(configured).'),
     'help_eng_opponent': (
         'Set Engine Opponent',
         'Engine -> Set Engine Opponent (before a game starts).\n\n'
-        'This is the engine you play against; the list shows the engines\n'
-        'you have installed. Set its clock under Settings -> Time ->\n'
-        'Engine.'),
+        'This is the engine you play against. Select one of the\n'
+        'installed engines and press Use Selected.\n\n'
+        'Its clock:   Settings -> Time -> Engine.\n'
+        'Its book:    Settings -> Set Book.\n'
+        'Its depth:   Engine -> Set Depth.'),
     'help_eng_adviser': (
         'Engine Adviser',
-        'Select it with  Engine -> Set Engine Adviser.\n\n'
-        'During a game (Play mode) right-click the Adviser label and press\n'
-        'Start to get a suggested move and score for the current position.'),
+        'Select it with  Engine -> Set Engine Adviser. How long it\n'
+        'thinks (Movetime) is set in the same window.\n\n'
+        'During a game (Play mode) right-click the Adviser label in the\n'
+        'Engine panel and press Start to get a suggested move and score\n'
+        'for the current position.'),
     'help_eng_analysis': (
         'Review Analysis Engine',
         'Select it with  Engine -> Set Engine Analysis.\n\n'
         'In Review mode press the Analysis button to evaluate the current\n'
-        'position (multiple lines). The search stops after the analysis\n'
+        'position. Hash, Threads and the number of lines (MultiPV) are\n'
+        'set in the Analysis panel. The search stops after the analysis\n'
         'time in Settings -> General (default 60s).'),
     'help_eng_threat': (
         'Review Threat Engine',
         'Select it with  Engine -> Set Engine Threat.\n\n'
         'In Review mode press the Threat button to see what the opponent\n'
         'would play if the side to move passed (null move). Unavailable\n'
-        'while in check. Time limit: Settings -> General (default 30s).'),
+        'while in check. Hash and Threads are set in the Threat panel.\n'
+        'Time limit: Settings -> General (default 30s).'),
     'help_eng_depth': (
         'Search Depth',
         'Engine -> Set Depth caps the search depth of the playing and\n'
@@ -521,9 +569,13 @@ HELP_TOPICS = {
     'help_game_play': (
         'Play a Game',
         'Click the piece and its destination square (or drag it).\n'
-        'Your first move starts the game and the clocks.\n'
-        'Engine -> Move Now forces the engine to move;\n'
-        'Game -> New starts a new game.'),
+        'Your first move starts the game and the clocks.\n\n'
+        'Engine -> Move Now      the engine moves at once\n'
+        'Game -> New             start a new game\n'
+        'Game -> Resign, User Wins, User Draws   end the game\n\n'
+        'The two dots beside the board show whose turn it is: the green\n'
+        'one is the side to move. The Players panel shows the time left\n'
+        'and the time spent on the current move.'),
     'help_game_black': (
         'Play as Black',
         'Press Engine -> Go before making a move: the engine takes\n'
@@ -534,21 +586,57 @@ HELP_TOPICS = {
         'Game -> Paste FEN sets up a position from the clipboard (only\n'
         'before a game starts). If the side to move is not yours,\n'
         'press Engine -> Go.'),
+    'help_game_assist': (
+        'Adviser and Book Moves',
+        'These help you during a game. Right-click the label:\n\n'
+        'Adviser (Engine panel) -> Start: a suggested move and score\n'
+        'from the adviser engine. Stop ends it.\n\n'
+        'BOOK 1 / BOOK 2 (Opening books panel) -> Show: the opening\n'
+        'book moves of the position, from computer games and from human\n'
+        'games. Hide removes them.\n\n'
+        'Opponent Search Info (Engine panel) -> Show / Hide: what the\n'
+        'opponent engine thinks.'),
     'help_game_save': (
         'Save Games and Repertoire',
         'Every game auto-saves to pecg_auto_save_games.pgn.\n\n'
-        'During a game the Game menu also offers Save to My Games and\n'
-        'Save to White / Black Repertoire.'),
+        'During a game Game -> Save also offers Save to My Games and\n'
+        'Save to White / Black Repertoire.\n\n'
+        'Open any of these files in Review mode to replay the games.'),
     'help_game_time': (
         'Time Control',
         'Settings -> Time -> User sets your clock; Settings -> Time ->\n'
         'Engine sets the opponent clock. Adjudication on flag-fall is\n'
         'toggled in Settings -> General.'),
+    'help_settings': (
+        'Settings',
+        'The Settings menu is in Play mode, before a game starts.\n\n'
+        'General:\n'
+        '  Save time left in game notation   adds [%clk] comments\n'
+        '  Adjudicate game on time forfeit   a flag-fall ends the game\n'
+        '  Review analysis time (sec)        default 60\n'
+        '  Review threat time (sec)          default 30\n'
+        'Time -> User / Engine    the clock of each side\n'
+        'Set Book                 the opponent book: use it or not, up\n'
+        '                         to which ply, best or random move\n'
+        'User Name                your name in the games\n'
+        'PGN -> Delete Player     delete the games of a player from a\n'
+        '                         PGN file\n\n'
+        'Everything is saved and restored at the next start.'),
+    'help_files': (
+        'Files the App Writes',
+        'All in the folder the app is started from:\n\n'
+        'pecg_auto_save_games.pgn   every game played\n'
+        'pecg_analyzed_games.pgn    games annotated by Auto-Analyze\n'
+        'pecg_engines.json          installed engines and options\n'
+        'pecg_settings.json         settings, engine jobs, layouts\n'
+        'pecg_user.json             user names\n'
+        'pecg_log.txt               log, new on every start; look here\n'
+        '                           first when something goes wrong'),
     'help_review_open': (
         'Open a Game to Review',
         'Mode -> Review, then Game -> Select Game: choose a PGN file (or\n'
         'pick one from Recent), select a game and press OK or\n'
-        'double-click it.\n\n'
+        'double-click it. The file is opened again the next time.\n\n'
         'The Game list panel shows the games of that file: click one to\n'
         'put it on the board, or use the Up / Down keys in the list.\n'
         'Click a column heading to sort. Analysis and Threat, if they\n'
@@ -561,27 +649,32 @@ HELP_TOPICS = {
         'click a move in the move list to jump to that position.'),
     'help_review_engine': (
         'Analysis and Threat (Review)',
-        'Analysis button: evaluate the position with the analysis engine.\n'
-        'Threat button: show the opponent threat (null move).\n'
-        'Both stop after their time limits in Settings -> General (analysis\n'
-        '60s, threat 30s) and restart automatically when you change move.\n\n'
-        'Each box shows the search figures (depth, time, nodes, nodes per\n'
-        'second), then the score and the line of moves. The score is for\n'
-        'the side to move; #3 means that side mates in 3, -#3 that it is\n'
-        'mated in 3. For Threat the side to move is the opponent. The line\n'
-        'is as long as the panel is wide: widen the panel to see more.\n\n'
-        'Hash, Threads and MultiPV (number of lines) are set in the panel\n'
-        'and saved; a running search restarts with the new value.'),
+        'Analysis button (Alt+A): evaluate the position with the\n'
+        'analysis engine.\n'
+        'Threat button (Alt+T): show the opponent threat (null move).\n'
+        'Both stop after their time limits in Settings -> General\n'
+        '(analysis 60s, threat 30s) and restart automatically when you\n'
+        'change move.\n\n'
+        'Each box shows the search figures (depth, time, nodes, nodes\n'
+        'per second), then the score and the line of moves. The score\n'
+        'is for the side to move; #3 means that side mates in 3, -#3\n'
+        'that it is mated in 3. For Threat the side to move is the\n'
+        'opponent. The line is as long as the panel is wide: widen the\n'
+        'panel to see more.\n\n'
+        'Hash, Threads and MultiPV (number of lines) are set in the\n'
+        'panel and saved; a running search restarts with the new value.'),
     'help_review_auto': (
         'Auto-Analyze Game',
-        'Game -> Auto-Analyze Game annotates every move of the loaded game\n'
-        'with the engine and time per move that you choose. Each move gets\n'
-        'an evaluation comment, from the side that played it (positive is\n'
-        'good for that side); bad moves are marked ?! ? ??. When the\n'
-        'engine move is at least 25cp better (and its score stays within\n'
-        '+/-300cp) the better line is replayed engine vs engine for up to\n'
-        '5 plies and added as a "Better is" variation scored at the end of\n'
-        'the line. Results are appended to pecg_analyzed_games.pgn and the\n'
+        'Game -> Auto-Analyze Game annotates every move of the loaded\n'
+        'game with the engine and time per move that you choose.\n\n'
+        'Each move gets an evaluation comment, from the side that\n'
+        'played it (positive is good for that side); bad moves are\n'
+        'marked ?! ? ??.\n\n'
+        'When the engine move is at least 25cp better (and its score\n'
+        'stays within +/-300cp) the better line is replayed engine vs\n'
+        'engine for up to 5 plies and added as a "Better is" variation\n'
+        'scored at the end of the line.\n\n'
+        'Results are appended to pecg_analyzed_games.pgn and the\n'
         'annotated game replaces the current review game. Use Game ->\n'
         'Cancel Analysis to stop early.'),
     'help_board_flip': (
@@ -601,7 +694,8 @@ HELP_TOPICS = {
         'leftover space. Like Flip, resizing works at any time.'),
     'help_board_layout': (
         'Panels and Layout',
-        'The Play and Review windows are made of panels around the board.\n\n'
+        'The Play and Review windows are made of panels around the\n'
+        'board.\n\n'
         'Move a panel: drag its title bar to the left of the board, to\n'
         'the right or below it (a green bar shows where it will land),\n'
         'or use View -> Move Panel. Under the board, drop it on the top\n'
@@ -618,31 +712,35 @@ HELP_TOPICS = {
         'changes the overall GUI theme (before a game starts).'),
 }
 
-# Online (detailed) help target for Help -> Online Help.
+# The full manual: the project README (Help -> About shows this address).
 ONLINE_HELP_URL = 'https://github.com/fsmosca/Python-Easy-Chess-GUI#readme'
 
 
-# Help submenu fragments. Note: a literal '&' marks a keyboard accelerator in
-# menu labels, so plain words are used instead.
+# Help submenu fragments, one per subject; each mode's Help menu is made
+# of the ones that apply to it. Note: a literal '&' marks a keyboard
+# accelerator in menu labels, so plain words are used instead.
 HELP_ENGINE_MENU = ['Engine', ['Install / Manage::help_eng_install',
+                               'Engine for Each Job::help_eng_roles',
                                'Set Opponent::help_eng_opponent',
                                'Adviser::help_eng_adviser',
                                'Analysis::help_eng_analysis',
                                'Threat::help_eng_threat',
                                'Search Depth::help_eng_depth']]
-HELP_GAME_MENU = ['Game', ['Play a Game::help_game_play',
+HELP_GAME_MENU = ['Play', ['Play a Game::help_game_play',
                            'Play as Black::help_game_black',
                            'Paste FEN::help_game_fen',
+                           'Adviser and Book Moves::help_game_assist',
                            'Save and Repertoire::help_game_save',
                            'Time Control::help_game_time']]
 HELP_REVIEW_MENU = ['Review', ['Open a Game::help_review_open',
                                'Navigate Moves::help_review_nav',
                                'Analysis and Threat::help_review_engine',
                                'Auto-Analyze Game::help_review_auto']]
-HELP_BOARD_MENU = ['Board', ['Flip::help_board_flip',
-                             'Size::help_board_size',
-                             'Panels and Layout::help_board_layout',
-                             'Colors and Themes::help_board_color']]
+HELP_BOARD_MENU = ['Board and Layout', [
+    'Flip::help_board_flip',
+    'Size::help_board_size',
+    'Panels and Layout::help_board_layout',
+    'Colors and Themes::help_board_color']]
 
 
 def make_help_menu(*sections):
@@ -654,9 +752,12 @@ def make_help_menu(*sections):
     immediately followed by a list). A deep copy is returned so FreeSimpleGUI
     cannot mutate the shared fragment lists across the three menu definitions.
     """
-    items = ['Getting Started::help_start']
+    items = ['Getting Started::help_start',
+             'Mouse and Keyboard::help_shortcuts', '---']
     for section in sections:
         items.extend(section)  # 'Label', [subitems] as two sibling elements
+    items.extend(['---', 'Settings::help_settings',
+                  'Files the App Writes::help_files'])
     # 'Online Help' is disabled (leading '!') so it shows but is not clickable.
     items.extend(['---', '!Online Help::help_online', 'About::help_about'])
     return ['&Help', copy.deepcopy(items)]
@@ -4892,7 +4993,8 @@ class EasyChessGui:
             self.show_about()
             return
         title, body = HELP_TOPICS.get(
-            key, ('Help', 'See Help -> Online Help for the full manual.'))
+            key, ('Help', 'See the README on the project page for the '
+                          'full manual.'))
         sg.popup_scrolled(body, title='Help - {}'.format(title),
                           size=(64, 16), icon=ico_path[platform]['pecg'])
 
