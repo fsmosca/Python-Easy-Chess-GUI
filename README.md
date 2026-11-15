@@ -137,7 +137,7 @@ Both windows are made of panels around the board.
 Each mode keeps its own arrangement.
 * **Move a panel:** drag it by its title bar to the left of the board, to the right, or below it. A green bar shows where it will land. `View → Move Panel` does the same from the menu.
 * **Ready-made arrangements:** `View → Board Left`, `Board Centre` or `Board Right`, plus `Engine Below Board` in Play and `Analysis Below Board` in Review.
-* **Resize:** drag the divider between two panels, or between the board and the panels beside it. The board takes the largest size that fits.
+* **Resize:** drag the divider between two panels, or between the board and the panels beside it. The board takes the largest size that fits. Beside the board, spare height goes to the Move list, or to the last panel of a column without it.
 * **Several panels under the board:** drop a panel on the top or bottom edge of a panel that is already there to put it above or below it (for example board, Analysis, Threat), or on its middle to put it beside it. `View → Move Panel → Below Board` adds it as a new row at the bottom.
 * **Height of the panels under the board:** drag the divider between the board and those panels up or down to make them taller or shorter. The board keeps its size and the window changes height instead. In a maximized window the divider stays where you drop it, and the board takes the largest size that fits above it.
 * **Saved:** the arrangement, the sizes and the window size are saved in `pecg_settings.json` and restored at the next start. `View → Reset Layout` goes back to the default.

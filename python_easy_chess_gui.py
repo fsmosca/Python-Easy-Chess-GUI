@@ -72,7 +72,7 @@ logging.getLogger('chess.engine').setLevel(logging.WARNING)
 
 
 APP_NAME = 'Python Easy Chess GUI'
-APP_VERSION = 'v2.37.0'
+APP_VERSION = 'v2.38.0'
 BOX_TITLE = f'{APP_NAME} {APP_VERSION}'
 REVIEW_MAX_DISPLAY_GAMES = 10000
 REVIEW_ANALYSIS_MULTIPV_LINES = 3
@@ -2051,11 +2051,17 @@ class PanelLayout:
                 and not isinstance(value, bool) and value > 0 else None
 
         for zone in ('left', 'right'):
+            # The spare height of a zone goes to its stretch panels, or
+            # to its last panel when it has none. Height that belongs to
+            # no panel could not be used: a divider only takes from the
+            # panels below it, so they would be squeezed above empty room.
+            stretchy = [k for k in new[zone] if k in self.stretch_panels] \
+                or new[zone][-1:]
             for key in new[zone]:
                 panel = self.window[key].Widget
                 panel.pack_forget()
                 options = dict(minsize=40,
-                               stretch='always' if key in self.stretch_panels
+                               stretch='always' if key in stretchy
                                else 'never')
                 if size_of(panel_px.get(key)):
                     options['height'] = panel_px[key]
